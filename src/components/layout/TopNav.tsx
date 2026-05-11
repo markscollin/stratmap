@@ -1,0 +1,104 @@
+import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { ChevronRight, Search, Sun, Moon, Bell } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { useUIStore } from '../../store'
+
+const PAGE_LABELS: Record<string, string> = {
+  '/':          'Dashboard',
+  '/charts':    'Org Charts',
+  '/roles':     'Roles',
+  '/headcount': 'Headcount',
+  '/settings':  'Settings',
+}
+
+function getLabel(pathname: string): string {
+  if (pathname.startsWith('/charts/')) return 'Canvas'
+  return PAGE_LABELS[pathname] ?? 'Dashboard'
+}
+
+function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
+  id: string
+  Icon: LucideIcon
+  onClick: () => void
+  hovBtn: string | null
+  setHovBtn: (v: string | null) => void
+}) {
+  const hov = hovBtn === id
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovBtn(id)}
+      onMouseLeave={() => setHovBtn(null)}
+      style={{
+        width: 34, height: 34, borderRadius: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: hov ? 'var(--nav-hover)' : 'var(--input-bg)',
+        border: `1px solid ${hov ? 'var(--border-hover)' : 'var(--border)'}`,
+        cursor: 'pointer',
+        color: hov ? 'var(--text)' : 'var(--muted)',
+        transition: 'all .15s',
+      }}
+    >
+      <Icon size={15} />
+    </button>
+  )
+}
+
+export function TopNav() {
+  const { isDark, toggleTheme } = useUIStore()
+  const { pathname } = useLocation()
+  const [hovBtn, setHovBtn] = useState<string | null>(null)
+  const label = getLabel(pathname)
+
+  return (
+    <div style={{
+      height: 56,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 24px',
+      background: 'var(--surface)',
+      borderBottom: '1px solid var(--border)',
+      flexShrink: 0,
+    }}>
+      {/* Breadcrumb */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 12, color: 'var(--dim)' }}>StratMap</span>
+        <ChevronRight size={12} color="var(--dim)" />
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{label}</span>
+      </div>
+
+      {/* Right controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Search hint */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--input-bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 8, padding: '6px 12px', width: 196,
+        }}>
+          <Search size={13} color="var(--dim)" />
+          <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>Search…</span>
+          <kbd style={{
+            fontSize: 10, color: 'var(--dim)',
+            background: 'var(--raised)', border: '1px solid var(--border)',
+            borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace',
+          }}>⌘K</kbd>
+        </div>
+
+        <IconBtn id="theme" Icon={isDark ? Sun : Moon} onClick={toggleTheme} hovBtn={hovBtn} setHovBtn={setHovBtn} />
+        <IconBtn id="bell"  Icon={Bell}                onClick={() => {}}   hovBtn={hovBtn} setHovBtn={setHovBtn} />
+
+        {/* User avatar */}
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          background: 'var(--grad-brand)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 700, color: '#fff',
+          cursor: 'pointer', flexShrink: 0,
+        }}>JD</div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,34 @@
+import { create } from 'zustand'
+
+interface UIStore {
+  isDark: boolean
+  sidebarCollapsed: boolean
+  activePanelNodeId: string | null
+  toggleTheme: () => void
+  toggleSidebar: () => void
+  openPanel: (nodeId: string) => void
+  closePanel: () => void
+}
+
+export const useUIStore = create<UIStore>((set, get) => ({
+  isDark: true,
+  sidebarCollapsed: false,
+  activePanelNodeId: null,
+
+  toggleTheme: () => {
+    const next = !get().isDark
+    if (next) {
+      document.documentElement.removeAttribute('data-theme')   // dark = :root default
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light')
+    }
+    set({ isDark: next })
+  },
+
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+  openPanel: (nodeId) => set({ activePanelNodeId: nodeId }),
+
+  closePanel: () => set({ activePanelNodeId: null }),
+}))

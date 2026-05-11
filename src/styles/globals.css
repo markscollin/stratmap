@@ -1,0 +1,92 @@
+@import './fonts.css';
+@import 'tailwindcss';
+
+/* ── Dark theme (default) ─────────────────────────────────────── */
+:root {
+  --bg:           #060D18;
+  --surface:      #0D1B2A;
+  --raised:       #152336;
+  --border:       rgba(148,163,184,0.10);
+  --border-hover: rgba(148,163,184,0.22);
+  --brand:        #0EA5E9;
+  --brand-bg:     rgba(14,165,233,0.12);
+  --brand-glow:   rgba(14,165,233,0.30);
+  --success:      #10B981;
+  --success-bg:   rgba(16,185,129,0.12);
+  --warn:         #F59E0B;
+  --warn-bg:      rgba(245,158,11,0.12);
+  --purple:       #8B5CF6;
+  --purple-bg:    rgba(139,92,246,0.12);
+  --danger:       #EF4444;
+  --danger-bg:    rgba(239,68,68,0.12);
+  --text:         #F0F6FF;
+  --muted:        #94A3B8;
+  --dim:          #475569;
+  --nav-hover:    rgba(148,163,184,0.07);
+  --nav-active:   rgba(14,165,233,0.10);
+  --input-bg:     rgba(148,163,184,0.08);
+  --shadow:       0 16px 48px rgba(0,0,0,0.60);
+  --shadow-sm:    0 2px 12px rgba(0,0,0,0.35);
+  --grad-brand:   linear-gradient(135deg,#0EA5E9,#0369A1);
+  --grad-purple:  linear-gradient(135deg,#8B5CF6,#6D28D9);
+  --grad-success: linear-gradient(135deg,#10B981,#059669);
+  --grad-warn:    linear-gradient(135deg,#F59E0B,#D97706);
+}
+
+/* ── Light theme ──────────────────────────────────────────────── */
+:root[data-theme='light'] {
+  --bg:           #EEF2F8;
+  --surface:      #FFFFFF;
+  --raised:       #F4F7FB;
+  --border:       rgba(15,23,42,0.08);
+  --border-hover: rgba(15,23,42,0.18);
+  --brand:        #0284C7;
+  --brand-bg:     rgba(2,132,199,0.08);
+  --brand-glow:   rgba(2,132,199,0.25);
+  --success:      #059669;
+  --success-bg:   rgba(5,150,105,0.08);
+  --warn:         #D97706;
+  --warn-bg:      rgba(217,119,6,0.08);
+  --purple:       #7C3AED;
+  --purple-bg:    rgba(124,58,237,0.08);
+  --danger:       #DC2626;
+  --danger-bg:    rgba(220,38,38,0.08);
+  --text:         #0F172A;
+  --muted:        #64748B;
+  --dim:          #94A3B8;
+  --nav-hover:    rgba(15,23,42,0.04);
+  --nav-active:   rgba(2,132,199,0.08);
+  --input-bg:     rgba(15,23,42,0.04);
+  --shadow:       0 16px 48px rgba(0,0,0,0.12);
+  --shadow-sm:    0 2px 12px rgba(0,0,0,0.07);
+  --grad-brand:   linear-gradient(135deg,#0284C7,#0369A1);
+  --grad-purple:  linear-gradient(135deg,#7C3AED,#5B21B6);
+  --grad-success: linear-gradient(135deg,#059669,#047857);
+  --grad-warn:    linear-gradient(135deg,#D97706,#B45309);
+}
+
+/* ── Base resets & keyframes ──────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+input, textarea, select, button { font-family: 'DM Sans', sans-serif; }
+input, select { outline: none; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.18); border-radius: 2px; }
+
+@keyframes ghostPulse  { 0%,100%{opacity:.22}50%{opacity:.48} }
+@keyframes drawLine    { to{stroke-dashoffset:0} }
+@keyframes fadeUp      { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes nodePop     { from{opacity:0;transform:scale(.88)} to{opacity:1;transform:scale(1)} }
+@keyframes cardIn      { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideDown   { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes livePulse   { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.6)} }
+@keyframes barGrow     { from{width:0} to{width:var(--w)} }
