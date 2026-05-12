@@ -2,6 +2,22 @@
 
 A collaborative org chart and people planning tool. Build, visualize, and manage your organization structure in real-time.
 
+---
+
+## 📖 Documentation Entry Point
+
+**If you're a Claude AI session:**
+1. Read **[CLAUDE.md](./CLAUDE.md)** first — this tells you what's been built, current status, how to manage the repo, and what's next
+2. Then read **[DESIGN.md](./DESIGN.md)** for product spec and design system context
+3. Reference this README for quick start commands
+
+**If you're a human developer:**
+1. Read this README (quick start + tech overview)
+2. Read **[DESIGN.md](./DESIGN.md)** for the product specification and design system
+3. Use **[CLAUDE.md](./CLAUDE.md)** as a reference for implementation notes
+
+---
+
 ## Quick Start
 
 ```bash
@@ -55,11 +71,6 @@ npm run build       # Production build
 - **SSH configured** — git operations work automatically
 - **Vercel** — Connected for CI/CD from main branch
 
-## Documentation
-
-- **[DESIGN.md](./DESIGN.md)** — Product specification, design system, data model, sprint plan (the authoritative reference)
-- **[CLAUDE.md](./CLAUDE.md)** — Implementation context for Claude sessions, file structure, what's built, next steps
-- **README.md** — This file; quick start and tech overview
 
 ## License
 
