@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# StratMap
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A collaborative org chart and people planning tool. Build, visualize, and manage your organization structure in real-time.
 
-Currently, two official plugins are available:
+## Quick Start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open http://localhost:5173
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Features
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- **Org Chart Canvas** — Drag nodes, create edges, zoom/pan, undo/redo
+- **Chart Library** — Create charts from templates (Blank, Startup, Scale-up, Hiring plan)
+- **JD Panel** — View role details and employment info
+- **Theme Toggle** — Dark/light mode
+- **Responsive Design** — Works on desktop (mobile support in progress)
+
+## Project Structure
+
 ```
+src/
+├── components/       # UI components (Sidebar, TopNav, etc.)
+├── features/         # Feature modules (canvas, nodes, panel)
+├── pages/           # Page components (Dashboard, ChartView, CanvasView, etc.)
+├── store/           # Zustand state management
+├── styles/          # Global CSS (dark/light themes)
+├── types/           # TypeScript definitions
+└── data/            # Mock data
+```
+
+## Tech Stack
+
+- **React 18** + **TypeScript**
+- **Vite** (build tool)
+- **React Router v6** (navigation)
+- **Zustand** (state management)
+- **Tailwind CSS** (styling)
+- **Lucide React** (icons)
+
+## Development
+
+```bash
+npm run dev          # Start dev server
+npx tsc --noEmit   # Type check
+npm run build       # Production build
+```
+
+## Git & Deployment
+
+- **GitHub:** https://github.com/markscollin/stratmap
+- **SSH configured** — git operations work automatically
+- **Vercel** — Connected for CI/CD from main branch
+
+## Next Steps
+
+See [CLAUDE.md](./CLAUDE.md) for detailed project context, file structure, and implementation notes for future development sessions.
+
+## License
+
+Internal project — Anthropic/StratMap team only.
