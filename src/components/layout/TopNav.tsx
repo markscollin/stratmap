@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronRight, Search, Sun, Moon, Bell } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
-import { useAuth } from '../../features/auth/useAuth'
+import { useAuth, IS_DEV_BYPASS } from '../../features/auth/useAuth'
 import { useUserStore } from '../../store/userStore'
+import { useClerk } from '@clerk/clerk-react'
 
 const PAGE_LABELS: Record<string, string> = {
   '/':          'Dashboard',
@@ -57,9 +58,19 @@ export function TopNav() {
   const { user } = useAuth()
   const { signOut: storeSignOut } = useUserStore()
 
-  const handleSignOut = () => {
+  // Get Clerk signOut — works in real Clerk mode, undefined in dev-bypass
+  let clerkSignOut: (() => Promise<void>) | undefined
+  if (!IS_DEV_BYPASS) {
+    clerkSignOut = useClerk().signOut
+  }
+
+  const handleSignOut = async () => {
     storeSignOut()
-    navigate('/sign-in')
+    if (clerkSignOut) {
+      await clerkSignOut({ redirectUrl: '/sign-in' })
+    } else {
+      navigate('/sign-in')
+    }
   }
 
   return (
