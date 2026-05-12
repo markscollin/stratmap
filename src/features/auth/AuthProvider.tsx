@@ -52,9 +52,11 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
   }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate, pathname])
 
   // Once loaded + signed in, redirect to onboarding if no workspace set
+  // But don't redirect if we're on the sign-in/sign-up pages (let Clerk finish first)
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
-    if (!workspace && pathname !== '/onboarding') {
+    const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
+    if (!workspace && pathname !== '/onboarding' && !isAuthPage) {
       navigate('/onboarding')
     }
   }, [isLoaded, isSignedIn, workspace, navigate, pathname])
