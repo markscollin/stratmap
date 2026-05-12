@@ -63,7 +63,10 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
 
   // Don't override signOut in useEffect — useAuth handles the bridge
 
-  if (!isLoaded) {
+  // Don't show loading spinner on auth pages — let Clerk's UI through
+  const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
+
+  if (!isLoaded && !isAuthPage) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
