@@ -6,150 +6,150 @@
 ## Sprint 2 — Node Management + Reporting Lines
 **Goal:** Make the canvas fully editable. Users can add, edit, and delete nodes, draw and remove reporting lines, and see their changes persist in state.
 
-### 2.1 — Add Node Modal
+### 2.1 — Add Node Modal ✅
 **Prompt:** Build the Add Node modal in src/features/nodes/NodeModal.tsx
 
-- [ ] Create NodeModal.tsx component scaffold
-- [ ] Build form fields:
-  - [ ] Name (text input, required)
-  - [ ] Job title (text input, required)
-  - [ ] Department (select dropdown)
-  - [ ] Employment type (segmented control)
-  - [ ] Status (segmented control)
-  - [ ] Reports to (select dropdown, optional)
-  - [ ] Location (text input, optional)
-  - [ ] Is this a new role? (toggle)
-- [ ] Form validation (Name & Job title required)
-- [ ] Create button disabled until required fields filled
-- [ ] Wire modal open trigger to toolbar "Add node" button
-- [ ] Implement chartStore.addNode() action
-- [ ] Auto-generate OrgEdge if "Reports to" selected
-- [ ] Modal animations (nodePop on mount)
-- [ ] Style with design tokens (--input-bg, --brand-bg, --grad-brand)
-- [ ] Test form submission & validation
+- [x] Create NodeModal.tsx component scaffold
+- [x] Build form fields:
+  - [x] Name (text input, required)
+  - [x] Job title (text input, required)
+  - [x] Department (select dropdown)
+  - [x] Employment type (segmented control)
+  - [x] Status (segmented control)
+  - [x] Reports to (select dropdown, optional)
+  - [x] Location (text input, optional)
+  - [x] Is this a new role? (toggle)
+- [x] Form validation (Name & Job title required)
+- [x] Create button disabled until required fields filled
+- [x] Wire modal open trigger to toolbar "Add node" button
+- [x] Implement chartStore.addNode() action
+- [x] Auto-generate OrgEdge if "Reports to" selected
+- [x] Modal animations (nodePop on mount)
+- [x] Style with design tokens (--input-bg, --brand-bg, --grad-brand)
+- [x] Test form submission & validation
 
 ---
 
-### 2.2 — Edit Node Modal
+### 2.2 — Edit Node Modal ✅
 **Prompt:** Build Edit Node modal (reuses NodeModal component, edit mode)
 
-- [ ] Add edit mode to NodeModal component
-- [ ] Pre-populate all fields with node's current values
-- [ ] Change title to "Edit role"
-- [ ] Add Delete button (bottom-left, destructive)
-- [ ] Implement delete confirmation flow (2-step: Delete → "Are you sure?" → Confirm/Cancel)
-- [ ] Implement chartStore.updateNode() action
-- [ ] Implement chartStore.deleteNode() action (removes connected edges)
-- [ ] Wire double-click on node card to open edit modal
-- [ ] Verify single-click still opens JD panel
-- [ ] Test edit, delete, confirmation flows
+- [x] Add edit mode to NodeModal component
+- [x] Pre-populate all fields with node's current values
+- [x] Change title to "Edit role"
+- [x] Add Delete button (bottom-left, destructive)
+- [x] Implement delete confirmation flow (2-step: Delete → "Are you sure?" → Confirm/Cancel)
+- [x] Implement chartStore.updateNode() action
+- [x] Implement chartStore.deleteNode() action (removes connected edges)
+- [x] Wire double-click on node card to open edit modal
+- [x] Verify single-click still opens JD panel
+- [x] Test edit, delete, confirmation flows
 
 ---
 
-### 2.3 — Reporting Lines (Edge Drawing)
+### 2.3 — Reporting Lines (Edge Drawing) ✅
 **Prompt:** Build click-to-connect interaction for drawing reporting lines
 
-- [ ] Add "Connect" tool button to toolbar
-- [ ] Implement cursor change to crosshair when Connect active
-- [ ] Implement click-to-connect flow:
-  - [ ] Click source node → highlight with brand ring (animated pulse)
-  - [ ] Click target node → draw edge
-  - [ ] Return to normal select mode
-- [ ] Implement chartStore.addEdge() action
-- [ ] Guard against self-connections (source === target)
-- [ ] Guard against duplicate edges
-- [ ] Guard against circular reporting (show toast error)
-- [ ] Edge visual styling:
-  - [ ] Smooth cubic bezier curve
-  - [ ] Department colour at 60% opacity
-  - [ ] Arrow head at target end
-  - [ ] On hover: 3px, 100% opacity
-- [ ] Edge selection state:
-  - [ ] Click edge to select → brand colour, 3px
-  - [ ] Delete button appears at midpoint
-- [ ] Delete edge via Delete/Backspace key or × button
-- [ ] Implement chartStore.deleteEdge() action
-- [ ] Test all connection scenarios & guards
+- [x] Add "Connect" tool button to toolbar
+- [x] Implement cursor change to crosshair when Connect active
+- [x] Implement click-to-connect flow:
+  - [x] Click source node → highlight with brand ring (animated pulse)
+  - [x] Click target node → draw edge
+  - [x] Return to normal select mode
+- [x] Implement chartStore.addEdge() action
+- [x] Guard against self-connections (source === target)
+- [x] Guard against duplicate edges
+- [x] Guard against circular reporting (show toast error)
+- [x] Edge visual styling:
+  - [x] Smooth cubic bezier curve
+  - [x] Department colour at 60% opacity
+  - [x] Arrow head at target end
+  - [x] On hover: 3px, 100% opacity
+- [x] Edge selection state:
+  - [x] Click edge to select → brand colour, 3px
+  - [x] Delete button appears at midpoint
+- [x] Delete edge via Delete/Backspace key or × button
+- [x] Implement chartStore.deleteEdge() action
+- [x] Test all connection scenarios & guards
 
 ---
 
-### 2.4 — Undo/Redo History
+### 2.4 — Undo/Redo History ✅
 **Prompt:** Implement undo/redo for all canvas operations
 
-- [ ] Create src/store/historyStore.ts (Zustand)
-- [ ] Maintain past/future state arrays (max 50 snapshots)
-- [ ] Export: pushSnapshot(), undo(), redo(), canUndo, canRedo
-- [ ] Integrate with chartStore:
-  - [ ] addNode calls pushSnapshot
-  - [ ] updateNode calls pushSnapshot
-  - [ ] deleteNode calls pushSnapshot
-  - [ ] addEdge calls pushSnapshot
-  - [ ] deleteEdge calls pushSnapshot
-  - [ ] Node drag reposition calls pushSnapshot
-- [ ] Create src/hooks/useKeyboard.ts (or extend existing)
-- [ ] Wire keyboard shortcuts:
-  - [ ] Ctrl+Z / Cmd+Z → undo
-  - [ ] Ctrl+Shift+Z / Cmd+Shift+Z → redo
-- [ ] Add undo/redo buttons to canvas toolbar (disabled when canUndo/canRedo false)
-- [ ] Show toast notification on undo/redo (bottom-centre, 2 second fade)
-- [ ] Test undo/redo for all operatable actions
+- [x] Create src/store/historyStore.ts (Zustand)
+- [x] Maintain past/future state arrays (max 50 snapshots)
+- [x] Export: pushSnapshot(), undo(), redo(), canUndo, canRedo
+- [x] Integrate with chartStore:
+  - [x] addNode calls pushSnapshot
+  - [x] updateNode calls pushSnapshot
+  - [x] deleteNode calls pushSnapshot
+  - [x] addEdge calls pushSnapshot
+  - [x] deleteEdge calls pushSnapshot
+  - [x] Node drag reposition calls pushSnapshot
+- [x] Create src/hooks/useKeyboard.ts (or extend existing)
+- [x] Wire keyboard shortcuts:
+  - [x] Ctrl+Z / Cmd+Z → undo
+  - [x] Ctrl+Shift+Z / Cmd+Shift+Z → redo
+- [x] Add undo/redo buttons to canvas toolbar (disabled when canUndo/canRedo false)
+- [x] Show toast notification on undo/redo (bottom-centre, 2 second fade)
+- [x] Test undo/redo for all operatable actions
 
 ---
 
-### 2.5 — Node Status Badges + Department Colour Coding
+### 2.5 — Node Status Badges + Department Colour Coding ✅
 **Prompt:** Polish node cards with full status badges and department colours
 
-- [ ] Add department colour to node cards:
-  - [ ] Left border: 3px solid, department colour
-  - [ ] Avatar background: department colour at 20% opacity
-  - [ ] Avatar border: 1px department colour at 40% opacity
-- [ ] Add status badges (bottom-right corner):
-  - [ ] active: no badge
-  - [ ] open: amber pill "OPEN" + Briefcase icon
-  - [ ] planned: purple pill "PLANNED" + Clock icon
-  - [ ] backfill: blue pill "BACKFILL" + RefreshCw icon
-  - [ ] isNew: teal pill "★ NEW" (shown in addition to status)
-- [ ] Add employment type label (bottom-left):
-  - [ ] contractor: show "CONTRACT" in dim text
-  - [ ] advisor: show "ADVISOR" in dim text
-  - [ ] full-time/part-time: no label
-- [ ] Node card styling:
-  - [ ] Width: 220px, min-height: 80px
-  - [ ] Border-radius: 12px, background --surface, border --border
-  - [ ] Box shadow: --shadow-sm
-  - [ ] On hover: border --border-hover, shadow --shadow, translateY(-1px)
-- [ ] Handle open/planned roles:
-  - [ ] Show role title in place of person name
-  - [ ] Style role title in italic
-- [ ] Test styling in various states & departments
+- [x] Add department colour to node cards:
+  - [x] Left border: 3px solid, department colour
+  - [x] Avatar background: department colour at 20% opacity
+  - [x] Avatar border: 1px department colour at 40% opacity
+- [x] Add status badges (bottom-right corner):
+  - [x] active: no badge
+  - [x] open: amber pill "OPEN" + Briefcase icon
+  - [x] planned: purple pill "PLANNED" + Clock icon
+  - [x] backfill: blue pill "BACKFILL" + RefreshCw icon
+  - [x] isNew: teal pill "★ NEW" (shown in addition to status)
+- [x] Add employment type label (bottom-left):
+  - [x] contractor: show "CONTRACT" in dim text
+  - [x] advisor: show "ADVISOR" in dim text
+  - [x] full-time/part-time: no label
+- [x] Node card styling:
+  - [x] Width: 220px, min-height: 80px
+  - [x] Border-radius: 12px, background --surface, border --border
+  - [x] Box shadow: --shadow-sm
+  - [x] On hover: border --border-hover, shadow --shadow, translateY(-1px)
+- [x] Handle open/planned roles:
+  - [x] Show role title in place of person name
+  - [x] Style role title in italic
+- [x] Test styling in various states & departments
 
 ---
 
-### 2.6 — Spotlight Search (Cmd+K)
+### 2.6 — Spotlight Search (Cmd+K) ✅
 **Prompt:** Build the Spotlight search feature
 
-- [ ] Create src/components/ui/Spotlight.tsx
-- [ ] Set up keyboard listener for Cmd+K / Ctrl+K
-- [ ] Build UI:
-  - [ ] Full-screen overlay (rgba 0,0,0,0.5)
-  - [ ] Centred modal (560px wide)
-  - [ ] Large search input (18px, no border)
-  - [ ] Results list (max-height 360px, scrollable)
-  - [ ] Keyboard navigation (arrows, Enter, Escape)
-- [ ] Implement search scope:
-  - [ ] Nodes in current chart (name + title)
-    - [ ] Show avatar + name + title + dept colour
-    - [ ] On select: pan canvas, highlight with brand ring (2s)
-  - [ ] Org charts in workspace (by name)
-    - [ ] Show Network icon + chart name + status badge
-    - [ ] On select: navigate to chart
-  - [ ] Pages (static list)
-    - [ ] Dashboard, Org Charts, Roles, Headcount, Settings
-    - [ ] Show relevant icon
-- [ ] Group results under headings: "People & Roles", "Charts", "Pages"
-- [ ] Show empty state: "No results for '...'"
-- [ ] Wire search hint in top nav search bar
-- [ ] Test search functionality & keyboard navigation
+- [x] Create src/components/ui/Spotlight.tsx
+- [x] Set up keyboard listener for Cmd+K / Ctrl+K
+- [x] Build UI:
+  - [x] Full-screen overlay (rgba 0,0,0,0.5)
+  - [x] Centred modal (560px wide)
+  - [x] Large search input (18px, no border)
+  - [x] Results list (max-height 360px, scrollable)
+  - [x] Keyboard navigation (arrows, Enter, Escape)
+- [x] Implement search scope:
+  - [x] Nodes in current chart (name + title)
+    - [x] Show avatar + name + title + dept colour
+    - [x] On select: pan canvas, highlight with brand ring (2s)
+  - [x] Org charts in workspace (by name)
+    - [x] Show Network icon + chart name + status badge
+    - [x] On select: navigate to chart
+  - [x] Pages (static list)
+    - [x] Dashboard, Org Charts, Roles, Headcount, Settings
+    - [x] Show relevant icon
+- [x] Group results under headings: "People & Roles", "Charts", "Pages"
+- [x] Show empty state: "No results for '...'"
+- [x] Wire search hint in top nav search bar
+- [x] Test search functionality & keyboard navigation
 
 ---
 
