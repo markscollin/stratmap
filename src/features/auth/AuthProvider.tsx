@@ -21,19 +21,22 @@ function DevBypassProvider({ children }: { children: ReactNode }) {
 // ── Clerk sync: hydrates userStore from Clerk's useUser ────────────────────
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
-  const { signOut: clerkSignOut } = useClerk()
   const { setUser, signOut: storeSignOut, workspace } = useUserStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
+
+  // Skip all auth logic on sign-in/sign-up pages — let Clerk work undisturbed
+  if (isAuthPage) {
+    return <>{children}</>
+  }
 
   useEffect(() => {
     if (!isLoaded) return
 
     if (!isSignedIn) {
       storeSignOut()
-      if (pathname !== '/sign-in' && pathname !== '/sign-up') {
-        navigate('/sign-in')
-      }
+      navigate('/sign-in')
       return
     }
 
@@ -49,24 +52,17 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
         'owner'
       )
     }
-  }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate, pathname])
+  }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate])
 
   // Once loaded + signed in, redirect to onboarding if no workspace set
-  // But don't redirect if we're on the sign-in/sign-up pages (let Clerk finish first)
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
-    const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-    if (!workspace && pathname !== '/onboarding' && !isAuthPage) {
+    if (!workspace && pathname !== '/onboarding') {
       navigate('/onboarding')
     }
   }, [isLoaded, isSignedIn, workspace, navigate, pathname])
 
-  // Don't override signOut in useEffect — useAuth handles the bridge
-
-  // Don't show loading spinner on auth pages — let Clerk's UI through
-  const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-
-  if (!isLoaded && !isAuthPage) {
+  if (!isLoaded) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',

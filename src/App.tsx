@@ -18,8 +18,9 @@ export default function App() {
       <AuthProvider>
         <Routes>
           {/* Auth routes — no sidebar layout */}
-          <Route path="/sign-in"    element={<SignInPage />} />
-          <Route path="/sign-up"    element={<SignUpPage />} />
+          {/* Clerk uses sub-routes like /sign-in/factor-one, so match with wildcard */}
+          <Route path="/sign-in/*"   element={<SignInPage />} />
+          <Route path="/sign-up/*"   element={<SignUpPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
 
           {/* App routes — with sidebar layout */}

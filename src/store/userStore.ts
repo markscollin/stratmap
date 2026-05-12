@@ -17,18 +17,38 @@ interface UserStore {
   removeMember: (userId: string) => void
 }
 
+// Load workspace from localStorage if available
+function loadWorkspaceFromStorage(): Workspace | null {
+  try {
+    const stored = localStorage.getItem('stratmap_workspace')
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
 export const useUserStore = create<UserStore>((set) => ({
   user: null,
   permission: 'viewer',
   isAuthenticated: false,
-  workspace: null,
+  workspace: loadWorkspaceFromStorage(),
 
   setUser: (user, permission = 'editor') =>
     set({ user, isAuthenticated: !!user, permission: user ? permission : 'viewer' }),
 
   setPermission: (permission) => set({ permission }),
 
-  setWorkspace: (workspace) => set({ workspace }),
+  setWorkspace: (workspace) => {
+    // Persist to localStorage
+    if (workspace) {
+      try {
+        localStorage.setItem('stratmap_workspace', JSON.stringify(workspace))
+      } catch {
+        // localStorage full or unavailable, continue anyway
+      }
+    }
+    set({ workspace })
+  },
 
   signOut: () => set({ user: null, isAuthenticated: false, permission: 'viewer', workspace: null }),
 
