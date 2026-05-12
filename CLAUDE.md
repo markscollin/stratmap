@@ -113,6 +113,12 @@ npm run dev
 # Type check
 npx tsc --noEmit
 
+# Run tests (watch mode)
+npm test
+
+# Run tests once (CI / pre-commit)
+npm run test:run
+
 # Build for production
 npm run build
 
@@ -121,6 +127,23 @@ git add .
 git commit -m "Your message"
 git push
 ```
+
+---
+
+## Testing
+
+**Stack:** Vitest + React Testing Library. Tests live in `__tests__/` directories co-located with source.
+
+**Setup files:**
+- `vite.config.ts` — test config (globals, jsdom, setupFiles)
+- `src/test/setup.ts` — imports `@testing-library/jest-dom` matchers
+
+**Test suites (Sprint 2):**
+- `src/store/__tests__/toastStore.test.ts` — addToast variants, cap behaviour, auto-dismiss, removeToast
+- `src/features/canvas/__tests__/useCanvasState.test.ts` — addNode, updateNode, deleteNode, addEdge guards (self/duplicate/circular), undo/redo
+- `src/features/nodes/__tests__/NodeModal.test.tsx` — add/edit modes, validation, delete confirmation flow
+
+**Convention for future sprints:** add a `__tests__/` folder alongside any new feature file that contains meaningful logic. Reset Zustand stores in `beforeEach` using `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for any timer-dependent behaviour.
 
 ---
 
@@ -145,13 +168,21 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 
 ---
 
+## Deployment
+
+✅ **Vercel is live and auto-deploys from main branch.**
+- Production URL: https://stratmap-seven.vercel.app
+- GitHub integration configured — every push to main triggers deployment
+- Deployment set up on 2026-05-12
+
+---
+
 ## Next Steps
 
 **Recommended priorities:**
-1. **Vercel deployment** — Connect repo to Vercel for CI/CD from main branch
-2. **JD editor** — Fill in Responsibilities/Requirements tabs (Sprint 6)
-3. **Approval workflow** — Wire up Edit/Approve buttons, status transitions
-4. **Backend/persistence** — Currently all data is mock; add API/database
+1. **JD editor** — Fill in Responsibilities/Requirements tabs (Sprint 6)
+2. **Approval workflow** — Wire up Edit/Approve buttons, status transitions
+3. **Backend/persistence** — Currently all data is mock; add API/database
 
 ---
 
