@@ -55,9 +55,11 @@ npm run build       # Production build
 - **SSH configured** — git operations work automatically
 - **Vercel** — Connected for CI/CD from main branch
 
-## Next Steps
+## Documentation
 
-See [CLAUDE.md](./CLAUDE.md) for detailed project context, file structure, and implementation notes for future development sessions.
+- **[DESIGN.md](./DESIGN.md)** — Product specification, design system, data model, sprint plan (the authoritative reference)
+- **[CLAUDE.md](./CLAUDE.md)** — Implementation context for Claude sessions, file structure, what's built, next steps
+- **README.md** — This file; quick start and tech overview
 
 ## License
 
