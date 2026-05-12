@@ -46,7 +46,7 @@ function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
 }
 
 export function TopNav() {
-  const { isDark, toggleTheme } = useUIStore()
+  const { isDark, toggleTheme, setSpotlightOpen } = useUIStore()
   const { pathname } = useLocation()
   const [hovBtn, setHovBtn] = useState<string | null>(null)
   const label = getLabel(pathname)
@@ -71,21 +71,24 @@ export function TopNav() {
 
       {/* Right controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Search hint */}
-        <div style={{
+        {/* Search hint — opens Spotlight */}
+        <button onClick={() => setSpotlightOpen(true)} style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          background: 'var(--input-bg)',
-          border: '1px solid var(--border)',
+          background: 'var(--input-bg)', border: '1px solid var(--border)',
           borderRadius: 8, padding: '6px 12px', width: 196,
-        }}>
+          cursor: 'pointer', transition: 'border-color .15s',
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        >
           <Search size={13} color="var(--dim)" />
-          <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1 }}>Search…</span>
+          <span style={{ fontSize: 13, color: 'var(--dim)', flex: 1, textAlign: 'left' }}>Search…</span>
           <kbd style={{
             fontSize: 10, color: 'var(--dim)',
             background: 'var(--raised)', border: '1px solid var(--border)',
             borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace',
           }}>⌘K</kbd>
-        </div>
+        </button>
 
         <IconBtn id="theme" Icon={isDark ? Sun : Moon} onClick={toggleTheme} hovBtn={hovBtn} setHovBtn={setHovBtn} />
         <IconBtn id="bell"  Icon={Bell}                onClick={() => {}}   hovBtn={hovBtn} setHovBtn={setHovBtn} />

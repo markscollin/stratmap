@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import { mockDepartments } from '../data/mockOrg'
 import { ChevronLeft } from 'lucide-react'
 import { useChartStore } from '../store'
 import { StatusBadge } from '../components/ui/StatusBadge'
@@ -37,7 +38,11 @@ export function CanvasView() {
         <VersionPill version={chart.version} />
       </div>
 
-      <OrgChart initialNodes={chart.nodes} initialEdges={chart.edges} />
+      <OrgChart
+        initialNodes={chart.nodes}
+        initialEdges={chart.edges}
+        departments={chart.departments.length ? chart.departments : mockDepartments}
+      />
     </div>
   )
 }

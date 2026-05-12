@@ -4,16 +4,19 @@ interface UIStore {
   isDark: boolean
   sidebarCollapsed: boolean
   activePanelNodeId: string | null
+  spotlightOpen: boolean
   toggleTheme: () => void
   toggleSidebar: () => void
   openPanel: (nodeId: string) => void
   closePanel: () => void
+  setSpotlightOpen: (open: boolean) => void
 }
 
 export const useUIStore = create<UIStore>((set, get) => ({
   isDark: true,
   sidebarCollapsed: false,
   activePanelNodeId: null,
+  spotlightOpen: false,
 
   toggleTheme: () => {
     const next = !get().isDark
@@ -31,4 +34,6 @@ export const useUIStore = create<UIStore>((set, get) => ({
   openPanel: (nodeId) => set({ activePanelNodeId: nodeId }),
 
   closePanel: () => set({ activePanelNodeId: null }),
+
+  setSpotlightOpen: (open) => set({ spotlightOpen: open }),
 }))

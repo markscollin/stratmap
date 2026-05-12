@@ -1,18 +1,42 @@
 import { useState } from 'react'
-import { User } from 'lucide-react'
+import { User, Briefcase, Clock, RefreshCw } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import { mockDepartments } from '../../data/mockOrg'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 
-const STATUS_DOT: Record<string, { color: string; label: string }> = {
-  active:  { color: '#10B981', label: '' },
-  open:    { color: '#F59E0B', label: 'OPEN' },
-  planned: { color: '#8B5CF6', label: 'PLANNED' },
-  backfill:{ color: '#0EA5E9', label: 'BACKFILL' },
-}
-
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+type StatusBadgeConfig = { color: string; bg: string; icon: React.ReactNode; label: string }
+
+function getStatusBadge(status: OrgNode['status']): StatusBadgeConfig | null {
+  switch (status) {
+    case 'open':     return { color: 'var(--warn)',   bg: 'var(--warn-bg)',   icon: <Briefcase size={8} />, label: 'OPEN'     }
+    case 'planned':  return { color: 'var(--purple)', bg: 'var(--purple-bg)', icon: <Clock size={8} />,     label: 'PLANNED'  }
+    case 'backfill': return { color: 'var(--brand)',  bg: 'var(--brand-bg)',  icon: <RefreshCw size={8} />, label: 'BACKFILL' }
+    default: return null
+  }
+}
+
+function StatusPill({ config }: { config: StatusBadgeConfig }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      padding: '2px 5px', borderRadius: 20,
+      background: config.bg, color: config.color,
+      fontSize: 9, fontWeight: 700, letterSpacing: '.3px', flexShrink: 0,
+    }}>
+      {config.icon}{config.label}
+    </span>
+  )
 }
 
 export function NodeCard({
@@ -22,6 +46,7 @@ export function NodeCard({
   isConnectTarget,
   onPointerDown,
   onClick,
+  onDoubleClick,
 }: {
   node: OrgNode
   selected: boolean
@@ -29,20 +54,21 @@ export function NodeCard({
   isConnectTarget: boolean
   onPointerDown: (e: React.PointerEvent) => void
   onClick: (e: React.MouseEvent) => void
+  onDoubleClick: (e: React.MouseEvent) => void
 }) {
   const [hov, setHov] = useState(false)
 
-  const dept = mockDepartments.find(d => d.id === node.departmentId)
-  const deptColour = dept?.colour ?? '#0EA5E9'
-  const isFilled   = node.status === 'active' || node.status === 'backfill'
-  const label      = isFilled ? node.name : node.title
-  const dot        = STATUS_DOT[node.status]
+  const dept        = mockDepartments.find(d => d.id === node.departmentId)
+  const deptColour  = dept?.colour ?? '#94A3B8'
+  const isUnfilled  = node.status === 'open' || node.status === 'planned'
+  const label       = isUnfilled ? node.title : node.name
+  const statusBadge = getStatusBadge(node.status)
 
   const borderColor =
-    connecting      ? 'var(--purple)' :
-    isConnectTarget ? 'var(--success)' :
-    selected        ? 'var(--brand)'   :
-    hov             ? 'var(--border-hover)' :
+    connecting      ? 'var(--purple)'      :
+    isConnectTarget ? 'var(--success)'     :
+    selected        ? 'var(--brand)'       :
+    hov             ? 'var(--border-hover)':
     'var(--border)'
 
   const shadow =
@@ -50,27 +76,28 @@ export function NodeCard({
     hov      ? 'var(--shadow)' :
     'var(--shadow-sm)'
 
+  const employmentLabel =
+    node.employmentType === 'contractor' ? 'CONTRACT' :
+    node.employmentType === 'advisor'    ? 'ADVISOR'  : null
+
   return (
     <div
       style={{
-        position: 'absolute',
-        left: node.x,
-        top: node.y,
-        width: NODE_W,
-        height: NODE_H,
-        borderRadius: 10,
+        position: 'absolute', left: node.x, top: node.y,
+        width: NODE_W, height: NODE_H,
+        borderRadius: 12,
         background: 'var(--surface)',
         border: `1.5px solid ${borderColor}`,
         boxShadow: shadow,
-        display: 'flex',
-        overflow: 'hidden',
+        display: 'flex', overflow: 'hidden',
         cursor: 'grab',
-        transition: 'border-color .12s, box-shadow .12s',
-        userSelect: 'none',
-        touchAction: 'none',
+        transition: 'border-color .12s, box-shadow .12s, transform .12s',
+        transform: hov && !selected ? 'translateY(-1px)' : 'none',
+        userSelect: 'none', touchAction: 'none',
       }}
       onPointerDown={onPointerDown}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
@@ -79,48 +106,55 @@ export function NodeCard({
 
       {/* Avatar */}
       <div style={{
-        width: 30, height: 30,
-        margin: '17px 8px',
-        borderRadius: '50%',
-        background: isFilled ? deptColour : 'transparent',
-        border: isFilled ? 'none' : `1.5px dashed ${deptColour}`,
+        width: 36, height: 36,
+        margin: '22px 8px 22px 10px',
+        borderRadius: '50%', flexShrink: 0,
+        background: isUnfilled ? hexToRgba(deptColour, 0.15) : deptColour,
+        border: isUnfilled ? `1px solid ${hexToRgba(deptColour, 0.4)}` : 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 10, fontWeight: 700, color: isFilled ? '#fff' : deptColour,
-        flexShrink: 0,
+        fontSize: 11, fontWeight: 700, color: isUnfilled ? deptColour : '#fff',
       }}>
-        {isFilled ? initials(node.name) : <User size={13} color={deptColour} />}
+        {isUnfilled
+          ? <User size={14} color={deptColour} />
+          : initials(node.name)
+        }
       </div>
 
-      {/* Text */}
-      <div style={{ flex: 1, paddingRight: 8, paddingTop: 14, minWidth: 0 }}>
-        <div style={{
-          fontSize: 12, fontWeight: 600, color: 'var(--text)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.3,
-        }}>{label}</div>
-        <div style={{
-          fontSize: 10, color: 'var(--muted)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          lineHeight: 1.3, marginTop: 2,
-        }}>{node.title}</div>
-      </div>
+      {/* Text content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: 10, minWidth: 0, gap: 3 }}>
+        {/* Row 1: name + status/new badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{
+            fontSize: 12, fontWeight: 700, color: 'var(--text)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            flex: 1, fontStyle: isUnfilled ? 'italic' : 'normal',
+          }}>{label}</span>
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            {node.isNew && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 2,
+                padding: '2px 5px', borderRadius: 20,
+                background: 'rgba(20,184,166,0.15)', color: '#14B8A6',
+                fontSize: 9, fontWeight: 700, letterSpacing: '.3px',
+              }}>★ NEW</span>
+            )}
+            {statusBadge && <StatusPill config={statusBadge} />}
+          </div>
+        </div>
 
-      {/* Status pill / dot */}
-      {node.status !== 'active' && dot.label && (
-        <div style={{
-          position: 'absolute', top: 6, right: 6,
-          fontSize: 9, fontWeight: 700, letterSpacing: '.4px',
-          padding: '2px 5px', borderRadius: 4,
-          background: `${dot.color}20`, color: dot.color,
-        }}>{dot.label}</div>
-      )}
-      {node.isNew && (
-        <div style={{
-          position: 'absolute', top: 6, right: 6,
-          fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4,
-          background: 'var(--brand-bg)', color: 'var(--brand)',
-        }}>★ NEW</div>
-      )}
+        {/* Row 2: job title + employment type */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{
+            fontSize: 11, color: 'var(--muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+          }}>{node.title}</span>
+          {employmentLabel && (
+            <span style={{ fontSize: 10, color: 'var(--dim)', fontWeight: 600, flexShrink: 0 }}>
+              {employmentLabel}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

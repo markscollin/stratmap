@@ -12,6 +12,7 @@ import { VersionPill } from '../components/ui/VersionPill'
 import { AvatarStack } from '../components/ui/AvatarStack'
 import { MiniChartThumb } from '../components/ui/MiniChartThumb'
 import type { OrgChart, OrgNode, OrgEdge, ChartStatus } from '../types'
+import { mockDepartments } from '../data/mockOrg'
 
 // ── Approval cycle bar ────────────────────────────────────────────────────────
 
@@ -412,7 +413,7 @@ export function ChartView() {
       name,
       status: 'draft',
       version: 1,
-      departments: [],
+      departments: mockDepartments,
       nodes,
       edges,
       owner: 'Jamie D',

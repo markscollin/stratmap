@@ -1,4 +1,5 @@
 import type { OrgChart, Department } from '../types'
+import { currentStructureNodes, currentStructureEdges } from './mockNodes'
 
 export const DEPT_COLOURS: Record<string, string> = {
   eng:     '#0EA5E9',
@@ -40,8 +41,8 @@ export const mockCharts: OrgChart[] = [
     status: 'live',
     version: 3,
     departments: mockDepartments,
-    nodes: [],
-    edges: [],
+    nodes: currentStructureNodes,
+    edges: currentStructureEdges,
     owner: 'Jamie D',
     creator: 'Jamie D',
     collaborators: ['JD', 'SR', 'MK'],

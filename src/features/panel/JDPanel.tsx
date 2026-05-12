@@ -100,7 +100,7 @@ export function JDPanel({ node, onClose }: {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
-            {tab === 'overview' && <OverviewTab node={node} deptColour={dept?.colour} />}
+            {tab === 'overview' && <OverviewTab node={node} />}
             {tab === 'responsibilities' && <PlaceholderTab label="Responsibilities" />}
             {tab === 'requirements'     && <PlaceholderTab label="Requirements" />}
           </div>
@@ -120,7 +120,7 @@ export function JDPanel({ node, onClose }: {
   )
 }
 
-function OverviewTab({ node, deptColour }: { node: OrgNode; deptColour?: string }) {
+function OverviewTab({ node }: { node: OrgNode }) {
   const fields = [
     { label: 'Employment type', value: node.employmentType },
     { label: 'Status',          value: node.status },

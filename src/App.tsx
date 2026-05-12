@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from './components/layout/Layout'
+import { ToastStack } from './components/ui/Toast'
+import { Spotlight } from './components/ui/Spotlight'
 import { Dashboard }     from './pages/Dashboard'
 import { ChartView }     from './pages/ChartView'
 import { CanvasView }    from './pages/CanvasView'
@@ -20,6 +22,8 @@ export default function App() {
           <Route path="/settings"   element={<SettingsView />} />
         </Route>
       </Routes>
+      <ToastStack />
+      <Spotlight />
     </BrowserRouter>
   )
 }

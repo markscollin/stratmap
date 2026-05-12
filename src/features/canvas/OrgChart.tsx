@@ -1,104 +1,117 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2 } from 'lucide-react'
-import type { OrgNode } from '../../types'
+import type { OrgNode, OrgEdge, Department } from '../../types'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 import { useCanvasState } from './useCanvasState'
 import { NodeCard } from '../nodes/NodeCard'
+import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
 
-// ─── Edge SVG ────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type Transform = { x: number; y: number; scale: number }
 
-// All coordinates are in canvas space; we project to screen space here so the
-// SVG can live outside the CSS-transformed viewport div (avoids overflow/clip issues).
 function toScreen(cx: number, cy: number, t: Transform) {
   return { x: cx * t.scale + t.x, y: cy * t.scale + t.y }
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+// ─── Edge SVG ─────────────────────────────────────────────────────────────────
+
 function EdgePath({
-  source, target, transform, selected, hovered,
-  onClick, onMouseEnter, onMouseLeave,
+  source, target, transform, selected, hovered, deptColour,
+  onClick, onMouseEnter, onMouseLeave, onDelete,
 }: {
   source: OrgNode; target: OrgNode
   transform: Transform
   selected: boolean; hovered: boolean
+  deptColour: string
   onClick: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
+  onDelete: () => void
 }) {
-  const s = toScreen(source.x + NODE_W / 2, source.y + NODE_H, transform)
-  const e = toScreen(target.x + NODE_W / 2, target.y,          transform)
-  // keep the bezier arc proportional to zoom so curves don't flatten at low zoom
+  const s  = toScreen(source.x + NODE_W / 2, source.y + NODE_H, transform)
+  const e  = toScreen(target.x + NODE_W / 2, target.y,          transform)
   const dy = Math.max((e.y - s.y) * 0.45, 30)
   const d  = `M ${s.x} ${s.y} C ${s.x} ${s.y+dy} ${e.x} ${e.y-dy} ${e.x} ${e.y}`
 
-  const stroke = selected ? 'var(--brand)' : hovered ? 'var(--muted)' : 'rgba(148,163,184,0.55)'
-  const width  = selected || hovered ? 2 : 1.5
+  const baseColour = selected ? 'var(--brand)' : hovered ? deptColour : hexToRgba(deptColour, 0.6)
+  const width      = selected || hovered ? 2.5 : 1.5
+
+  // Midpoint of the bezier (approximated as line midpoint — works for our vertical curves)
+  const mid = { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 }
+
+  // Arrowhead: our bezier always arrives vertically, so arrow points down (or up)
+  const arrowDir = e.y >= s.y ? 1 : -1
+  const arrowPath = `M ${e.x} ${e.y} L ${e.x - 5} ${e.y - 9 * arrowDir} L ${e.x + 5} ${e.y - 9 * arrowDir} Z`
 
   return (
     <g>
+      {/* Invisible wide hit area */}
       <path d={d} fill="none" stroke="transparent" strokeWidth={14}
         style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
         onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
       />
-      <path d={d} fill="none" stroke={stroke} strokeWidth={width}
+      {/* Visible path */}
+      <path d={d} fill="none" stroke={baseColour} strokeWidth={width}
         strokeLinecap="round"
         style={{ pointerEvents: 'none', transition: 'stroke .15s, stroke-width .15s' }}
       />
-      <circle cx={e.x} cy={e.y} r={3.5}
-        fill={stroke}
+      {/* Arrowhead */}
+      <path d={arrowPath} fill={baseColour}
         style={{ pointerEvents: 'none', transition: 'fill .15s' }}
       />
+      {/* Delete button at midpoint — only when selected */}
+      {selected && (
+        <g onClick={e => { e.stopPropagation(); onDelete() }} style={{ cursor: 'pointer' }}>
+          <circle cx={mid.x} cy={mid.y} r={10}
+            fill="var(--surface)" stroke="var(--danger)" strokeWidth={1.5}
+          />
+          <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="central"
+            fontSize={13} fill="var(--danger)"
+            style={{ pointerEvents: 'none', fontFamily: 'DM Sans, sans-serif', fontWeight: 700 }}
+          >×</text>
+        </g>
+      )}
     </g>
   )
 }
 
-// ─── Minimap ─────────────────────────────────────────────────────────────────
+// ─── Minimap ──────────────────────────────────────────────────────────────────
 
 const MM_W = 160
 const MM_H = 90
 
 function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
-  nodes: OrgNode[]
-  transform: { x: number; y: number; scale: number }
-  vpW: number; vpH: number
+  nodes: OrgNode[]; transform: Transform; vpW: number; vpH: number
   onPanTo: (x: number, y: number) => void
 }) {
   if (nodes.length === 0) return null
-
-  const xs = nodes.map(n => n.x)
-  const ys = nodes.map(n => n.y)
-  const minX = Math.min(...xs) - 40
-  const minY = Math.min(...ys) - 40
-  const maxX = Math.max(...xs) + NODE_W + 40
-  const maxY = Math.max(...ys) + NODE_H + 40
-  const cW = maxX - minX
-  const cH = maxY - minY
-
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y)
+  const minX = Math.min(...xs) - 40, minY = Math.min(...ys) - 40
+  const maxX = Math.max(...xs) + NODE_W + 40, maxY = Math.max(...ys) + NODE_H + 40
+  const cW = maxX - minX, cH = maxY - minY
   const mmScale = Math.min(MM_W / cW, MM_H / cH)
-
-  // Viewport rect in canvas space
-  const vpCX = -transform.x / transform.scale
-  const vpCY = -transform.y / transform.scale
-  const vpCW = vpW / transform.scale
-  const vpCH = vpH / transform.scale
-
-  // In minimap space
-  const vpMMX = (vpCX - minX) * mmScale
-  const vpMMY = (vpCY - minY) * mmScale
-  const vpMMW = vpCW * mmScale
-  const vpMMH = vpCH * mmScale
+  const vpCX = -transform.x / transform.scale, vpCY = -transform.y / transform.scale
+  const vpCW = vpW / transform.scale,           vpCH = vpH / transform.scale
+  const vpMMX = (vpCX - minX) * mmScale, vpMMY = (vpCY - minY) * mmScale
+  const vpMMW = vpCW * mmScale,          vpMMH = vpCH * mmScale
 
   const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const mx = (e.clientX - rect.left) / mmScale + minX
-    const my = (e.clientY - rect.top)  / mmScale + minY
-    onPanTo(
-      -(mx * transform.scale - vpW / 2),
-      -(my * transform.scale - vpH / 2),
-    )
+    const mx   = (e.clientX - rect.left)  / mmScale + minX
+    const my   = (e.clientY - rect.top)   / mmScale + minY
+    onPanTo(-(mx * transform.scale - vpW / 2), -(my * transform.scale - vpH / 2))
   }
+
+  const deptColors: Record<string,string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
 
   return (
     <div style={{
@@ -107,39 +120,26 @@ function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
     }}>
       <svg width={MM_W} height={MM_H} style={{ display: 'block', cursor: 'crosshair' }} onClick={handleClick}>
-        {/* Node rects */}
-        {nodes.map(n => {
-          const dept = n.departmentId
-          const deptColors: Record<string,string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
-          const c = deptColors[dept] ?? '#94A3B8'
-          return (
-            <rect key={n.id}
-              x={(n.x - minX) * mmScale} y={(n.y - minY) * mmScale}
-              width={NODE_W * mmScale} height={NODE_H * mmScale}
-              rx={2} fill={c} fillOpacity={0.55}
-            />
-          )
-        })}
-        {/* Viewport rect */}
-        <rect
-          x={vpMMX} y={vpMMY} width={vpMMW} height={vpMMH}
-          fill="rgba(14,165,233,0.08)"
-          stroke="var(--brand)" strokeWidth={1.5}
-          rx={2}
-          style={{ pointerEvents:'none' }}
+        {nodes.map(n => (
+          <rect key={n.id}
+            x={(n.x - minX) * mmScale} y={(n.y - minY) * mmScale}
+            width={NODE_W * mmScale} height={NODE_H * mmScale}
+            rx={2} fill={deptColors[n.departmentId] ?? '#94A3B8'} fillOpacity={0.55}
+          />
+        ))}
+        <rect x={vpMMX} y={vpMMY} width={vpMMW} height={vpMMH}
+          fill="rgba(14,165,233,0.08)" stroke="var(--brand)" strokeWidth={1.5}
+          rx={2} style={{ pointerEvents: 'none' }}
         />
       </svg>
     </div>
   )
 }
 
-// ─── Connect mode indicator line ──────────────────────────────────────────────
+// ─── Connect mode indicator ───────────────────────────────────────────────────
 
-// mousePos is in canvas space; transform projects it to screen space
 function ConnectingLine({ fromNode, mousePos, transform }: {
-  fromNode: OrgNode
-  mousePos: { x: number; y: number }
-  transform: Transform
+  fromNode: OrgNode; mousePos: { x: number; y: number }; transform: Transform
 }) {
   const s  = toScreen(fromNode.x + NODE_W / 2, fromNode.y + NODE_H, transform)
   const e  = toScreen(mousePos.x, mousePos.y, transform)
@@ -152,27 +152,15 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
   )
 }
 
-// ─── Toolbar ─────────────────────────────────────────────────────────────────
+// ─── Toolbar ──────────────────────────────────────────────────────────────────
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
 function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo }: {
-  activeTool: ActiveTool
-  setActiveTool: (t: ActiveTool) => void
-  onAddNode: () => void
-  onUndo: () => void
-  onRedo: () => void
-  canUndo: boolean
-  canRedo: boolean
+  activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
+  onAddNode: () => void; onUndo: () => void; onRedo: () => void
+  canUndo: boolean; canRedo: boolean
 }) {
-  const tools: { id: ActiveTool; Icon: React.FC<{ size?: number }>; label: string }[] = [
-    { id: 'select',  Icon: MousePointer2, label: 'Select (V)'  },
-    { id: 'pan',     Icon: Maximize2,     label: 'Pan (H)'     },
-    { id: 'zoom',    Icon: ZoomIn,        label: 'Zoom (Z)'    },
-    { id: 'connect', Icon: GitBranch,     label: 'Connect (C)' },
-    { id: 'zoom',    Icon: Layers,        label: 'Filter (F)'  }, // visual only
-  ]
-
   return (
     <div style={{
       position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
@@ -180,30 +168,22 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 10, padding: '4px 6px', boxShadow: 'var(--shadow-sm)',
     }}>
-      {/* Undo/Redo */}
-      <ToolBtn Icon={Undo2} label="Undo (⌘Z)" active={false} disabled={!canUndo} onClick={onUndo} />
-      <ToolBtn Icon={Redo2} label="Redo (⌘⇧Z)" active={false} disabled={!canRedo} onClick={onRedo} />
-
-      <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 3px' }} />
-
+      <ToolBtn Icon={Undo2} label="Undo (⌘Z)"    active={false} disabled={!canUndo} onClick={onUndo} />
+      <ToolBtn Icon={Redo2} label="Redo (⌘⇧Z)"   active={false} disabled={!canRedo} onClick={onRedo} />
+      <Divider />
       {(['select','pan','zoom','connect'] as ActiveTool[]).map(id => {
         const map: Record<ActiveTool, { Icon: React.FC<{ size?: number }>; label: string }> = {
-          select:  { Icon: MousePointer2, label: 'Select (V)' },
-          pan:     { Icon: Maximize2,     label: 'Pan (H)'    },
-          zoom:    { Icon: ZoomIn,        label: 'Zoom (Z)'   },
+          select:  { Icon: MousePointer2, label: 'Select (V)'  },
+          pan:     { Icon: Maximize2,     label: 'Pan (H)'     },
+          zoom:    { Icon: ZoomIn,        label: 'Zoom (Z)'    },
           connect: { Icon: GitBranch,     label: 'Connect (C)' },
         }
         const { Icon, label } = map[id]
         return <ToolBtn key={id} Icon={Icon} label={label} active={activeTool === id} onClick={() => setActiveTool(id)} />
       })}
-
-      <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 3px' }} />
-
-      {/* Filter */}
+      <Divider />
       <ToolBtn Icon={Layers} label="Filter (F)" active={false} onClick={() => {}} />
-
-      <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 3px' }} />
-
+      <Divider />
       <button onClick={onAddNode} style={{
         display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
         borderRadius: 6, background: 'var(--brand-bg)', border: '1px solid var(--brand)',
@@ -215,17 +195,17 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
   )
 }
 
+function Divider() {
+  return <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 3px' }} />
+}
+
 function ToolBtn({ Icon, label, active, disabled, onClick }: {
   Icon: React.FC<{ size?: number }>; label: string; active: boolean; disabled?: boolean; onClick: () => void
 }) {
   const [hov, setHov] = useState(false)
   return (
-    <button
-      onClick={onClick}
-      title={label}
-      disabled={disabled}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <button onClick={onClick} title={label} disabled={disabled}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         width: 30, height: 30, borderRadius: 6,
@@ -244,9 +224,7 @@ function ToolBtn({ Icon, label, active, disabled, onClick }: {
 
 // ─── Zoom controls ────────────────────────────────────────────────────────────
 
-function ZoomControls({ scale, onZoom, onFit }: {
-  scale: number; onZoom: (delta: number) => void; onFit: () => void
-}) {
+function ZoomControls({ scale, onZoom, onFit }: { scale: number; onZoom: (d: number) => void; onFit: () => void }) {
   return (
     <div style={{
       position: 'absolute', bottom: 16, right: 16, zIndex: 20,
@@ -270,11 +248,12 @@ const zoomBtnStyle: React.CSSProperties = {
   color: 'var(--muted)', cursor: 'pointer', fontSize: 14,
 }
 
-// ─── Main canvas ─────────────────────────────────────────────────────────────
+// ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ initialNodes = [], initialEdges = [] }: {
+export function OrgChart({ initialNodes = [], initialEdges = [], departments = [] }: {
   initialNodes?: OrgNode[]
   initialEdges?: OrgEdge[]
+  departments?: Department[]
 }) {
   const {
     nodes, edges, transform, setTransform,
@@ -282,69 +261,65 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
     selectedEdgeId, setSelectedEdgeId,
     connectingFrom, setConnectingFrom,
     activeTool, setActiveTool,
-    moveNode, commitDrag, addEdge, removeEdge, addNode,
+    moveNode, commitDrag,
+    addNode, updateNode, deleteNode,
+    addEdge, removeEdge, removeEdgesByTarget,
     undo, redo, canUndo, canRedo,
   } = useCanvasState(initialNodes, initialEdges)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const viewportRef  = useRef<HTMLDivElement>(null)
 
-  // Interaction refs — avoid stale closures in mousemove handlers
   const interactionRef = useRef({
-    mode:    'idle' as 'idle' | 'dragging' | 'panning',
-    nodeId:  null as string | null,
-    lastX:   0,
-    lastY:   0,
-    hasMoved: false,
-    startX:  0,
-    startY:  0,
+    mode: 'idle' as 'idle' | 'dragging' | 'panning',
+    nodeId:   null as string | null,
+    lastX: 0, lastY: 0, hasMoved: false, startX: 0, startY: 0,
   })
-  const scaleRef      = useRef(transform.scale)
-  scaleRef.current    = transform.scale
-  const nodesRef      = useRef(nodes)
-  nodesRef.current    = nodes
+  const scaleRef   = useRef(transform.scale)
+  scaleRef.current = transform.scale
+  const nodesRef   = useRef(nodes)
+  nodesRef.current = nodes
 
-  // Mouse pos in canvas space (for connect line)
   const [mouseCanvas, setMouseCanvas] = useState({ x: 0, y: 0 })
   const [hovEdgeId,   setHovEdgeId]   = useState<string | null>(null)
+  const [vpSize,      setVpSize]      = useState({ w: 1100, h: 600 })
 
-  // Viewport dimensions
-  const [vpSize, setVpSize] = useState({ w: 1100, h: 600 })
+  // Modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
+  const addNodePosRef = useRef({ x: 400, y: 200 })
+
+  // Single vs double click disambiguation
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
   useEffect(() => {
     if (!containerRef.current) return
     const obs = new ResizeObserver(entries => {
-      for (const e of entries) {
-        setVpSize({ w: e.contentRect.width, h: e.contentRect.height })
-      }
+      for (const e of entries) setVpSize({ w: e.contentRect.width, h: e.contentRect.height })
     })
     obs.observe(containerRef.current)
     return () => obs.disconnect()
   }, [])
 
-  // ── Fit to view ───────────────────────────────────────────────────────────
+  // ── Fit to view ────────────────────────────────────────────────────────────
 
   const fitToView = useCallback(() => {
     const ns = nodesRef.current
     if (ns.length === 0) return
     const { w, h } = vpSize
-    const xs = ns.map(n => n.x)
-    const ys = ns.map(n => n.y)
-    const minX = Math.min(...xs) - 60
-    const minY = Math.min(...ys) - 60
-    const maxX = Math.max(...xs) + NODE_W + 60
-    const maxY = Math.max(...ys) + NODE_H + 60
-    const cW = maxX - minX
-    const cH = maxY - minY
+    const xs = ns.map(n => n.x), ys = ns.map(n => n.y)
+    const minX = Math.min(...xs) - 60, minY = Math.min(...ys) - 60
+    const maxX = Math.max(...xs) + NODE_W + 60, maxY = Math.max(...ys) + NODE_H + 60
+    const cW = maxX - minX, cH = maxY - minY
     const scale = Math.min((w - 40) / cW, (h - 40) / cH, 1)
     const tx = (w - cW * scale) / 2 - minX * scale
     const ty = (h - cH * scale) / 2 - minY * scale
     setTransform({ x: tx, y: ty, scale })
   }, [vpSize, setTransform])
 
-  // Auto-fit on first render
   useEffect(() => { fitToView() }, [vpSize.w]) // eslint-disable-line
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -364,17 +339,19 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, removeEdge, selectedEdgeId, setConnectingFrom, setSelectedId, setActiveTool])
 
-  // ── Zoom ──────────────────────────────────────────────────────────────────
+  // ── Zoom ───────────────────────────────────────────────────────────────────
 
   const applyZoom = useCallback((delta: number, cx?: number, cy?: number) => {
     setTransform(t => {
-      const factor    = delta > 0 ? 1.1 : 0.9
-      const newScale  = Math.max(0.1, Math.min(3, t.scale * factor))
-      const mouseX    = cx ?? vpSize.w / 2
-      const mouseY    = cy ?? vpSize.h / 2
-      const newTx     = mouseX - (mouseX - t.x) * (newScale / t.scale)
-      const newTy     = mouseY - (mouseY - t.y) * (newScale / t.scale)
-      return { x: newTx, y: newTy, scale: newScale }
+      const factor   = delta > 0 ? 1.1 : 0.9
+      const newScale = Math.max(0.1, Math.min(3, t.scale * factor))
+      const mouseX   = cx ?? vpSize.w / 2
+      const mouseY   = cy ?? vpSize.h / 2
+      return {
+        x:     mouseX - (mouseX - t.x) * (newScale / t.scale),
+        y:     mouseY - (mouseY - t.y) * (newScale / t.scale),
+        scale: newScale,
+      }
     })
   }, [vpSize, setTransform])
 
@@ -384,26 +361,14 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
     applyZoom(-e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
   }, [applyZoom])
 
-  // ── Pointer events (drag + pan) ───────────────────────────────────────────
-
-  const screenToCanvas = useCallback((sx: number, sy: number) => {
-    return {
-      x: (sx - transform.x) / transform.scale,
-      y: (sy - transform.y) / transform.scale,
-    }
-  }, [transform])
+  // ── Pointer events ─────────────────────────────────────────────────────────
 
   const handleNodePointerDown = useCallback((e: React.PointerEvent, nodeId: string) => {
     if (e.button !== 0) return
-    e.stopPropagation() // always stop — prevents canvas handler from clearing connectingFrom
+    e.stopPropagation()
     if (activeTool !== 'select') return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    interactionRef.current = {
-      mode: 'dragging', nodeId,
-      lastX: e.clientX, lastY: e.clientY,
-      startX: e.clientX, startY: e.clientY,
-      hasMoved: false,
-    }
+    interactionRef.current = { mode: 'dragging', nodeId, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, hasMoved: false }
   }, [activeTool])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
@@ -411,42 +376,28 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
     if (connectingFrom) { setConnectingFrom(null); return }
     if (activeTool === 'pan') {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-      interactionRef.current = {
-        mode: 'panning',
-        nodeId: null,
-        lastX: e.clientX, lastY: e.clientY,
-        startX: e.clientX, startY: e.clientY,
-        hasMoved: false,
-      }
+      interactionRef.current = { mode: 'panning', nodeId: null, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, hasMoved: false }
     } else if (activeTool === 'select') {
-      setSelectedId(null)
-      setSelectedEdgeId(null)
+      setSelectedId(null); setSelectedEdgeId(null)
     }
   }, [activeTool, connectingFrom, setConnectingFrom, setSelectedId, setSelectedEdgeId])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const ia = interactionRef.current
+    const ia   = interactionRef.current
     const rect = containerRef.current!.getBoundingClientRect()
-    const canvasX = (e.clientX - rect.left - transform.x) / transform.scale
-    const canvasY = (e.clientY - rect.top  - transform.y) / transform.scale
-    setMouseCanvas({ x: canvasX, y: canvasY })
-
+    setMouseCanvas({
+      x: (e.clientX - rect.left - transform.x) / transform.scale,
+      y: (e.clientY - rect.top  - transform.y) / transform.scale,
+    })
     if (ia.mode === 'dragging' && ia.nodeId) {
       const dx = (e.clientX - ia.lastX) / scaleRef.current
       const dy = (e.clientY - ia.lastY) / scaleRef.current
-      if (!ia.hasMoved && (Math.abs(e.clientX - ia.startX) > 3 || Math.abs(e.clientY - ia.startY) > 3)) {
-        ia.hasMoved = true
-      }
-      if (ia.hasMoved) {
-        moveNode(ia.nodeId, dx, dy)
-      }
-      ia.lastX = e.clientX
-      ia.lastY = e.clientY
+      if (!ia.hasMoved && (Math.abs(e.clientX - ia.startX) > 3 || Math.abs(e.clientY - ia.startY) > 3)) ia.hasMoved = true
+      if (ia.hasMoved) moveNode(ia.nodeId, dx, dy)
+      ia.lastX = e.clientX; ia.lastY = e.clientY
     } else if (ia.mode === 'panning') {
-      const dx = e.clientX - ia.lastX
-      const dy = e.clientY - ia.lastY
-      ia.lastX = e.clientX
-      ia.lastY = e.clientY
+      const dx = e.clientX - ia.lastX, dy = e.clientY - ia.lastY
+      ia.lastX = e.clientX; ia.lastY = e.clientY
       if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
         ia.hasMoved = true
         setTransform(t => ({ ...t, x: t.x + dx, y: t.y + dy }))
@@ -454,16 +405,14 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
     }
   }, [moveNode, setTransform, transform])
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback(() => {
     const ia = interactionRef.current
-    if (ia.mode === 'dragging' && ia.hasMoved) {
-      commitDrag(nodesRef.current)
-    }
+    if (ia.mode === 'dragging' && ia.hasMoved) commitDrag(nodesRef.current)
     interactionRef.current = { mode: 'idle', nodeId: null, lastX: 0, lastY: 0, hasMoved: false, startX: 0, startY: 0 }
   }, [commitDrag])
 
   const handleNodeClick = useCallback((e: React.MouseEvent, nodeId: string) => {
-    if (interactionRef.current.hasMoved) return // was a drag
+    if (interactionRef.current.hasMoved) return
     e.stopPropagation()
 
     if (activeTool === 'connect' || connectingFrom) {
@@ -476,61 +425,92 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
       }
       return
     }
-    setSelectedId(prev => prev === nodeId ? null : nodeId)
-    setSelectedEdgeId(null)
+
+    clearTimeout(clickTimerRef.current)
+    clickTimerRef.current = setTimeout(() => {
+      setSelectedId(prev => prev === nodeId ? null : nodeId)
+      setSelectedEdgeId(null)
+    }, 220)
   }, [activeTool, connectingFrom, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
 
-  const handleAddNode = useCallback(() => {
+  const handleNodeDoubleClick = useCallback((e: React.MouseEvent, nodeId: string) => {
+    if (interactionRef.current.hasMoved) return
+    e.stopPropagation()
+    clearTimeout(clickTimerRef.current)
+    setSelectedId(null)
+    setEditingNodeId(nodeId)
+  }, [setSelectedId])
+
+  const handleOpenAddModal = useCallback(() => {
     const cx = (-transform.x + vpSize.w / 2) / transform.scale - NODE_W / 2
     const cy = (-transform.y + vpSize.h / 2) / transform.scale - NODE_H / 2
-    addNode(cx, cy)
-  }, [transform, vpSize, addNode])
+    addNodePosRef.current = { x: cx, y: cy }
+    setIsAddModalOpen(true)
+  }, [transform, vpSize])
 
-  // ── Node map for edge lookup ──────────────────────────────────────────────
+  const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
+    const pos = addNodePosRef.current
+    const newId = addNode({ ...data, x: pos.x, y: pos.y })
+    if (reportsToId && newId) addEdge(reportsToId, newId)
+    setIsAddModalOpen(false)
+  }, [addNode, addEdge])
 
-  const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]))
+  const handleUpdateSubmit = useCallback((nodeId: string, updates: Partial<import('../../types').OrgNode>, reportsToId: string) => {
+    updateNode(nodeId, updates)
+    // Remove old manager edge, add new one if changed
+    const oldEdge = edges.find(e => e.targetId === nodeId)
+    const oldManagerId = oldEdge?.sourceId ?? ''
+    if (oldManagerId !== reportsToId) {
+      if (oldEdge) removeEdge(oldEdge.id)
+      if (reportsToId) addEdge(reportsToId, nodeId)
+    }
+    setEditingNodeId(null)
+  }, [updateNode, deleteNode, edges, removeEdge, addEdge]) // eslint-disable-line
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    deleteNode(nodeId)
+    setEditingNodeId(null)
+  }, [deleteNode])
+
+  const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null
+  const editingNode  = editingNodeId ? nodeMap[editingNodeId] ?? null : null
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // Dept colour lookup for edges
+  const deptColourMap = Object.fromEntries(departments.map(d => [d.id, d.colour]))
 
   return (
     <div
       ref={containerRef}
       style={{
-        position: 'relative', width: '100%', height: '100%',
-        overflow: 'hidden',
+        position: 'relative', width: '100%', height: '100%', overflow: 'hidden',
         background: 'var(--bg)',
-        cursor: activeTool === 'pan' ? 'grab'
-              : activeTool === 'zoom' ? 'zoom-in'
-              : connectingFrom ? 'crosshair'
-              : 'default',
+        cursor: activeTool === 'pan' ? 'grab' : activeTool === 'zoom' ? 'zoom-in' : connectingFrom ? 'crosshair' : 'default',
       }}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
     >
-      {/* Subtle grid background */}
+      {/* Grid background */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <defs>
           <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"
-            patternTransform={`translate(${transform.x % 28},${transform.y % 28})`}
-          >
+            patternTransform={`translate(${transform.x % 28},${transform.y % 28})`}>
             <circle cx="0" cy="0" r="0.8" fill="rgba(148,163,184,0.12)" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
       </svg>
 
-      {/* Edge SVG — screen-space, outside the transformed viewport so there are no
-          overflow/clip issues with the CSS transform. Rendered before the viewport
-          div so edges appear behind nodes. */}
+      {/* Edge SVG layer */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
         <g style={{ pointerEvents: 'all' }}>
           {edges.map(edge => {
             const src = nodeMap[edge.sourceId]
             const tgt = nodeMap[edge.targetId]
             if (!src || !tgt) return null
+            const deptColour = deptColourMap[src.departmentId] ?? '#94A3B8'
             return (
               <EdgePath
                 key={edge.id}
@@ -538,28 +518,25 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
                 transform={transform}
                 selected={edge.id === selectedEdgeId}
                 hovered={edge.id === hovEdgeId}
+                deptColour={deptColour}
                 onClick={() => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
                 onMouseEnter={() => setHovEdgeId(edge.id)}
                 onMouseLeave={() => setHovEdgeId(null)}
+                onDelete={() => removeEdge(edge.id)}
               />
             )
           })}
           {connectingFrom && nodeMap[connectingFrom] && (
-            <ConnectingLine
-              fromNode={nodeMap[connectingFrom]}
-              mousePos={mouseCanvas}
-              transform={transform}
-            />
+            <ConnectingLine fromNode={nodeMap[connectingFrom]} mousePos={mouseCanvas} transform={transform} />
           )}
         </g>
       </svg>
 
-      {/* Viewport — transformed for pan/zoom (nodes only) */}
+      {/* Node viewport */}
       <div
         ref={viewportRef}
         style={{
-          position: 'absolute',
-          transformOrigin: '0 0',
+          position: 'absolute', transformOrigin: '0 0',
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           willChange: 'transform',
         }}
@@ -573,34 +550,18 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
             isConnectTarget={!!connectingFrom && node.id !== connectingFrom}
             onPointerDown={e => handleNodePointerDown(e, node.id)}
             onClick={e => handleNodeClick(e, node.id)}
+            onDoubleClick={e => handleNodeDoubleClick(e, node.id)}
           />
         ))}
       </div>
 
-      {/* Toolbar */}
       <Toolbar
-        activeTool={activeTool}
-        setActiveTool={setActiveTool}
-        onAddNode={handleAddNode}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
+        activeTool={activeTool} setActiveTool={setActiveTool}
+        onAddNode={handleOpenAddModal}
+        onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
       />
-
-      {/* Zoom controls */}
-      <ZoomControls
-        scale={transform.scale}
-        onZoom={d => applyZoom(d)}
-        onFit={fitToView}
-      />
-
-      {/* Minimap */}
-      <Minimap
-        nodes={nodes}
-        transform={transform}
-        vpW={vpSize.w}
-        vpH={vpSize.h}
+      <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
+      <Minimap nodes={nodes} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
         onPanTo={(x, y) => setTransform(t => ({ ...t, x, y }))}
       />
 
@@ -616,13 +577,12 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
         </div>
       )}
 
-      {/* Delete edge hint */}
-      {selectedEdgeId && (
+      {/* Selected edge hint */}
+      {selectedEdgeId && !connectingFrom && (
         <div style={{
           position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 20, padding: '6px 16px',
-          fontSize: 12, color: 'var(--muted)', zIndex: 20,
+          borderRadius: 20, padding: '6px 16px', fontSize: 12, color: 'var(--muted)', zIndex: 20,
           boxShadow: 'var(--shadow-sm)',
         }}>
           Reporting line selected · <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Delete</span> to remove
@@ -631,6 +591,35 @@ export function OrgChart({ initialNodes = [], initialEdges = [] }: {
 
       {/* JD panel */}
       <JDPanel node={selectedNode} onClose={() => setSelectedId(null)} />
+
+      {/* Add node modal */}
+      <NodeModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        mode="add"
+        departments={departments}
+        allNodes={nodes}
+        allEdges={edges}
+        onAdd={handleAddSubmit}
+        onUpdate={() => {}}
+        onDelete={() => {}}
+      />
+
+      {/* Edit node modal */}
+      {editingNode && (
+        <NodeModal
+          isOpen={!!editingNodeId}
+          onClose={() => setEditingNodeId(null)}
+          mode="edit"
+          node={editingNode}
+          departments={departments}
+          allNodes={nodes}
+          allEdges={edges}
+          onAdd={() => {}}
+          onUpdate={handleUpdateSubmit}
+          onDelete={handleDeleteNode}
+        />
+      )}
     </div>
   )
 }

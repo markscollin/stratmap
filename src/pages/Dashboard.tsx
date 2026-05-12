@@ -15,7 +15,6 @@ export function Dashboard() {
   const totalHeadcount = mockDepartments.reduce((s, d) => s + d.headcount, 0)
   const totalOpen      = mockDepartments.reduce((s, d) => s + d.open, 0)
   const liveCharts     = charts.filter(c => c.status === 'live').length
-  const maxHC          = Math.max(...mockDepartments.map(d => d.headcount + d.open))
 
   const nodeTotal = totalHeadcount + totalOpen + PLANNED_HIRES
   const nodePipeline = [
