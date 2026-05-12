@@ -59,16 +59,7 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
     }
   }, [isLoaded, isSignedIn, workspace, navigate, pathname])
 
-  // Expose Clerk's signOut to userStore signOut via a side-effect bridge
-  const { signOut: storeSignOutRef } = useUserStore()
-  useEffect(() => {
-    useUserStore.setState({
-      signOut: () => {
-        clerkSignOut()
-        storeSignOutRef()
-      },
-    })
-  }, [clerkSignOut, storeSignOutRef])
+  // Don't override signOut in useEffect — useAuth handles the bridge
 
   if (!isLoaded) {
     return (

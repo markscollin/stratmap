@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronRight, Search, Sun, Moon, Bell } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
 import { useAuth } from '../../features/auth/useAuth'
+import { useUserStore } from '../../store/userStore'
 
 const PAGE_LABELS: Record<string, string> = {
   '/':          'Dashboard',
@@ -49,10 +50,17 @@ function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
 export function TopNav() {
   const { isDark, toggleTheme, setSpotlightOpen } = useUIStore()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const [hovBtn, setHovBtn] = useState<string | null>(null)
   const [avatarHov, setAvatarHov] = useState(false)
   const label = getLabel(pathname)
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
+  const { signOut: storeSignOut } = useUserStore()
+
+  const handleSignOut = () => {
+    storeSignOut()
+    navigate('/sign-in')
+  }
 
   return (
     <div style={{
@@ -101,7 +109,7 @@ export function TopNav() {
           <img
             src={user.avatarUrl}
             alt={user.name}
-            onClick={signOut}
+            onClick={handleSignOut}
             onMouseEnter={() => setAvatarHov(true)}
             onMouseLeave={() => setAvatarHov(false)}
             title={`${user.name} — click to sign out`}
@@ -114,7 +122,7 @@ export function TopNav() {
           />
         ) : (
           <div
-            onClick={signOut}
+            onClick={handleSignOut}
             onMouseEnter={() => setAvatarHov(true)}
             onMouseLeave={() => setAvatarHov(false)}
             title={user ? `${user.name} — click to sign out` : ''}

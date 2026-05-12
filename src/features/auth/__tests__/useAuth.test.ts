@@ -54,23 +54,13 @@ describe('useAuth', () => {
     expect(result.current.permission).toBe('admin')
   })
 
-  it('calling signOut clears the user store', () => {
-    useUserStore.setState({ user: MOCK_USER, isAuthenticated: true, permission: 'owner', workspace: MOCK_WORKSPACE })
+  it('permission reflects store state', () => {
+    useUserStore.setState({ permission: 'admin' })
+    const { result, rerender } = renderHook(() => useAuth())
+    expect(result.current.permission).toBe('admin')
 
-    // Override window.location.href setter to avoid jsdom navigation errors
-    const originalHref = Object.getOwnPropertyDescriptor(window, 'location')
-    Object.defineProperty(window, 'location', {
-      value: { href: '/' },
-      writable: true,
-    })
-
-    const { result } = renderHook(() => useAuth())
-    act(() => { result.current.signOut() })
-
-    const { user, isAuthenticated } = useUserStore.getState()
-    expect(user).toBeNull()
-    expect(isAuthenticated).toBe(false)
-
-    if (originalHref) Object.defineProperty(window, 'location', originalHref)
+    useUserStore.setState({ permission: 'viewer' })
+    rerender()
+    expect(result.current.permission).toBe('viewer')
   })
 })

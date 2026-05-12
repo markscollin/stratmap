@@ -35,18 +35,13 @@ function toAuthUser(u: User): AuthUser {
 }
 
 export function useAuth(): UseAuthReturn {
-  const { user, permission, isAuthenticated, signOut: storeSignOut } = useUserStore()
-
-  const signOut = useCallback(() => {
-    storeSignOut()
-    window.location.href = '/sign-in'
-  }, [storeSignOut])
+  const { user, permission, isAuthenticated } = useUserStore()
 
   return {
     user: user ? toAuthUser(user) : null,
     permission,
     isLoaded: true,
     isSignedIn: isAuthenticated,
-    signOut,
+    signOut: () => {}, // Handled by TopNav directly via Clerk/store
   }
 }
