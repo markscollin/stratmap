@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { Edit3, AlertCircle, AlertTriangle, CheckCircle2, Eye, Archive } from 'lucide-react'
-import type { ChartStatus } from '../types'
+import type { ChartStatus, Permission } from '../types'
 
 export interface StatusMeta {
   label: string
@@ -19,14 +19,14 @@ export const STATUS_META: Record<ChartStatus, StatusMeta> = {
   archived: { label: 'Retired',           color: 'var(--dim)',     bg: 'rgba(71,85,105,0.12)',     Icon: Archive },
 }
 
-export const STATUS_ACTIONS: Record<ChartStatus, { next: ChartStatus; label: string; color: string }[]> = {
-  draft:    [{ next: 'review',   label: 'Submit for approval', color: 'var(--purple)' }],
-  editing:  [{ next: 'review',   label: 'Submit for approval', color: 'var(--purple)' }],
-  review:   [{ next: 'approved', label: 'Approve',             color: 'var(--brand)'  },
-             { next: 'rejected', label: 'Request changes',     color: 'var(--danger)' }],
-  rejected: [{ next: 'editing',  label: 'Revise',              color: 'var(--warn)'   }],
-  approved: [{ next: 'live',     label: 'Publish',             color: 'var(--success)'}],
-  live:     [{ next: 'editing',  label: 'Start revision',      color: 'var(--warn)'   },
-             { next: 'archived', label: 'Retire',              color: 'var(--dim)'    }],
+export const STATUS_ACTIONS: Record<ChartStatus, { next: ChartStatus; label: string; color: string; minPermission: Permission }[]> = {
+  draft:    [{ next: 'review',   label: 'Submit for approval', color: 'var(--purple)', minPermission: 'editor' }],
+  editing:  [{ next: 'review',   label: 'Submit for approval', color: 'var(--purple)', minPermission: 'editor' }],
+  review:   [{ next: 'approved', label: 'Approve',             color: 'var(--brand)',  minPermission: 'admin'  },
+             { next: 'rejected', label: 'Request changes',     color: 'var(--danger)', minPermission: 'admin'  }],
+  rejected: [{ next: 'editing',  label: 'Revise',              color: 'var(--warn)',   minPermission: 'editor' }],
+  approved: [{ next: 'live',     label: 'Publish',             color: 'var(--success)',minPermission: 'admin'  }],
+  live:     [{ next: 'editing',  label: 'Start revision',      color: 'var(--warn)',   minPermission: 'admin'  },
+             { next: 'archived', label: 'Retire',              color: 'var(--dim)',    minPermission: 'admin'  }],
   archived: [],
 }

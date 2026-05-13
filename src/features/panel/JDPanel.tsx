@@ -3,6 +3,7 @@ import { X, Briefcase, MapPin, Clock } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import { mockDepartments } from '../../data/mockOrg'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { usePermission } from '../../hooks/usePermission'
 import type { ChartStatus } from '../../types'
 
 type PanelTab = 'overview' | 'responsibilities' | 'requirements'
@@ -13,6 +14,7 @@ export function JDPanel({ node, onClose }: {
 }) {
   const [tab, setTab] = useState<PanelTab>('overview')
   const dept = node ? mockDepartments.find(d => d.id === node.departmentId) : null
+  const { canEdit, canAdmin } = usePermission()
 
   const isVisible = !!node
 
@@ -106,14 +108,20 @@ export function JDPanel({ node, onClose }: {
           </div>
 
           {/* Footer actions */}
-          <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-            <button style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>
-              Edit role
-            </button>
-            <button style={{ flex: 1, padding: '8px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Approve
-            </button>
-          </div>
+          {(canEdit || canAdmin) && (
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+              {canEdit && (
+                <button style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>
+                  Edit role
+                </button>
+              )}
+              {canAdmin && (
+                <button style={{ flex: 1, padding: '8px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Approve
+                </button>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

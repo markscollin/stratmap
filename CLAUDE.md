@@ -193,3 +193,5 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 - **Canvas data is template-based** — New charts load nodes/edges from templates; existing charts show their stored structure.
 - **TypeScript is strict** — `npx tsc --noEmit` verifies compilation before commits.
 - **No environment variables** — Mock data only; no .env needed for dev.
+- **Execution preference** — Execute code changes directly rather than asking the user to do them. This keeps iteration fast and reduces friction. Only ask for confirmation on risky/destructive operations or when clarification is needed.
+- **Dev tools helper** — `__devTools.setPermission(role)` in the browser console lets you test different permission levels without creating accounts.

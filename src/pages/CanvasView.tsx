@@ -5,11 +5,13 @@ import { useChartStore } from '../store'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
 import { OrgChart } from '../features/canvas/OrgChart'
+import { usePermission } from '../hooks/usePermission'
 
 export function CanvasView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { charts } = useChartStore()
+  const { canEdit } = usePermission()
 
   const chart = charts.find(c => c.id === id)
   if (!chart) return (
@@ -42,6 +44,7 @@ export function CanvasView() {
         initialNodes={chart.nodes}
         initialEdges={chart.edges}
         departments={chart.departments.length ? chart.departments : mockDepartments}
+        readOnly={!canEdit}
       />
     </div>
   )

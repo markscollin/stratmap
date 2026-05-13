@@ -11,8 +11,11 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
 import { AvatarStack } from '../components/ui/AvatarStack'
 import { MiniChartThumb } from '../components/ui/MiniChartThumb'
+import { usePermission } from '../hooks/usePermission'
 import type { OrgChart, OrgNode, OrgEdge, ChartStatus } from '../types'
 import { mockDepartments } from '../data/mockOrg'
+
+const PERMISSION_RANK: Record<string, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
 
 // ── Approval cycle bar ────────────────────────────────────────────────────────
 
@@ -76,16 +79,21 @@ function ApprovalCycleBar({
 
 // ── Chart card ────────────────────────────────────────────────────────────────
 
-function ChartCard({ chart, index, onAction }: {
+function ChartCard({ chart, index, onAction, canEdit, canAdmin }: {
   chart: OrgChart
   index: number
   onAction: (id: string, next: ChartStatus) => void
+  canEdit: boolean
+  canAdmin: boolean
 }) {
   const [hov, setHov]   = useState(false)
   const [menu, setMenu] = useState(false)
   const navigate        = useNavigate()
   const { duplicateChart } = useChartStore()
-  const actions = STATUS_ACTIONS[chart.status] || []
+  const { permission } = usePermission()
+  const actions = (STATUS_ACTIONS[chart.status] || []).filter(
+    a => PERMISSION_RANK[permission] >= PERMISSION_RANK[a.minPermission]
+  )
   const display = CHART_DISPLAY[chart.id] ?? { nodeCount: chart.nodes.length, deptCount: chart.departments.length, updatedDisplay: chart.updatedAt }
 
   const metaItems = [
@@ -141,6 +149,7 @@ function ChartCard({ chart, index, onAction }: {
             {menu && (
               <OverflowMenu
                 actions={actions}
+                canAdmin={canAdmin}
                 onAction={next => { onAction(chart.id, next); setMenu(false) }}
                 onOpen={() => { navigate(`/charts/${chart.id}`); setMenu(false) }}
                 onDuplicate={() => { duplicateChart(chart.id); setMenu(false) }}
@@ -178,8 +187,9 @@ function ChartCard({ chart, index, onAction }: {
   )
 }
 
-function OverflowMenu({ actions, onAction, onOpen, onDuplicate, onClose }: {
+function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onClose }: {
   actions: { next: ChartStatus; label: string; color: string }[]
+  canAdmin: boolean
   onAction: (next: ChartStatus) => void
   onOpen: () => void
   onDuplicate: () => void
@@ -189,7 +199,7 @@ function OverflowMenu({ actions, onAction, onOpen, onDuplicate, onClose }: {
     { Icon: ExternalLink, label: 'Open chart',   color: 'var(--text)',    fn: onOpen },
     { Icon: Copy,         label: 'Duplicate',    color: 'var(--text)',    fn: onDuplicate },
     { Icon: GitBranch,    label: 'New scenario', color: 'var(--text)',    fn: onClose },
-    { Icon: Trash2,       label: 'Delete',       color: 'var(--danger)',  fn: onClose },
+    ...(canAdmin ? [{ Icon: Trash2, label: 'Delete', color: 'var(--danger)', fn: onClose }] : []),
   ]
   return (
     <div style={{ position: 'absolute', top: 30, right: 0, zIndex: 100, background: 'var(--surface)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: 5, minWidth: 190, boxShadow: 'var(--shadow)', animation: 'slideDown .15s ease-out' }}>
@@ -391,6 +401,7 @@ function makeTemplateData(template: string): { nodes: OrgNode[]; edges: OrgEdge[
 export function ChartView() {
   const { charts, updateChartStatus, addChart } = useChartStore()
   const navigate = useNavigate()
+  const { canEdit, canAdmin } = usePermission()
   const [search, setSearch]         = useState('')
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
   const [showModal, setShowModal]   = useState(false)
@@ -439,12 +450,14 @@ export function ChartView() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={{ padding: '9px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>Import CSV</button>
-          <button
-            onClick={() => setShowModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px var(--brand-glow)' }}
-          >
-            <Plus size={14} /> New chart
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setShowModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px var(--brand-glow)' }}
+            >
+              <Plus size={14} /> New chart
+            </button>
+          )}
         </div>
       </div>
 
@@ -482,7 +495,7 @@ export function ChartView() {
           <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.7, maxWidth: 380, margin: '0 auto 24px' }}>
             {search ? 'Try a different search or clear the filter.' : 'Create your first org chart.'}
           </p>
-          {!search && (
+          {!search && canEdit && (
             <button
               onClick={() => setShowModal(true)}
               style={{ padding: '10px 22px', background: 'var(--grad-brand)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px var(--brand-glow)' }}
@@ -500,9 +513,11 @@ export function ChartView() {
                 chart={chart}
                 index={i}
                 onAction={(id, next) => updateChartStatus(id, next)}
+                canEdit={canEdit}
+                canAdmin={canAdmin}
               />
             ))}
-            <NewChartTile onClick={() => setShowModal(true)} />
+            {canEdit && <NewChartTile onClick={() => setShowModal(true)} />}
           </div>
 
           {/* Footer */}

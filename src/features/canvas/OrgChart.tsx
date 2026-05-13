@@ -156,11 +156,14 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo }: {
+function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo, readOnly }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
   onAddNode: () => void; onUndo: () => void; onRedo: () => void
-  canUndo: boolean; canRedo: boolean
+  canUndo: boolean; canRedo: boolean; readOnly: boolean
 }) {
+  const editTools: ActiveTool[] = readOnly
+    ? ['select', 'pan', 'zoom']
+    : ['select', 'pan', 'zoom', 'connect']
   return (
     <div style={{
       position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
@@ -168,10 +171,12 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 10, padding: '4px 6px', boxShadow: 'var(--shadow-sm)',
     }}>
-      <ToolBtn Icon={Undo2} label="Undo (⌘Z)"    active={false} disabled={!canUndo} onClick={onUndo} />
-      <ToolBtn Icon={Redo2} label="Redo (⌘⇧Z)"   active={false} disabled={!canRedo} onClick={onRedo} />
-      <Divider />
-      {(['select','pan','zoom','connect'] as ActiveTool[]).map(id => {
+      {!readOnly && <>
+        <ToolBtn Icon={Undo2} label="Undo (⌘Z)"  active={false} disabled={!canUndo} onClick={onUndo} />
+        <ToolBtn Icon={Redo2} label="Redo (⌘⇧Z)" active={false} disabled={!canRedo} onClick={onRedo} />
+        <Divider />
+      </>}
+      {editTools.map(id => {
         const map: Record<ActiveTool, { Icon: React.FC<{ size?: number }>; label: string }> = {
           select:  { Icon: MousePointer2, label: 'Select (V)'  },
           pan:     { Icon: Maximize2,     label: 'Pan (H)'     },
@@ -183,14 +188,21 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
       })}
       <Divider />
       <ToolBtn Icon={Layers} label="Filter (F)" active={false} onClick={() => {}} />
-      <Divider />
-      <button onClick={onAddNode} style={{
-        display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
-        borderRadius: 6, background: 'var(--brand-bg)', border: '1px solid var(--brand)',
-        color: 'var(--brand)', fontSize: 12, cursor: 'pointer',
-      }}>
-        <Plus size={12} /> Add node
-      </button>
+      {!readOnly ? <>
+        <Divider />
+        <button onClick={onAddNode} style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
+          borderRadius: 6, background: 'var(--brand-bg)', border: '1px solid var(--brand)',
+          color: 'var(--brand)', fontSize: 12, cursor: 'pointer',
+        }}>
+          <Plus size={12} /> Add node
+        </button>
+      </> : <>
+        <Divider />
+        <span style={{ fontSize: 11, color: 'var(--muted)', padding: '4px 10px', background: 'var(--nav-hover)', borderRadius: 6, fontWeight: 500 }}>
+          View only
+        </span>
+      </>}
     </div>
   )
 }
@@ -250,10 +262,11 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ initialNodes = [], initialEdges = [], departments = [] }: {
+export function OrgChart({ initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
   initialNodes?: OrgNode[]
   initialEdges?: OrgEdge[]
   departments?: Department[]
+  readOnly?: boolean
 }) {
   const {
     nodes, edges, transform, setTransform,
@@ -325,15 +338,15 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       const mod = e.ctrlKey || e.metaKey
-      if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
-      if (mod &&  e.shiftKey && e.key === 'z') { e.preventDefault(); redo() }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedEdgeId) removeEdge(selectedEdgeId)
+      if (!readOnly) {
+        if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
+        if (mod &&  e.shiftKey && e.key === 'z') { e.preventDefault(); redo() }
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) removeEdge(selectedEdgeId)
+        if (e.key === 'c' && !mod) setActiveTool('connect')
       }
       if (e.key === 'Escape') { setConnectingFrom(null); setSelectedId(null) }
       if (e.key === 'v' && !mod) setActiveTool('select')
       if (e.key === 'h' && !mod) setActiveTool('pan')
-      if (e.key === 'c' && !mod) setActiveTool('connect')
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -366,10 +379,10 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
   const handleNodePointerDown = useCallback((e: React.PointerEvent, nodeId: string) => {
     if (e.button !== 0) return
     e.stopPropagation()
-    if (activeTool !== 'select') return
+    if (readOnly || activeTool !== 'select') return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     interactionRef.current = { mode: 'dragging', nodeId, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, hasMoved: false }
-  }, [activeTool])
+  }, [activeTool, readOnly])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -434,12 +447,12 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
   }, [activeTool, connectingFrom, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
 
   const handleNodeDoubleClick = useCallback((e: React.MouseEvent, nodeId: string) => {
-    if (interactionRef.current.hasMoved) return
+    if (interactionRef.current.hasMoved || readOnly) return
     e.stopPropagation()
     clearTimeout(clickTimerRef.current)
     setSelectedId(null)
     setEditingNodeId(nodeId)
-  }, [setSelectedId])
+  }, [setSelectedId, readOnly])
 
   const handleOpenAddModal = useCallback(() => {
     const cx = (-transform.x + vpSize.w / 2) / transform.scale - NODE_W / 2
@@ -559,6 +572,7 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
         activeTool={activeTool} setActiveTool={setActiveTool}
         onAddNode={handleOpenAddModal}
         onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+        readOnly={readOnly}
       />
       <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
       <Minimap nodes={nodes} transform={transform} vpW={vpSize.w} vpH={vpSize.h}

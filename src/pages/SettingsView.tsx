@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { Plus, Users, Sparkles } from 'lucide-react'
+import { Plus, Users, Sparkles, X, Lock, ChevronDown } from 'lucide-react'
+import { useUserStore } from '../store/userStore'
+import { usePermission } from '../hooks/usePermission'
+import type { Permission } from '../types'
 
 type Tab = 'general' | 'members' | 'billing' | 'notifications'
 
@@ -83,30 +86,212 @@ function GeneralTab() {
   )
 }
 
+const SEAT_LIMIT = 3
+const ROLE_LABELS: Record<Permission, string> = {
+  owner: 'Owner', admin: 'Admin', editor: 'Editor', commenter: 'Commenter', viewer: 'Viewer',
+}
+const ASSIGNABLE: Permission[] = ['admin', 'editor', 'commenter', 'viewer']
+
 function MembersTab() {
+  const { workspace, user, updateMemberPermission, removeMember, addPendingInvite, removePendingInvite } = useUserStore()
+  const { canAdmin } = usePermission()
+  const [showInviteForm, setShowInviteForm] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<Permission>('editor')
+  const [inviteFocus, setInviteFocus] = useState(false)
+
+  const members = workspace?.members ?? []
+  const pending = workspace?.pendingInvites ?? []
+  const seatsUsed = members.length
+  const atLimit = seatsUsed >= SEAT_LIMIT
+
+  function handleSendInvite() {
+    if (!inviteEmail.trim()) return
+    addPendingInvite({ email: inviteEmail.trim(), permission: inviteRole, sentAt: new Date().toISOString() })
+    setInviteEmail('')
+    setInviteRole('editor')
+    setShowInviteForm(false)
+  }
+
   return (
     <div style={{ maxWidth: 580 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Team members</h3>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Free plan · 3 seats included</p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+              {seatsUsed} of {SEAT_LIMIT} seats used · Free plan
+            </p>
           </div>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Plus size={13} /> Invite
-          </button>
+          {canAdmin && (
+            <button
+              onClick={() => setShowInviteForm(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >
+              <Plus size={13} /> Invite
+            </button>
+          )}
         </div>
-        <div style={{ background: 'var(--raised)', borderRadius: 10, padding: '28px 20px', textAlign: 'center', border: '1px dashed var(--border)' }}>
-          <Users size={22} color="var(--dim)" style={{ marginBottom: 10 }} />
-          <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 4 }}>No team members yet</p>
-          <p style={{ fontSize: 12, color: 'var(--dim)' }}>Invite colleagues — they'll get a link to join your workspace</p>
+
+        {/* Seat usage bar */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ height: 4, borderRadius: 4, background: 'var(--raised)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 4, width: `${Math.min((seatsUsed / SEAT_LIMIT) * 100, 100)}%`, background: atLimit ? 'var(--warn)' : 'var(--brand)', transition: 'width .3s' }} />
+          </div>
+          {atLimit && (
+            <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 5 }}>
+              All seats used. Additional seats are £4/month. <span style={{ color: 'var(--brand)', cursor: 'pointer' }}>Upgrade to add more</span>
+            </p>
+          )}
         </div>
+
+        {/* Invite form */}
+        {showInviteForm && (
+          <div style={{ background: 'var(--raised)', borderRadius: 10, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Invite a team member</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="email"
+                placeholder="colleague@company.com"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                onFocus={() => setInviteFocus(true)}
+                onBlur={() => setInviteFocus(false)}
+                onKeyDown={e => e.key === 'Enter' && handleSendInvite()}
+                style={{
+                  flex: 1, padding: '8px 12px', background: 'var(--input-bg)',
+                  border: `1px solid ${inviteFocus ? 'var(--brand)' : 'var(--border)'}`,
+                  boxShadow: inviteFocus ? '0 0 0 3px var(--brand-bg)' : 'none',
+                  borderRadius: 8, color: 'var(--text)', fontSize: 13, transition: 'all .15s',
+                }}
+              />
+              <select
+                value={inviteRole}
+                onChange={e => setInviteRole(e.target.value as Permission)}
+                style={{ padding: '8px 10px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 13 }}
+              >
+                {ASSIGNABLE.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <button
+                onClick={handleSendInvite}
+                disabled={!inviteEmail.trim()}
+                style={{ padding: '8px 16px', background: inviteEmail.trim() ? 'var(--grad-brand)' : 'var(--raised)', border: 'none', borderRadius: 8, color: inviteEmail.trim() ? '#fff' : 'var(--dim)', fontSize: 13, fontWeight: 600, cursor: inviteEmail.trim() ? 'pointer' : 'not-allowed' }}
+              >
+                Send
+              </button>
+              <button onClick={() => setShowInviteForm(false)} style={{ padding: '8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', cursor: 'pointer' }}>
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Member list */}
+        {members.length === 0 ? (
+          <div style={{ background: 'var(--raised)', borderRadius: 10, padding: '28px 20px', textAlign: 'center', border: '1px dashed var(--border)' }}>
+            <Users size={22} color="var(--dim)" style={{ marginBottom: 10 }} />
+            <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 4 }}>No team members yet</p>
+            <p style={{ fontSize: 12, color: 'var(--dim)' }}>Invite colleagues — they'll get a link to join your workspace</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {members.map(m => {
+              const initials = m.user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+              const isCurrentUser = m.user.id === user?.id
+              const canChange = canAdmin && !isCurrentUser && m.permission !== 'owner'
+              return (
+                <div key={m.user.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px solid var(--border)' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                    {initials}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                      {m.user.name} {isCurrentUser && <span style={{ fontSize: 11, color: 'var(--muted)' }}>(you)</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{m.user.email}</div>
+                  </div>
+                  {canChange ? (
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <select
+                        value={m.permission}
+                        onChange={e => updateMemberPermission(m.user.id, e.target.value as Permission)}
+                        style={{ appearance: 'none', padding: '4px 24px 4px 10px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        {ASSIGNABLE.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                      <ChevronDown size={11} style={{ position: 'absolute', right: 7, pointerEvents: 'none', color: 'var(--muted)' }} />
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--muted)', padding: '4px 10px', background: 'var(--nav-hover)', borderRadius: 6 }}>
+                      {ROLE_LABELS[m.permission]}
+                    </span>
+                  )}
+                  {canChange && (
+                    <button onClick={() => removeMember(m.user.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4, display: 'flex', alignItems: 'center' }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Pending invites */}
+        {pending.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Pending invites</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {pending.map(inv => (
+                <div key={inv.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px dashed var(--border)' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--nav-hover)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Users size={14} color="var(--dim)" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>{inv.email}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>Invited as {ROLE_LABELS[inv.permission]}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--warn)', background: 'var(--warn-bg)', padding: '3px 8px', borderRadius: 20 }}>Pending</span>
+                  {canAdmin && (
+                    <button onClick={() => removePendingInvite(inv.email)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4 }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Viewer lock notice */}
+        {!canAdmin && (
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--raised)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <Lock size={13} color="var(--dim)" />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Only admins can invite and manage team members</span>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 function BillingTab() {
+  const { canAdmin } = usePermission()
+  if (!canAdmin) return (
+    <div style={{ maxWidth: 500 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 40, boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
+        <Lock size={28} color="var(--dim)" style={{ marginBottom: 14 }} />
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Admin access required</h3>
+        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>Only workspace admins can view and manage billing.</p>
+      </div>
+    </div>
+  )
+  return <BillingTabContent />
+}
+
+function BillingTabContent() {
   const plans = [
     { label: 'Starter', price: '£18', desc: '5 charts · 100 nodes · JD management · 5 seats', grad: 'var(--grad-brand)',  glow: 'var(--brand-glow)' },
     { label: 'Growth',  price: '£49', desc: 'Unlimited charts · Headcount · AI drafting · 10 seats', grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
