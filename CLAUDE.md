@@ -32,13 +32,18 @@ src/
 ├── components/       # Reusable UI components
 ├── data/            # Mock data (mockOrg, mockNodes, mockJDs)
 ├── features/        # Feature-specific code
+│   ├── auth/        # Clerk + dev-bypass auth
+│   ├── billing/     # CheckoutButton (Stripe)
 │   ├── canvas/      # Org chart canvas (OrgChart.tsx, useCanvasState.ts)
-│   ├── nodes/       # Node card rendering (NodeCard.tsx)
+│   ├── jd/          # JD editor + AI drafting (JDEditor, AIJDDraft)
+│   ├── nodes/       # Node card + modal (NodeCard, NodeModal)
 │   └── panel/       # JD slide-out panel (JDPanel.tsx)
+├── hooks/           # usePermission, usePlanLimits
 ├── pages/           # Page components (Dashboard, ChartView, CanvasView, etc.)
-├── store/           # Zustand stores (chartStore, uiStore, userStore)
+├── store/           # Zustand stores (chartStore, billingStore, jobDescriptionStore, templateStore, etc.)
 ├── styles/          # Global CSS (globals.css with CSS custom properties for theming)
 ├── types/           # TypeScript types (chart.ts, user.ts, jd.ts)
+├── utils/           # layout.ts (auto-layout algorithm)
 ├── App.tsx          # Router setup
 └── main.tsx         # Entry point
 ```
@@ -47,80 +52,104 @@ src/
 
 ## Key Technologies
 
-- **React 18** + **TypeScript**
-- **Vite** (dev server, build)
+- **React 18** + **TypeScript** (strict mode)
+- **Vite** + **vitest/config** (dev server, build, tests)
 - **React Router v6** (navigation)
-- **Zustand** (state management)
+- **Zustand** (state management, localStorage persistence)
 - **Tailwind CSS** + `@tailwindcss/vite` (styling)
 - **CSS custom properties** (theming: dark by default, light mode via `data-theme='light'`)
 - **Lucide React** (icons)
-- **Framer Motion** (mentioned in types but not heavily used yet)
+- **TipTap 3** (rich text editor)
+- **Clerk** (auth) + dev-bypass mode (no Clerk key needed in dev)
+- **Anthropic SDK** (AI JD drafting — requires `VITE_ANTHROPIC_API_KEY` in `.env.local`)
 
 ---
 
-## What's Complete
+## What's Complete (Sprints 1–7)
 
-### Phase 2: App Shell ✅
-- Sidebar, TopNav, Layout
-- Dashboard, ChartView, RolesView, HeadcountView, SettingsView
-- Theme toggle (dark/light)
-- Chart library with status badges, version pills, templates
+### Sprints 1–2: Canvas + Node Management ✅
+- Draggable nodes, SVG edges, zoom/pan, minimap, fit-to-view
+- Add/Edit/Delete node modals with full form
+- Connect tool (2-click edge drawing), edge deletion
+- Undo/redo history (Cmd+Z / Cmd+Shift+Z)
+- Edge guards: self-connections, duplicates, circular reporting
+- Status badges (OPEN, PLANNED, BACKFILL) + ★ NEW badge
+- Department colour coding
+- Spotlight search (Cmd+K): people, charts, pages
+- Chart creation with templates (Blank, Startup, Scale-up, Hiring plan)
 
-### Phase 3: Org Chart Canvas ✅
-- **Draggable nodes** with smooth positioning
-- **SVG edges** (screen-space rendering, visible/selectable/deletable)
-- **Zoom/pan controls** (mouse wheel, toolbar buttons, fit-to-view)
-- **Minimap** with clickable pan
-- **Toolbar** (Select/Pan/Zoom/Connect tools, Add Node button)
-- **Connect tool** (2-click flow: source → target → edge created)
-- **Undo/redo** with full history
-- **JD panel** (slide-in, Overview tab, Responsibilities/Requirements placeholders for Sprint 6)
-- **Chart creation** with template starters:
-  - Blank (empty canvas)
-  - Startup (5-node flat tree)
-  - Scale-up (13-node functional org)
-  - Hiring plan (active backbone + open/planned roles)
+### Sprint 3: Auth + Workspace + Permissions ✅
+- Clerk integration with dev-bypass mode (`IS_DEV_BYPASS` auto-detected)
+- Onboarding: 2-step flow (workspace + invite up to 5 members)
+- Quick-start option: creates 5-node starter chart directly from onboarding
+- Permission gating: 5-tier hierarchy (owner > admin > editor > commenter > viewer)
+- Dev tools: `__devTools.setPermission(role)` in browser console
+
+### Sprint 4: Billing + Limits + Pricing ✅
+- Billing store (Zustand): Free/Starter/Growth/Enterprise tiers
+- `usePlanLimits` hook: chart/node/seat limits, feature gates, `upgradeRequired(feature)`
+- UpgradeModal: tier comparison, pricing, navigates to /pricing
+- Pricing page (/pricing): plan cards, monthly/annual toggle, "Trusted by teams at" logo bar, FAQ, enterprise CTA
+- Checkout flow (demo-ready): Stripe Payment Link compatible
+- Dev tools: `__devTools.setPlan('free'|'starter'|'growth')` in browser console
+
+### Sprint 5: JD Editor with Rich Text ✅
+- JDEditor (TipTap): Bold, Italic, H2, H3, BulletList, OrderedList, auto-save (1s debounce)
+- jobDescriptionStore: per-node JD state, version bumping, localStorage persistence
+- Full approval workflow: draft → in-review → approved → published → hired
+- Status badge + version display (v1, v2…) in JD panel
+
+### Sprint 6: AI JD Drafting + Template Library ✅ Code Complete, ⚠️ Not E2E Tested
+- AIJDDraft: Anthropic streaming (claude-sonnet-4-6), tone selector, ghostPulse animation, cancel support
+- Dev session limit: 10 AI drafts/session via `sessionStorage` (prevents token burn)
+- templateStore: CRUD with localStorage, seeded from mockRoleTemplates
+- RolesView: full template management UI (create/edit/duplicate/delete)
+- JDPanel: inline template picker + AI draft button gated by plan tier
+- **⚠️ Requires `VITE_ANTHROPIC_API_KEY=sk-ant-...` in `.env.local` for AI drafting to work**
+- User has Anthropic account + $21 payment — verify billing balance at console.anthropic.com before testing
+
+### Sprint 7: Auto-layout + Role Types + Launch Polish ✅
+- **Auto-layout** (`src/utils/layout.ts`): Reingold-Tilford hierarchical algorithm
+  - 120px vertical gap, 260px center-to-center horizontal, subtrees centred
+  - Handles multiple roots, circular refs, isolated nodes
+  - LayoutGrid toolbar button: locked for Free (UpgradeModal), Starter+ runs layout + fit + toast
+  - 80% node warning: amber banner when free-tier node count ≥ 80% of limit
+- **Role types**: `RoleType = 'existing' | 'new-headcount' | 'backfill' | 'contractor' | 'tbd'`
+  - NodeModal: role type segmented selector (5 options with colour dots)
+  - NodeCard: pill badge row for non-existing types (NEW HC, BACKFILL, CONTRACT, TBD)
+  - JDPanel Overview: "Role type" field in key-value list
+  - Dashboard: "By role type" breakdown with coloured pill counts
+- **Page titles**: `document.title` set on all main pages (Dashboard, ChartView, CanvasView dynamic, RolesView, PricingPage, OnboardingPage)
 
 **Key files:**
-- `src/features/canvas/OrgChart.tsx` — main canvas component
-- `src/features/canvas/useCanvasState.ts` — canvas state management (nodes, edges, history, tools)
-- `src/pages/CanvasView.tsx` — wires chart data to canvas
-- `src/pages/ChartView.tsx` — chart library + new chart modal
-
-### Sprint 3: Auth + Workspace + Invite Flow + Members + Permissions ✅
-- **Auth**: Clerk integration with dev-bypass mode; sign-in/sign-up working
-- **Onboarding**: 2-step flow (workspace name + role/size; invite up to 5 members)
-- **Workspace persistence**: localStorage saves/restores workspace across sessions
-- **Members management**: SettingsView Members tab with permission dropdowns, invite form, pending invites
-- **Permission gating**: 
-  - 5-tier hierarchy (owner > admin > editor > commenter > viewer)
-  - OrgChart readOnly mode blocks edit interactions
-  - ChartView hides creation UI and status actions per rank
-  - JDPanel gates "Edit role" (editor+) and "Approve" (admin+)
-  - Status actions filtered by minPermission field
-- **Tests**: 94 passing tests including new auth, onboarding, members, and permission tests
-
-**Key files:**
-- `src/store/userStore.ts` — workspace + member management, localStorage persistence
-- `src/hooks/usePermission.ts` — permission rank system
-- `src/features/auth/AuthProvider.tsx`, `useAuth.ts` — Clerk integration + dev-bypass
-- `src/pages/OnboardingPage.tsx` — 2-step workspace setup
-- `src/pages/SettingsView.tsx` — Members tab + invite form
-- `src/pages/ChartView.tsx` — permission-gated chart library
-- `src/features/canvas/OrgChart.tsx` — readOnly prop blocks editing
-- `src/features/panel/JDPanel.tsx` — gated footer buttons
+- `src/utils/layout.ts` — auto-layout algorithm
+- `src/types/chart.ts` — OrgNode, RoleType, all chart types
+- `src/features/canvas/OrgChart.tsx` — main canvas (toolbar, modals, JD panel)
+- `src/features/canvas/useCanvasState.ts` — canvas state + history + applyLayout
+- `src/features/nodes/NodeCard.tsx` — node card with role type badges
+- `src/features/nodes/NodeModal.tsx` — add/edit modal with role type selector
+- `src/features/panel/JDPanel.tsx` — JD panel with template picker + AI draft
+- `src/features/jd/AIJDDraft.tsx` — Anthropic streaming component
+- `src/store/templateStore.ts` — template CRUD + seeding
+- `src/store/billingStore.ts` — plan tier + usage + AI draft limits
+- `src/hooks/usePlanLimits.ts` — feature gates + upgrade detection
+- `src/pages/Dashboard.tsx` — dashboard with role type breakdown
+- `src/pages/PricingPage.tsx` — pricing with logo bar + FAQ
+- `src/pages/OnboardingPage.tsx` — 2-step onboarding + quick-start chart
 
 ---
 
-## What's Not Done (Out of Scope)
+## What's Not Done (Next Priorities)
 
-- JD editor (Responsibilities/Requirements tabs) — Sprint 6
-- Edit/Approve buttons (not wired)
-- Filter tool (visual only, not functional)
-- Salary band (locked placeholder)
-- Persistence (no backend/DB yet — data resets on page reload)
-- Headcount forecasting
-- Approval workflows
+1. **Sprint 6 end-to-end verification** — verify Anthropic billing, add API key, test AI drafting
+2. **Git commits** — Sprint 6 + Sprint 7 uncommitted pending user verification
+3. **Share Link + PNG Export** — viral growth: public read-only view, copy link, export image
+4. **Backend/persistence** — data resets on page reload; no DB yet (mock data only)
+5. **Stripe webhooks** — handle payment completion + automatic plan upgrade
+6. **Approval email notifications** — wire status transitions to email
+7. **Filter tool** — canvas filter button exists but is a no-op
+8. **Salary band** — locked placeholder, needs backend compensation data
+9. **Headcount forecasting** — planned for HeadcountView
 
 ---
 
@@ -134,7 +163,7 @@ npm install
 npm run dev
 
 # Type check
-npx tsc --noEmit
+npx tsc -p tsconfig.app.json --noEmit
 
 # Run tests (watch mode)
 npm test
@@ -146,7 +175,7 @@ npm run test:run
 npm run build
 
 # Git workflow
-git add .
+git add src/
 git commit -m "Your message"
 git push
 ```
@@ -155,24 +184,17 @@ git push
 
 ## Testing
 
-**Stack:** Vitest + React Testing Library. Tests live in `__tests__/` directories co-located with source.
+**Stack:** Vitest + React Testing Library. `vite.config.ts` uses `defineConfig` from `vitest/config` (not `vite`).
 
-**Setup files:**
-- `vite.config.ts` — test config (globals, jsdom, setupFiles)
-- `src/test/setup.ts` — imports `@testing-library/jest-dom` matchers
+Tests live in `__tests__/` directories co-located with source. **141 tests, all passing.**
 
-**Test suites (Sprint 2):**
-- `src/store/__tests__/toastStore.test.ts` — addToast variants, cap behaviour, auto-dismiss, removeToast
-- `src/features/canvas/__tests__/useCanvasState.test.ts` — addNode, updateNode, deleteNode, addEdge guards (self/duplicate/circular), undo/redo
-- `src/features/nodes/__tests__/NodeModal.test.tsx` — add/edit modes, validation, delete confirmation flow
-
-**Convention for future sprints:** add a `__tests__/` folder alongside any new feature file that contains meaningful logic. Reset Zustand stores in `beforeEach` using `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for any timer-dependent behaviour.
+**Convention:** add a `__tests__/` folder alongside any new feature file with meaningful logic. Reset Zustand stores in `beforeEach` using `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for timer-dependent behaviour.
 
 ---
 
 ## Design System
 
-All colors use CSS custom properties (never hardcoded hex). See `src/styles/globals.css`:
+All colours use CSS custom properties (never hardcoded hex). See `src/styles/globals.css`:
 
 **Dark theme (default):**
 ```css
@@ -182,10 +204,13 @@ All colors use CSS custom properties (never hardcoded hex). See `src/styles/glob
 --text: #F0F6FF
 --muted: #94A3B8
 --dim: #475569
+--warn: amber
+--success: green
+--purple: #8B5CF6
+--danger: red
 ```
 
-**Light theme** (`data-theme='light'`):
-- Inverts backgrounds, adjusts text colors, lightens accent colors
+**Light theme** (`data-theme='light'`): inverts backgrounds, adjusts text/accent colours.
 
 Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 
@@ -195,26 +220,19 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 
 ✅ **Vercel is live and auto-deploys from main branch.**
 - Production URL: https://stratmap-seven.vercel.app
-- GitHub integration configured — every push to main triggers deployment
-- Deployment set up on 2026-05-12
-
----
-
-## Next Steps
-
-**Recommended priorities:**
-1. **JD editor** — Fill in Responsibilities/Requirements tabs (Sprint 6)
-2. **Approval workflow** — Wire up Edit/Approve buttons, status transitions
-3. **Backend/persistence** — Currently all data is mock; add API/database
+- GitHub integration: every push to `main` triggers deployment
 
 ---
 
 ## Notes for Future Sessions
 
-- **SSH is your auth method** — No token setup needed for future chats. Just run git commands.
-- **Dev server persists** — If you start `npm run dev`, it keeps running. You can stop it with Ctrl+C.
-- **Canvas data is template-based** — New charts load nodes/edges from templates; existing charts show their stored structure.
-- **TypeScript is strict** — `npx tsc --noEmit` verifies compilation before commits.
-- **No environment variables** — Mock data only; no .env needed for dev.
-- **Execution preference** — Execute code changes directly rather than asking the user to do them. This keeps iteration fast and reduces friction. Only ask for confirmation on risky/destructive operations or when clarification is needed.
-- **Dev tools helper** — `__devTools.setPermission(role)` in the browser console lets you test different permission levels without creating accounts.
+- **Do not commit** until user confirms features are working — per project git policy
+- **SSH auth** — No token setup needed. Just run `git` commands directly.
+- **Dev server** — `npm run dev` (may start on 5174 if 5173 is in use)
+- **Canvas data is template-based** — New charts load nodes/edges from templates; state is in-memory only (resets on reload)
+- **TypeScript** — Use `npx tsc -p tsconfig.app.json --noEmit` (not `npx tsc --noEmit`) for accurate error checking
+- **Execution preference** — Execute code changes directly. Only ask for confirmation on risky/destructive operations.
+- **Dev tools** — In browser console:
+  - `__devTools.setPermission('admin'|'editor'|'viewer'|...)` — test permission levels
+  - `__devTools.setPlan('free'|'starter'|'growth')` — test billing tiers
+- **Sprint 6 AI drafting** — Blocked on Anthropic API key. Add `VITE_ANTHROPIC_API_KEY=sk-ant-...` to `.env.local` after verifying billing balance at console.anthropic.com

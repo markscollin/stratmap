@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid } from 'lucide-react'
 import type { OrgNode, OrgEdge, Department } from '../../types'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 import { useCanvasState } from './useCanvasState'
@@ -9,6 +10,8 @@ import { JDPanel } from '../panel/JDPanel'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
+import { useToastStore } from '../../store/toastStore'
+import { calculateLayout } from '../../utils/layout'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -159,9 +162,9 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier }: {
+function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
-  onAddNode: () => void; onUndo: () => void; onRedo: () => void
+  onAddNode: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
 }) {
@@ -192,6 +195,14 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
       })}
       <Divider />
       <ToolBtn Icon={Layers} label="Filter (F)" active={false} onClick={() => {}} />
+      {!readOnly && <>
+        <ToolBtn
+          Icon={LayoutGrid}
+          label={currentTier === 'free' ? 'Auto-layout (Starter+)' : 'Auto-layout'}
+          active={false}
+          onClick={onAutoLayout}
+        />
+      </>}
       {!readOnly ? <>
         <Divider />
         <button onClick={onAddNode} style={{
@@ -289,9 +300,12 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
     activeTool, setActiveTool,
     moveNode, commitDrag,
     addNode, updateNode, deleteNode,
-    addEdge, removeEdge, removeEdgesByTarget,
+    addEdge, removeEdge,
+    applyLayout,
     undo, redo, canUndo, canRedo,
   } = useCanvasState(initialNodes, initialEdges)
+
+  const addToast = useToastStore(s => s.addToast)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const viewportRef  = useRef<HTMLDivElement>(null)
@@ -317,11 +331,12 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
   const addNodePosRef = useRef({ x: 400, y: 200 })
 
   // Plan limits
-  const { isAtNodeLimit, currentTier } = usePlanLimits()
+  const { isAtNodeLimit, currentTier, upgradeRequired } = usePlanLimits()
   const plan = useBillingStore((state) => state.plan)
+  const navigate = useNavigate()
 
   // Single vs double click disambiguation
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -387,10 +402,16 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
     })
   }, [vpSize, setTransform])
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const rect = containerRef.current!.getBoundingClientRect()
-    applyZoom(-e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      applyZoom(-e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
   }, [applyZoom])
 
   // ── Pointer events ─────────────────────────────────────────────────────────
@@ -508,6 +529,18 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
     setEditingNodeId(null)
   }, [deleteNode])
 
+  const handleAutoLayout = useCallback(() => {
+    if (upgradeRequired('auto-layout')) {
+      setShowUpgradeModal(true)
+      return
+    }
+    const positions = calculateLayout(nodesRef.current, edges)
+    applyLayout(positions)
+    // Fit after React re-renders with new positions
+    setTimeout(fitToView, 50)
+    addToast('Layout applied', 'success')
+  }, [upgradeRequired, edges, applyLayout, fitToView, addToast])
+
   const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null
   const editingNode  = editingNodeId ? nodeMap[editingNodeId] ?? null : null
@@ -526,11 +559,11 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
     >
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={() => navigate('/pricing')}
         feature="More nodes"
         requiredTier="starter"
         currentTier={currentTier}
@@ -602,12 +635,30 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
       <Toolbar
         activeTool={activeTool} setActiveTool={setActiveTool}
         onAddNode={handleOpenAddModal}
+        onAutoLayout={handleAutoLayout}
         onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         readOnly={readOnly}
         nodeCount={nodes.length}
         maxNodesPerChart={plan.maxNodesPerChart}
         currentTier={currentTier}
       />
+
+      {/* 80% node limit warning banner */}
+      {!readOnly && currentTier === 'free' && nodes.length >= Math.floor(plan.maxNodesPerChart * 0.8) && nodes.length < plan.maxNodesPerChart && (
+        <div style={{
+          position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--warn-bg)', border: '1px solid var(--warn)',
+          borderRadius: 8, padding: '7px 16px', zIndex: 19,
+          display: 'flex', alignItems: 'center', gap: 10, fontSize: 12,
+          color: 'var(--text)', boxShadow: 'var(--shadow-sm)',
+        }}>
+          <span>You're using <strong>{nodes.length}</strong> of <strong>{plan.maxNodesPerChart}</strong> nodes.</span>
+          <button onClick={() => navigate('/pricing')} style={{
+            background: 'var(--warn)', border: 'none', borderRadius: 6,
+            color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 10px', cursor: 'pointer',
+          }}>Upgrade</button>
+        </div>
+      )}
       <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
       <Minimap nodes={nodes} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
         onPanTo={(x, y) => setTransform(t => ({ ...t, x, y }))}

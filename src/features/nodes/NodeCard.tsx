@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { User, Briefcase, Clock, RefreshCw } from 'lucide-react'
-import type { OrgNode } from '../../types'
+import type { OrgNode, RoleType } from '../../types'
 import { mockDepartments } from '../../data/mockOrg'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 
@@ -16,6 +16,18 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 type StatusBadgeConfig = { color: string; bg: string; icon: React.ReactNode; label: string }
+
+type RoleTypeBadgeConfig = { color: string; bg: string; label: string }
+
+function getRoleTypeBadge(roleType: RoleType | undefined): RoleTypeBadgeConfig | null {
+  switch (roleType) {
+    case 'new-headcount': return { color: 'var(--success)', bg: 'var(--success-bg)', label: 'NEW HC'   }
+    case 'backfill':      return { color: 'var(--warn)',    bg: 'var(--warn-bg)',    label: 'BACKFILL' }
+    case 'contractor':    return { color: 'var(--purple)',  bg: 'var(--purple-bg)', label: 'CONTRACT' }
+    case 'tbd':           return { color: 'var(--dim)',     bg: 'var(--raised)',    label: 'TBD'      }
+    default: return null
+  }
+}
 
 function getStatusBadge(status: OrgNode['status']): StatusBadgeConfig | null {
   switch (status) {
@@ -58,11 +70,12 @@ export function NodeCard({
 }) {
   const [hov, setHov] = useState(false)
 
-  const dept        = mockDepartments.find(d => d.id === node.departmentId)
-  const deptColour  = dept?.colour ?? '#94A3B8'
-  const isUnfilled  = node.status === 'open' || node.status === 'planned'
-  const label       = isUnfilled ? node.title : node.name
-  const statusBadge = getStatusBadge(node.status)
+  const dept          = mockDepartments.find(d => d.id === node.departmentId)
+  const deptColour    = dept?.colour ?? '#94A3B8'
+  const isUnfilled    = node.status === 'open' || node.status === 'planned'
+  const label         = isUnfilled ? node.title : node.name
+  const statusBadge   = getStatusBadge(node.status)
+  const roleTypeBadge = getRoleTypeBadge(node.roleType)
 
   const borderColor =
     connecting      ? 'var(--purple)'      :
@@ -154,6 +167,20 @@ export function NodeCard({
             </span>
           )}
         </div>
+
+        {/* Row 3: role type badge (only for non-existing types) */}
+        {roleTypeBadge && (
+          <div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '1px 5px', borderRadius: 4,
+              background: roleTypeBadge.bg, color: roleTypeBadge.color,
+              fontSize: 9, fontWeight: 700, letterSpacing: '.3px',
+            }}>
+              {roleTypeBadge.label}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, X } from 'lucide-react'
 import { CheckoutButton } from '../features/billing/CheckoutButton'
 import { usePlanLimits } from '../hooks/usePlanLimits'
@@ -6,6 +6,8 @@ import { usePlanLimits } from '../hooks/usePlanLimits'
 export function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
   const { currentTier } = usePlanLimits()
+
+  useEffect(() => { document.title = 'Pricing — StratMap' }, [])
 
   const plans = [
     {
@@ -123,6 +125,21 @@ export function PricingPage() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Trusted by teams */}
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 16 }}>
+          Trusted by teams at
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, flexWrap: 'wrap' }}>
+          {['Acme Corp', 'Lumen Labs', 'Orbit HQ', 'Starfall', 'NovaTech'].map(name => (
+            <span key={name} style={{
+              fontSize: 14, fontWeight: 700, color: 'var(--dim)',
+              letterSpacing: '-.2px', opacity: 0.6,
+            }}>{name}</span>
+          ))}
+        </div>
       </div>
 
       {/* Pricing cards */}

@@ -151,6 +151,17 @@ export function useCanvasState(initialNodes: OrgNode[] = [], initialEdges: OrgEd
     })
   }, [pushHistory])
 
+  const applyLayout = useCallback((newPositions: Map<string, { x: number; y: number }>) => {
+    setNodes(prev => {
+      const next = prev.map(n => {
+        const pos = newPositions.get(n.id)
+        return pos ? { ...n, x: pos.x, y: pos.y } : n
+      })
+      setEdges(es => { pushHistory(next, es); return es })
+      return next
+    })
+  }, [pushHistory])
+
   return {
     nodes, edges, transform, setTransform,
     selectedId, setSelectedId,
@@ -160,6 +171,7 @@ export function useCanvasState(initialNodes: OrgNode[] = [], initialEdges: OrgEd
     moveNode, commitDrag,
     addNode, updateNode, deleteNode,
     addEdge, removeEdge, removeEdgesByTarget,
+    applyLayout,
     undo, redo, canUndo, canRedo,
   }
 }

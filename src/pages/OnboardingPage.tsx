@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Zap } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { useToastStore } from '../store/toastStore'
+import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
+import { mockDepartments } from '../data/mockOrg'
 
 type Step = 1 | 2
 
@@ -22,6 +24,9 @@ export function OnboardingPage() {
   const { user } = useAuth()
   const { setWorkspace } = useUserStore()
   const { addToast } = useToastStore()
+  const { addChart } = useChartStore()
+
+  useEffect(() => { document.title = 'Get started — StratMap' }, [])
 
   const [step, setStep] = useState<Step>(1)
   const [workspaceName, setWorkspaceName] = useState('')
@@ -52,31 +57,55 @@ export function OnboardingPage() {
     setInvites((rows) => rows.filter((_, i) => i !== idx))
   }
 
-  function complete(sendInvites: boolean) {
+  function buildWorkspace(sendInvites: boolean) {
     const now = new Date().toISOString()
-    const filledInvites = sendInvites
-      ? invites.filter((r) => r.email.trim())
-      : []
-
+    const filledInvites = sendInvites ? invites.filter((r) => r.email.trim()) : []
     setWorkspace({
       id: `ws-${Date.now()}`,
       name: workspaceName.trim(),
-      ownerRole,
-      size,
+      ownerRole, size,
       members: user
         ? [{ user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl }, permission: 'owner', joinedAt: now }]
         : [],
-      pendingInvites: filledInvites.map((r) => ({
-        email: r.email.trim(),
-        permission: r.permission,
-        sentAt: now,
-      })),
+      pendingInvites: filledInvites.map((r) => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
       createdAt: now,
     })
+  }
 
+  function complete(sendInvites: boolean) {
+    buildWorkspace(sendInvites)
     const firstName = user?.name.split(' ')[0] ?? 'there'
     addToast(`Welcome to StratMap, ${firstName}!`, 'success')
     navigate('/charts')
+  }
+
+  function completeWithQuickStart(sendInvites: boolean) {
+    buildWorkspace(sendInvites)
+    const now = new Date().toISOString()
+    const dept = mockDepartments[0]
+    const nodes = [
+      { id: 'qs-1', name: 'CEO',             title: 'Chief Executive Officer',  departmentId: dept?.id ?? 'eng', managerId: null,   status: 'active' as const, employmentType: 'full-time' as const, x: 400, y: 0   },
+      { id: 'qs-2', name: 'CTO',             title: 'Chief Technology Officer', departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'active' as const, employmentType: 'full-time' as const, x: 0,   y: 200 },
+      { id: 'qs-3', name: 'CPO',             title: 'Chief Product Officer',    departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'active' as const, employmentType: 'full-time' as const, x: 260, y: 200 },
+      { id: 'qs-4', name: 'Head of Sales',   title: 'Head of Sales',            departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'open'   as const, employmentType: 'full-time' as const, x: 520, y: 200 },
+      { id: 'qs-5', name: 'Head of Ops',     title: 'Head of Operations',       departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'planned' as const, employmentType: 'full-time' as const, x: 780, y: 200 },
+    ]
+    const edges = [
+      { id: 'qe-1', sourceId: 'qs-1', targetId: 'qs-2' },
+      { id: 'qe-2', sourceId: 'qs-1', targetId: 'qs-3' },
+      { id: 'qe-3', sourceId: 'qs-1', targetId: 'qs-4' },
+      { id: 'qe-4', sourceId: 'qs-1', targetId: 'qs-5' },
+    ]
+    const chartId = `chart-qs-${Date.now()}`
+    addChart({
+      id: chartId, name: 'Current Structure', status: 'editing', version: 1,
+      departments: mockDepartments, nodes, edges,
+      owner: user?.id ?? 'dev', creator: user?.id ?? 'dev',
+      collaborators: [], createdAt: now, updatedAt: now,
+    })
+    const firstName = user?.name.split(' ')[0] ?? 'there'
+    addToast(`Welcome to StratMap, ${firstName}! Your starter chart is ready.`, 'success')
+    navigate(`/charts/${chartId}`)
   }
 
   return (
@@ -138,6 +167,7 @@ export function OnboardingPage() {
             removeInviteRow={removeInviteRow}
             onSkip={() => complete(false)}
             onSend={() => complete(true)}
+            onQuickStart={() => completeWithQuickStart(false)}
             canAddMore={invites.length < 5}
           />
         )}
@@ -254,7 +284,7 @@ function Step1({
 // ── Step 2 ──────────────────────────────────────────────────────────────────
 function Step2({
   invites, updateInvite, addInviteRow, removeInviteRow,
-  onSkip, onSend, canAddMore,
+  onSkip, onSend, onQuickStart, canAddMore,
 }: {
   invites: InviteRow[]
   updateInvite: (idx: number, field: keyof InviteRow, value: string) => void
@@ -262,6 +292,7 @@ function Step2({
   removeInviteRow: (idx: number) => void
   onSkip: () => void
   onSend: () => void
+  onQuickStart: () => void
   canAddMore: boolean
 }) {
   return (
@@ -331,7 +362,37 @@ function Step2({
         </button>
       )}
 
-      <div style={{ display: 'flex', gap: 10, marginTop: canAddMore ? 0 : 28 }}>
+      {/* Quick start option */}
+      <div style={{
+        marginTop: canAddMore ? 0 : 28, marginBottom: 12,
+        padding: '14px 16px', background: 'var(--raised)', borderRadius: 10,
+        border: '1px solid var(--border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+              Start with a starter chart
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Creates a 5-node "Current Structure" chart — CEO, CTO, CPO, Head of Sales &amp; Ops
+            </div>
+          </div>
+          <button
+            onClick={onQuickStart}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', flexShrink: 0,
+              background: 'var(--brand-bg)', border: '1px solid var(--brand)',
+              borderRadius: 8, color: 'var(--brand)',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <Zap size={13} /> Quick start
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
         <button
           data-testid="skip-btn"
           onClick={onSkip}

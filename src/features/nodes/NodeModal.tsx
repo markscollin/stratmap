@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, ChevronDown, MapPin } from 'lucide-react'
-import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus } from '../../types'
+import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus, RoleType } from '../../types'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -201,6 +201,34 @@ const STATUS_OPTIONS: { value: NodeStatus; label: string }[] = [
   { value: 'backfill', label: 'Backfill' },
 ]
 
+const ROLE_TYPE_OPTIONS: { value: RoleType; label: string; color: string }[] = [
+  { value: 'existing',      label: 'Existing',  color: 'var(--muted)'   },
+  { value: 'new-headcount', label: 'New HC',    color: 'var(--success)' },
+  { value: 'backfill',      label: 'Backfill',  color: 'var(--warn)'    },
+  { value: 'contractor',    label: 'Contract',  color: 'var(--purple)'  },
+  { value: 'tbd',           label: 'TBD',       color: 'var(--dim)'     },
+]
+
+function RoleTypeControl({ value, onChange }: { value: RoleType; onChange: (v: RoleType) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 2, background: 'var(--raised)', borderRadius: 8, padding: 2 }}>
+      {ROLE_TYPE_OPTIONS.map(opt => (
+        <button key={opt.value} type="button" onClick={() => onChange(opt.value)} style={{
+          flex: 1, padding: '6px 4px', borderRadius: 6, border: 'none', fontSize: 11,
+          fontWeight: 500, cursor: 'pointer', transition: 'all .12s',
+          background: value === opt.value ? 'var(--surface)' : 'transparent',
+          color: value === opt.value ? opt.color : 'var(--muted)',
+          boxShadow: value === opt.value ? 'var(--shadow-sm)' : 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: value === opt.value ? opt.color : 'var(--dim)', flexShrink: 0, display: 'inline-block' }} />
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function NodeModal({
   isOpen, onClose, mode, node, departments, allNodes, allEdges,
   onAdd, onUpdate, onDelete,
@@ -217,6 +245,7 @@ export function NodeModal({
   const [deptId,         setDeptId]         = useState(fallbackDept)
   const [employment,     setEmployment]     = useState<EmploymentType>('full-time')
   const [status,         setStatus]         = useState<NodeStatus>('active')
+  const [roleType,       setRoleType]       = useState<RoleType>('existing')
   const [reportsTo,      setReportsTo]      = useState('')
   const [location,       setLocation]       = useState('')
   const [isNew,          setIsNew]          = useState(false)
@@ -232,12 +261,14 @@ export function NodeModal({
       setDeptId(node.departmentId)
       setEmployment(node.employmentType)
       setStatus(node.status)
+      setRoleType(node.roleType ?? 'existing')
       setReportsTo(currentManagerId)
       setLocation(node.location ?? '')
       setIsNew(node.isNew ?? false)
     } else {
       setName(''); setJobTitle(''); setDeptId(fallbackDept)
       setEmployment('full-time'); setStatus('active')
+      setRoleType('existing')
       setReportsTo(''); setLocation(''); setIsNew(false)
     }
   }, [isOpen, mode, node?.id]) // eslint-disable-line
@@ -257,6 +288,7 @@ export function NodeModal({
       departmentId: deptId,
       employmentType: employment,
       status,
+      roleType,
       managerId: reportsTo || null,
       location: location.trim() || undefined,
       isNew,
@@ -331,6 +363,10 @@ export function NodeModal({
 
         <Field label="Status">
           <SegmentedControl options={STATUS_OPTIONS} value={status} onChange={setStatus} />
+        </Field>
+
+        <Field label="Role type">
+          <RoleTypeControl value={roleType} onChange={setRoleType} />
         </Field>
 
         <Field label="Reports to">

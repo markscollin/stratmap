@@ -63,17 +63,6 @@ describe('ChartView — New chart button', () => {
 })
 
 describe('ChartView — Overflow menu status actions', () => {
-  function openMenu() {
-    const moreBtn = screen.getByRole('button', { name: '' })
-    const moreBtns = screen.getAllByRole('button')
-    // MoreHorizontal button is the one in the card header
-    const overflowBtn = moreBtns.find(b => b.querySelector('svg') && b.style.width === '')
-    // Use the card's overflow button — easiest to find by its containing card
-    const cardMenuBtn = document.querySelector('button[style*="width: 26px"]') as HTMLButtonElement
-    if (cardMenuBtn) fireEvent.click(cardMenuBtn)
-    return cardMenuBtn
-  }
-
   it('editor sees Submit actions but not Approve', () => {
     renderView('editor')
     // Find the MoreHorizontal button in the card (26x26px)

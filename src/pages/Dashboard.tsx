@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, Briefcase, TrendingUp, Network, ArrowRight, Plus, BarChart2 } from 'lucide-react'
 import { useChartStore } from '../store'
 import { mockDepartments } from '../data/mockOrg'
 import { STATUS_META } from '../constants/statusMeta'
-import type { ChartStatus } from '../types'
+import type { ChartStatus, OrgChart } from '../types'
 
 const PLANNED_HIRES = 6
 
 export function Dashboard() {
   const navigate = useNavigate()
   const { charts } = useChartStore()
+
+  useEffect(() => { document.title = 'StratMap — Dashboard' }, [])
 
   const totalHeadcount = mockDepartments.reduce((s, d) => s + d.headcount, 0)
   const totalOpen      = mockDepartments.reduce((s, d) => s + d.open, 0)
@@ -139,6 +141,9 @@ export function Dashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Role type breakdown */}
+            <RoleTypeBreakdown charts={charts} />
           </div>
 
           {/* Chart status summary */}
@@ -196,6 +201,46 @@ function QuickActions({
       <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>Quick actions</h2>
       <div style={{ display: 'flex', gap: 10 }}>
         {actions.map(a => <QuickActionBtn key={a.label} {...a} onClick={() => onNavigate(a.path)} />)}
+      </div>
+    </div>
+  )
+}
+
+function RoleTypeBreakdown({ charts }: { charts: OrgChart[] }) {
+  const allNodes = charts.flatMap(c => c.nodes)
+  const counts = {
+    'new-headcount': allNodes.filter(n => n.roleType === 'new-headcount').length,
+    'backfill':      allNodes.filter(n => n.roleType === 'backfill').length,
+    'contractor':    allNodes.filter(n => n.roleType === 'contractor').length,
+    'tbd':           allNodes.filter(n => n.roleType === 'tbd').length,
+  }
+  const nonZero = Object.entries(counts).filter(([, v]) => v > 0)
+  if (nonZero.length === 0) return null
+
+  const badges: Record<string, { label: string; color: string; bg: string }> = {
+    'new-headcount': { label: 'new hires',  color: 'var(--success)', bg: 'var(--success-bg)' },
+    'backfill':      { label: 'backfills',  color: 'var(--warn)',    bg: 'var(--warn-bg)'    },
+    'contractor':    { label: 'contractors',color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
+    'tbd':           { label: 'TBD',        color: 'var(--dim)',     bg: 'var(--raised)'     },
+  }
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>By role type</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {nonZero.map(([type, count]) => {
+          const b = badges[type]
+          return (
+            <span key={type} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 20,
+              background: b.bg, color: b.color,
+              fontSize: 11, fontWeight: 600,
+            }}>
+              {count} {b.label}
+            </span>
+          )
+        })}
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
@@ -81,7 +81,7 @@ function ApprovalCycleBar({
 
 // ── Chart card ────────────────────────────────────────────────────────────────
 
-function ChartCard({ chart, index, onAction, canEdit, canAdmin }: {
+function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   chart: OrgChart
   index: number
   onAction: (id: string, next: ChartStatus) => void
@@ -409,6 +409,8 @@ export function ChartView() {
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
   const [showModal, setShowModal]   = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
+  useEffect(() => { document.title = 'StratMap — Org Charts' }, [])
   const [focusSearch, setFocusSearch] = useState(false)
 
   const filtered = charts
@@ -448,6 +450,7 @@ export function ChartView() {
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={() => navigate('/pricing')}
         feature="More org charts"
         requiredTier="starter"
         currentTier={currentTier}

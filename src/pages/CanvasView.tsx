@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { mockDepartments } from '../data/mockOrg'
 import { ChevronLeft } from 'lucide-react'
@@ -14,6 +15,10 @@ export function CanvasView() {
   const { canEdit } = usePermission()
 
   const chart = charts.find(c => c.id === id)
+
+  useEffect(() => {
+    document.title = chart ? `${chart.name} — StratMap` : 'StratMap'
+  }, [chart?.name])
   if (!chart) return (
     <div style={{ padding: 40, color: 'var(--text)' }}>
       <p>Chart not found.</p>

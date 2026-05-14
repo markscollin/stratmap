@@ -2,6 +2,7 @@ export type EmploymentType = 'full-time' | 'part-time' | 'contractor' | 'advisor
 export type NodeStatus = 'active' | 'open' | 'planned' | 'backfill'
 export type RoleStatus = 'draft' | 'in-review' | 'approved' | 'published' | 'hired'
 export type ChartStatus = 'draft' | 'editing' | 'review' | 'rejected' | 'approved' | 'live' | 'archived'
+export type RoleType = 'existing' | 'new-headcount' | 'backfill' | 'contractor' | 'tbd'
 
 export interface Department {
   id: string
@@ -17,6 +18,7 @@ export interface OrgNode {
   managerId: string | null
   status: NodeStatus
   employmentType: EmploymentType
+  roleType?: RoleType
   avatarUrl?: string
   location?: string
   startDate?: string
