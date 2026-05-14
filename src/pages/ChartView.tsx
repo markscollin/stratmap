@@ -11,7 +11,9 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
 import { AvatarStack } from '../components/ui/AvatarStack'
 import { MiniChartThumb } from '../components/ui/MiniChartThumb'
+import { UpgradeModal } from '../components/ui/UpgradeModal'
 import { usePermission } from '../hooks/usePermission'
+import { usePlanLimits } from '../hooks/usePlanLimits'
 import type { OrgChart, OrgNode, OrgEdge, ChartStatus } from '../types'
 import { mockDepartments } from '../data/mockOrg'
 
@@ -402,9 +404,11 @@ export function ChartView() {
   const { charts, updateChartStatus, addChart } = useChartStore()
   const navigate = useNavigate()
   const { canEdit, canAdmin } = usePermission()
+  const { isAtChartLimit, currentTier } = usePlanLimits()
   const [search, setSearch]         = useState('')
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
   const [showModal, setShowModal]   = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [focusSearch, setFocusSearch] = useState(false)
 
   const filtered = charts
@@ -441,18 +445,38 @@ export function ChartView() {
   return (
     <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
       {showModal && <NewChartModal onClose={() => setShowModal(false)} onCreate={handleCreate} />}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="More org charts"
+        requiredTier="starter"
+        currentTier={currentTier}
+      />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 4 }}>Org Charts</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted)' }}>{charts.length} charts in your workspace</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>{charts.length} charts in your workspace</p>
+            {currentTier === 'free' && (
+              <p style={{ fontSize: 12, color: 'var(--dim)', background: 'var(--raised)', padding: '4px 10px', borderRadius: 6 }}>
+                {charts.length} of 1 chart
+              </p>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={{ padding: '9px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>Import CSV</button>
           {canEdit && (
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                if (isAtChartLimit()) {
+                  setShowUpgradeModal(true)
+                } else {
+                  setShowModal(true)
+                }
+              }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px var(--brand-glow)' }}
             >
               <Plus size={14} /> New chart
@@ -497,7 +521,13 @@ export function ChartView() {
           </p>
           {!search && canEdit && (
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => {
+                if (isAtChartLimit()) {
+                  setShowUpgradeModal(true)
+                } else {
+                  setShowModal(true)
+                }
+              }}
               style={{ padding: '10px 22px', background: 'var(--grad-brand)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px var(--brand-glow)' }}
             >
               Create your first chart
@@ -517,7 +547,17 @@ export function ChartView() {
                 canAdmin={canAdmin}
               />
             ))}
-            {canEdit && <NewChartTile onClick={() => setShowModal(true)} />}
+            {canEdit && (
+              <NewChartTile
+                onClick={() => {
+                  if (isAtChartLimit()) {
+                    setShowUpgradeModal(true)
+                  } else {
+                    setShowModal(true)
+                  }
+                }}
+              />
+            )}
           </div>
 
           {/* Footer */}

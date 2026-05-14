@@ -11,6 +11,8 @@ import { HeadcountView }   from './pages/HeadcountView'
 import { SettingsView }    from './pages/SettingsView'
 import { OnboardingPage }  from './pages/OnboardingPage'
 import { SignInPage, SignUpPage } from './pages/SignInPage'
+import { PricingPage }     from './pages/PricingPage'
+import { BillingSuccessPage } from './pages/BillingSuccessPage'
 
 export default function App() {
   return (
@@ -31,6 +33,8 @@ export default function App() {
             <Route path="/roles"      element={<RolesView />} />
             <Route path="/headcount"  element={<HeadcountView />} />
             <Route path="/settings"   element={<SettingsView />} />
+            <Route path="/pricing"    element={<PricingPage />} />
+            <Route path="/billing/success" element={<BillingSuccessPage />} />
           </Route>
         </Routes>
         <ToastStack />

@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Users, Sparkles, X, Lock, ChevronDown } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { usePermission } from '../hooks/usePermission'
+import { usePlanLimits } from '../hooks/usePlanLimits'
 import type { Permission } from '../types'
 
 type Tab = 'general' | 'members' | 'billing' | 'notifications'
@@ -86,7 +88,6 @@ function GeneralTab() {
   )
 }
 
-const SEAT_LIMIT = 3
 const ROLE_LABELS: Record<Permission, string> = {
   owner: 'Owner', admin: 'Admin', editor: 'Editor', commenter: 'Commenter', viewer: 'Viewer',
 }
@@ -95,6 +96,16 @@ const ASSIGNABLE: Permission[] = ['admin', 'editor', 'commenter', 'viewer']
 function MembersTab() {
   const { workspace, user, updateMemberPermission, removeMember, addPendingInvite, removePendingInvite } = useUserStore()
   const { canAdmin } = usePermission()
+  const { currentTier } = usePlanLimits()
+  const plan = (() => {
+    const plans: Record<string, { seats: number; name: string }> = {
+      free: { seats: 3, name: 'Free' },
+      starter: { seats: 5, name: 'Starter' },
+      growth: { seats: 10, name: 'Growth' },
+      enterprise: { seats: 25, name: 'Enterprise' },
+    }
+    return plans[currentTier]
+  })()
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Permission>('editor')
@@ -103,7 +114,7 @@ function MembersTab() {
   const members = workspace?.members ?? []
   const pending = workspace?.pendingInvites ?? []
   const seatsUsed = members.length
-  const atLimit = seatsUsed >= SEAT_LIMIT
+  const atLimit = seatsUsed >= plan.seats
 
   function handleSendInvite() {
     if (!inviteEmail.trim()) return
@@ -122,7 +133,7 @@ function MembersTab() {
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Team members</h3>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-              {seatsUsed} of {SEAT_LIMIT} seats used · Free plan
+              {seatsUsed} of {plan.seats} seats used · {plan.name} plan
             </p>
           </div>
           {canAdmin && (
@@ -138,7 +149,7 @@ function MembersTab() {
         {/* Seat usage bar */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ height: 4, borderRadius: 4, background: 'var(--raised)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 4, width: `${Math.min((seatsUsed / SEAT_LIMIT) * 100, 100)}%`, background: atLimit ? 'var(--warn)' : 'var(--brand)', transition: 'width .3s' }} />
+            <div style={{ height: '100%', borderRadius: 4, width: `${Math.min((seatsUsed / plan.seats) * 100, 100)}%`, background: atLimit ? 'var(--warn)' : 'var(--brand)', transition: 'width .3s' }} />
           </div>
           {atLimit && (
             <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 5 }}>
@@ -292,6 +303,7 @@ function BillingTab() {
 }
 
 function BillingTabContent() {
+  const navigate = useNavigate()
   const plans = [
     { label: 'Starter', price: '£18', desc: '5 charts · 100 nodes · JD management · 5 seats', grad: 'var(--grad-brand)',  glow: 'var(--brand-glow)' },
     { label: 'Growth',  price: '£49', desc: 'Unlimited charts · Headcount · AI drafting · 10 seats', grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
@@ -310,7 +322,7 @@ function BillingTabContent() {
           </p>
         </div>
         {plans.map(({ label, price, desc, grad, glow }) => (
-          <button key={label} style={{
+          <button key={label} onClick={() => navigate('/pricing')} style={{
             width: '100%', padding: '12px 18px', background: grad, border: 'none',
             borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600,
             cursor: 'pointer', marginBottom: 8, textAlign: 'left',

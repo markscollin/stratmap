@@ -87,6 +87,29 @@ src/
 - `src/pages/CanvasView.tsx` — wires chart data to canvas
 - `src/pages/ChartView.tsx` — chart library + new chart modal
 
+### Sprint 3: Auth + Workspace + Invite Flow + Members + Permissions ✅
+- **Auth**: Clerk integration with dev-bypass mode; sign-in/sign-up working
+- **Onboarding**: 2-step flow (workspace name + role/size; invite up to 5 members)
+- **Workspace persistence**: localStorage saves/restores workspace across sessions
+- **Members management**: SettingsView Members tab with permission dropdowns, invite form, pending invites
+- **Permission gating**: 
+  - 5-tier hierarchy (owner > admin > editor > commenter > viewer)
+  - OrgChart readOnly mode blocks edit interactions
+  - ChartView hides creation UI and status actions per rank
+  - JDPanel gates "Edit role" (editor+) and "Approve" (admin+)
+  - Status actions filtered by minPermission field
+- **Tests**: 94 passing tests including new auth, onboarding, members, and permission tests
+
+**Key files:**
+- `src/store/userStore.ts` — workspace + member management, localStorage persistence
+- `src/hooks/usePermission.ts` — permission rank system
+- `src/features/auth/AuthProvider.tsx`, `useAuth.ts` — Clerk integration + dev-bypass
+- `src/pages/OnboardingPage.tsx` — 2-step workspace setup
+- `src/pages/SettingsView.tsx` — Members tab + invite form
+- `src/pages/ChartView.tsx` — permission-gated chart library
+- `src/features/canvas/OrgChart.tsx` — readOnly prop blocks editing
+- `src/features/panel/JDPanel.tsx` — gated footer buttons
+
 ---
 
 ## What's Not Done (Out of Scope)

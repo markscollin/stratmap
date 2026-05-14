@@ -6,6 +6,9 @@ import { useCanvasState } from './useCanvasState'
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
+import { UpgradeModal } from '../../components/ui/UpgradeModal'
+import { usePlanLimits } from '../../hooks/usePlanLimits'
+import { useBillingStore } from '../../store/billingStore'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,10 +159,11 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo, readOnly }: {
+function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
   onAddNode: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
+  nodeCount: number; maxNodesPerChart: number; currentTier: string
 }) {
   const editTools: ActiveTool[] = readOnly
     ? ['select', 'pan', 'zoom']
@@ -197,6 +201,14 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onUndo, onRedo, canUndo
         }}>
           <Plus size={12} /> Add node
         </button>
+        {currentTier === 'free' && (
+          <>
+            <Divider />
+            <span style={{ fontSize: 11, color: 'var(--dim)', padding: '4px 10px', fontWeight: 500 }}>
+              {nodeCount} / {maxNodesPerChart}
+            </span>
+          </>
+        )}
       </> : <>
         <Divider />
         <span style={{ fontSize: 11, color: 'var(--muted)', padding: '4px 10px', background: 'var(--nav-hover)', borderRadius: 6, fontWeight: 500 }}>
@@ -262,7 +274,8 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
+export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
+  chartId?: string
   initialNodes?: OrgNode[]
   initialEdges?: OrgEdge[]
   departments?: Department[]
@@ -300,7 +313,12 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
   // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const addNodePosRef = useRef({ x: 400, y: 200 })
+
+  // Plan limits
+  const { isAtNodeLimit, currentTier } = usePlanLimits()
+  const plan = useBillingStore((state) => state.plan)
 
   // Single vs double click disambiguation
   const clickTimerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -455,11 +473,15 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
   }, [setSelectedId, readOnly])
 
   const handleOpenAddModal = useCallback(() => {
+    if (isAtNodeLimit(chartId)) {
+      setShowUpgradeModal(true)
+      return
+    }
     const cx = (-transform.x + vpSize.w / 2) / transform.scale - NODE_W / 2
     const cy = (-transform.y + vpSize.h / 2) / transform.scale - NODE_H / 2
     addNodePosRef.current = { x: cx, y: cy }
     setIsAddModalOpen(true)
-  }, [transform, vpSize])
+  }, [transform, vpSize, chartId, isAtNodeLimit])
 
   const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
     const pos = addNodePosRef.current
@@ -505,6 +527,14 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
     >
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="More nodes"
+        requiredTier="starter"
+        currentTier={currentTier}
+      />
+
       {/* Grid background */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <defs>
@@ -573,6 +603,9 @@ export function OrgChart({ initialNodes = [], initialEdges = [], departments = [
         onAddNode={handleOpenAddModal}
         onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         readOnly={readOnly}
+        nodeCount={nodes.length}
+        maxNodesPerChart={plan.maxNodesPerChart}
+        currentTier={currentTier}
       />
       <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
       <Minimap nodes={nodes} transform={transform} vpW={vpSize.w} vpH={vpSize.h}

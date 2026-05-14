@@ -41,6 +41,7 @@ export function CanvasView() {
       </div>
 
       <OrgChart
+        chartId={chart.id}
         initialNodes={chart.nodes}
         initialEdges={chart.edges}
         departments={chart.departments.length ? chart.departments : mockDepartments}
