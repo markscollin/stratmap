@@ -355,6 +355,7 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.target instanceof HTMLElement && e.target.isContentEditable) return
       const mod = e.ctrlKey || e.metaKey
       if (!readOnly) {
         if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
@@ -637,7 +638,12 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
       )}
 
       {/* JD panel */}
-      <JDPanel node={selectedNode} onClose={() => setSelectedId(null)} />
+      <JDPanel
+        node={selectedNode}
+        allNodes={nodes}
+        onClose={() => setSelectedId(null)}
+        onEditNode={node => setEditingNodeId(node.id)}
+      />
 
       {/* Add node modal */}
       <NodeModal
