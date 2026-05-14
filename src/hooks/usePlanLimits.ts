@@ -29,8 +29,7 @@ export function usePlanLimits() {
   const canUseAIDrafting = useCallback(() => {
     if (plan.tier === 'free') return false
     if (plan.tier === 'starter') return usage.aiDraftsUsed < usage.aiDraftsLimit
-    if (plan.tier === 'growth') return true
-    return false
+    return true // growth + enterprise: unlimited
   }, [plan.tier, usage.aiDraftsUsed, usage.aiDraftsLimit])
 
   const currentTier: PlanTier = plan.tier

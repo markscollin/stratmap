@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { useUserStore } from '../../store/userStore'
 import type { User, Permission } from '../../types'
 

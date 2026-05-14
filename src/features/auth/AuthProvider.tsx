@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ClerkProvider, useUser, useClerk } from '@clerk/clerk-react'
+import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
 import { IS_DEV_BYPASS } from './useAuth'
 

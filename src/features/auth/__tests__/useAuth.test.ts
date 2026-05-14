@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { useAuth } from '../useAuth'
-import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../../store/userStore'
+import { useUserStore, MOCK_USER } from '../../../store/userStore'
 
 beforeEach(() => {
   useUserStore.setState({

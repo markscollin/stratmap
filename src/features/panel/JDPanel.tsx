@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { X, Briefcase, MapPin, Clock } from 'lucide-react'
+import { X, Briefcase, MapPin, Clock, FileText, Search } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import type { RoleStatus } from '../../types/chart'
 import type { JobDescription } from '../../types/jd'
 import { mockDepartments } from '../../data/mockOrg'
 import { usePermission } from '../../hooks/usePermission'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
+import { useTemplateStore } from '../../store/templateStore'
 import { JDEditor } from '../jd/JDEditor'
+import { AIJDDraft } from '../jd/AIJDDraft'
 
 type PanelTab = 'overview' | 'responsibilities' | 'requirements'
 
@@ -32,7 +34,10 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
   onClose: () => void
   onEditNode?: (node: OrgNode) => void
 }) {
-  const [tab, setTab] = useState<PanelTab>('overview')
+  const [tab,              setTab]              = useState<PanelTab>('overview')
+  const [draftVersion,     setDraftVersion]     = useState(0)
+  const [showTemplatePick, setShowTemplatePick] = useState(false)
+
   const dept = node ? mockDepartments.find(d => d.id === node.departmentId) : null
   const { canEdit, canAdmin } = usePermission()
 
@@ -41,11 +46,29 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
   const setStatus = useJobDescriptionStore(s => s.setStatus)
   const jd        = useJobDescriptionStore(s => node ? s.jobDescriptions[node.id] : undefined)
 
+  const templateMap = useTemplateStore(s => s.templates)
+  const templates   = Object.values(templateMap)
+
   useEffect(() => {
-    if (node) initJD(node.id)
+    if (node) { initJD(node.id); setDraftVersion(0); setShowTemplatePick(false) }
   }, [node?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isVisible = !!node
+
+  const handleDraftComplete = (responsibilities: string, requirements: string) => {
+    if (!node) return
+    updateJD(node.id, { responsibilities, requirements })
+    setDraftVersion(v => v + 1)
+  }
+
+  const handleApplyTemplate = (resp: string, req: string) => {
+    if (!node) return
+    updateJD(node.id, { responsibilities: resp, requirements: req })
+    setDraftVersion(v => v + 1)
+    setShowTemplatePick(false)
+  }
+
+  const currentContent = jd && tab === 'responsibilities' ? jd.responsibilities : jd?.requirements ?? ''
 
   return (
     <div
@@ -127,7 +150,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginLeft: -20, paddingLeft: 20, marginRight: -20 }}>
               {(['overview', 'responsibilities', 'requirements'] as PanelTab[]).map(t => (
-                <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t) }} style={{
+                <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); setShowTemplatePick(false) }} style={{
                   padding: '8px 14px', background: 'transparent', border: 'none',
                   borderBottom: `2px solid ${tab === t ? 'var(--brand)' : 'transparent'}`,
                   color: tab === t ? 'var(--brand)' : 'var(--muted)',
@@ -141,28 +164,69 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
           </div>
 
           {/* Tab content */}
-          <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }} onWheel={e => e.stopPropagation()}>
             {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} />}
-            {tab === 'responsibilities' && jd && (
-              <JDContentTab
-                key={`${node.id}-resp`}
-                content={jd.responsibilities}
-                onSave={html => updateJD(node.id, { responsibilities: html })}
-                editable={canEdit}
-                placeholder="Outline the key responsibilities of this role…"
-                jd={jd}
-              />
+
+            {(tab === 'responsibilities' || tab === 'requirements') && jd && (
+              <>
+                {/* AI draft button */}
+                {canEdit && (
+                  <AIJDDraft
+                    node={node}
+                    jd={jd}
+                    deptName={dept?.name ?? node.departmentId}
+                    onDraftComplete={handleDraftComplete}
+                  />
+                )}
+
+                {/* Apply template link — shown when current section is empty */}
+                {canEdit && !currentContent && !showTemplatePick && (
+                  <button
+                    onClick={() => setShowTemplatePick(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontSize: 12, color: 'var(--muted)', background: 'transparent',
+                      border: 'none', cursor: 'pointer', padding: '0 0 12px',
+                    }}
+                  >
+                    <FileText size={12} />
+                    Apply a template
+                  </button>
+                )}
+
+                {/* Template picker */}
+                {showTemplatePick && (
+                  <TemplatePicker
+                    templates={templates}
+                    onApply={handleApplyTemplate}
+                    onClose={() => setShowTemplatePick(false)}
+                  />
+                )}
+
+                {/* Editor */}
+                {tab === 'responsibilities' && (
+                  <JDContentTab
+                    key={`${node.id}-resp-${draftVersion}`}
+                    content={jd.responsibilities}
+                    onSave={html => updateJD(node.id, { responsibilities: html })}
+                    editable={canEdit}
+                    placeholder="Outline the key responsibilities of this role…"
+                    jd={jd}
+                  />
+                )}
+                {tab === 'requirements' && (
+                  <JDContentTab
+                    key={`${node.id}-req-${draftVersion}`}
+                    content={jd.requirements}
+                    onSave={html => updateJD(node.id, { requirements: html })}
+                    editable={canEdit}
+                    placeholder="List the qualifications and experience required…"
+                    jd={jd}
+                  />
+                )}
+              </>
             )}
-            {tab === 'requirements' && jd && (
-              <JDContentTab
-                key={`${node.id}-req`}
-                content={jd.requirements}
-                onSave={html => updateJD(node.id, { requirements: html })}
-                editable={canEdit}
-                placeholder="List the qualifications and experience required…"
-                jd={jd}
-              />
-            )}
+
             {(tab === 'responsibilities' || tab === 'requirements') && !jd && (
               <div style={{ textAlign: 'center', paddingTop: 40, color: 'var(--dim)', fontSize: 13 }}>
                 Loading…
@@ -193,6 +257,68 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+function TemplatePicker({ templates, onApply, onClose }: {
+  templates: import('../../store/templateStore').Template[]
+  onApply: (resp: string, req: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const filtered = templates.filter(t =>
+    t.title.toLowerCase().includes(query.toLowerCase()) ||
+    t.department.toLowerCase().includes(query.toLowerCase())
+  )
+
+  return (
+    <div style={{
+      marginBottom: 12,
+      border: '1px solid var(--border)', borderRadius: 10,
+      background: 'var(--raised)', overflow: 'hidden',
+    }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Search size={12} color="var(--dim)" />
+        <input
+          autoFocus
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search templates…"
+          style={{
+            flex: 1, background: 'transparent', border: 'none',
+            color: 'var(--text)', fontSize: 12, outline: 'none',
+            fontFamily: 'inherit',
+          }}
+        />
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex', padding: 0 }}>
+          <X size={12} />
+        </button>
+      </div>
+      <div style={{ maxHeight: 180, overflow: 'auto' }} onWheel={e => e.stopPropagation()}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '16px 12px', textAlign: 'center', fontSize: 12, color: 'var(--dim)' }}>No templates found</div>
+        ) : filtered.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onApply(t.responsibilities, t.requirements)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', background: 'transparent', border: 'none',
+              borderBottom: '1px solid var(--border)', cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <FileText size={13} color="var(--dim)" />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{t.title}</div>
+              <div style={{ fontSize: 11, color: 'var(--dim)' }}>{t.department}</div>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -319,6 +445,14 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
   return null
 }
 
+const ROLE_TYPE_LABEL: Record<string, string> = {
+  'existing':      'Existing',
+  'new-headcount': 'New Headcount',
+  'backfill':      'Backfill',
+  'contractor':    'Contractor',
+  'tbd':           'TBD',
+}
+
 function OverviewTab({ node, dept, allNodes }: {
   node: OrgNode
   dept: ReturnType<typeof mockDepartments.find> | null
@@ -328,6 +462,7 @@ function OverviewTab({ node, dept, allNodes }: {
   const fields = [
     { label: 'Employment type', value: node.employmentType },
     { label: 'Status',          value: node.status },
+    { label: 'Role type',       value: ROLE_TYPE_LABEL[node.roleType ?? 'existing'] },
     { label: 'Department',      value: dept?.name ?? node.departmentId },
     { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'No manager (root)' },
   ]

@@ -4,6 +4,7 @@ import type { PlanTier } from '../../types'
 interface UpgradeModalProps {
   isOpen: boolean
   onClose: () => void
+  onUpgrade?: () => void
   feature: string
   requiredTier: 'starter' | 'growth'
   currentTier: PlanTier
@@ -28,7 +29,7 @@ const TIER_INFO = {
   },
 }
 
-export function UpgradeModal({ isOpen, onClose, feature, requiredTier, currentTier }: UpgradeModalProps) {
+export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, requiredTier, currentTier: _currentTier }: UpgradeModalProps) {
   if (!isOpen) return null
 
   const tierInfo = TIER_INFO[requiredTier]
@@ -141,8 +142,8 @@ export function UpgradeModal({ isOpen, onClose, feature, requiredTier, currentTi
         {/* Upgrade button */}
         <button
           onClick={() => {
-            // TODO: Navigate to pricing or checkout
             onClose()
+            onUpgrade?.()
           }}
           style={{
             width: '100%',

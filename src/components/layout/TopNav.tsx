@@ -61,13 +61,14 @@ export function TopNav() {
   // Get Clerk signOut — works in real Clerk mode, undefined in dev-bypass
   let clerkSignOut: (() => Promise<void>) | undefined
   if (!IS_DEV_BYPASS) {
-    clerkSignOut = useClerk().signOut
+    const clerk = useClerk()
+    clerkSignOut = () => clerk.signOut({ redirectUrl: '/sign-in' })
   }
 
   const handleSignOut = async () => {
     storeSignOut()
     if (clerkSignOut) {
-      await clerkSignOut({ redirectUrl: '/sign-in' })
+      await clerkSignOut()
     } else {
       navigate('/sign-in')
     }

@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import type { Plan, UsageLimits, PlanTier } from '../types'
 
+const AI_DRAFT_LIMITS: Record<PlanTier, number> = {
+  free: 0, starter: 3, growth: -1, enterprise: -1,
+}
+
 interface BillingStore {
   plan: Plan
   usage: UsageLimits
@@ -63,9 +67,13 @@ function loadUsageFromStorage(): UsageLimits {
   }
 }
 
-export const useBillingStore = create<BillingStore>((set) => ({
-  plan: loadPlanFromStorage(),
-  usage: loadUsageFromStorage(),
+export const useBillingStore = create<BillingStore>((set) => {
+  const initialPlan  = loadPlanFromStorage()
+  const initialUsage = { ...loadUsageFromStorage(), aiDraftsLimit: AI_DRAFT_LIMITS[initialPlan.tier] }
+
+  return {
+  plan: initialPlan,
+  usage: initialUsage,
   isLoading: false,
 
   setPlan: (plan) => {
@@ -74,7 +82,7 @@ export const useBillingStore = create<BillingStore>((set) => ({
     } catch {
       // localStorage full or unavailable, continue anyway
     }
-    set({ plan })
+    set(state => ({ plan, usage: { ...state.usage, aiDraftsLimit: AI_DRAFT_LIMITS[plan.tier] } }))
   },
 
   incrementUsage: (key, amount = 1) =>
@@ -97,6 +105,7 @@ export const useBillingStore = create<BillingStore>((set) => ({
     }
     set({ usage: resetUsage })
   },
-}))
+  }
+})
 
 export { FREE_PLAN, STARTER_PLAN, GROWTH_PLAN }
