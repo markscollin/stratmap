@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid } from 'lucide-react'
+import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download } from 'lucide-react'
+import { exportAsPNG, exportAsPDF } from '../../utils/export'
 import type { OrgNode, OrgEdge, Department } from '../../types'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 import { useCanvasState } from './useCanvasState'
@@ -120,7 +121,7 @@ function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
   const deptColors: Record<string,string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
 
   return (
-    <div style={{
+    <div data-export-ignore style={{
       position: 'absolute', bottom: 56, left: 16, zIndex: 20,
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
@@ -162,17 +163,71 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier }: {
+function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) {
+  const [open, setOpen] = useState(false)
+  const [hov, setHov] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        title="Export"
+        onClick={() => setOpen(o => !o)}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 30, height: 30, borderRadius: 6,
+          background: hov ? 'var(--nav-hover)' : 'transparent',
+          border: '1px solid transparent',
+          color: hov ? 'var(--text)' : 'var(--muted)',
+          cursor: 'pointer', transition: 'all .12s',
+        }}
+      >
+        <Download size={13} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: 4, zIndex: 50,
+            boxShadow: 'var(--shadow-sm)', minWidth: 110,
+          }}>
+            {(['png', 'pdf'] as const).map(fmt => (
+              <button
+                key={fmt}
+                onClick={() => { setOpen(false); onExport(fmt) }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '6px 10px', borderRadius: 5, border: 'none',
+                  background: 'transparent', color: 'var(--text)',
+                  fontSize: 12, cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--nav-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                Export as {fmt.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
   onAddNode: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
+  onExport: (format: 'png' | 'pdf') => void
 }) {
   const editTools: ActiveTool[] = readOnly
     ? ['select', 'pan', 'zoom']
     : ['select', 'pan', 'zoom', 'connect']
   return (
-    <div style={{
+    <div data-export-ignore style={{
       position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
       display: 'flex', alignItems: 'center', gap: 2, zIndex: 20,
       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -203,6 +258,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, o
           onClick={onAutoLayout}
         />
       </>}
+      <ExportBtn onExport={onExport} />
       {!readOnly ? <>
         <Divider />
         <button onClick={onAddNode} style={{
@@ -261,7 +317,7 @@ function ToolBtn({ Icon, label, active, disabled, onClick }: {
 
 function ZoomControls({ scale, onZoom, onFit }: { scale: number; onZoom: (d: number) => void; onFit: () => void }) {
   return (
-    <div style={{
+    <div data-export-ignore style={{
       position: 'absolute', bottom: 16, right: 16, zIndex: 20,
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 8, padding: '5px 8px',
@@ -285,8 +341,9 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
   chartId?: string
+  chartName?: string
   initialNodes?: OrgNode[]
   initialEdges?: OrgEdge[]
   departments?: Department[]
@@ -541,6 +598,44 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
     addToast('Layout applied', 'success')
   }, [upgradeRequired, edges, applyLayout, fitToView, addToast])
 
+  const [isExporting,    setIsExporting]    = useState(false)
+  const [exportOverflow, setExportOverflow] = useState(false)
+
+  const handleExport = useCallback(async (format: 'png' | 'pdf') => {
+    if (!containerRef.current || isExporting) return
+    const ns = nodesRef.current
+    if (ns.length === 0) return
+    setIsExporting(true)
+
+    const PAD = 60
+    const xs = ns.map(n => n.x), ys = ns.map(n => n.y)
+    const minX = Math.min(...xs),     minY = Math.min(...ys)
+    const maxX = Math.max(...xs) + NODE_W, maxY = Math.max(...ys) + NODE_H
+    const chartW = maxX - minX + PAD * 2
+    const chartH = maxY - minY + PAD * 2
+
+    const savedTransform = { ...transform }
+
+    // Use React state for overflow so the container's pixel dimensions never
+    // change — direct DOM mutation would fire ResizeObserver → vpSize update
+    // → fitToView effect → transform override after restore.
+    setExportOverflow(true)
+    setTransform({ x: PAD - minX, y: PAD - minY, scale: 1 })
+
+    // Wait for React to commit both state updates and the browser to paint.
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+
+    try {
+      const slug = chartName.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'chart'
+      if (format === 'png') await exportAsPNG(containerRef.current, slug, { width: chartW, height: chartH })
+      else await exportAsPDF(containerRef.current, slug, { width: chartW, height: chartH })
+    } finally {
+      setExportOverflow(false)
+      setTransform(savedTransform)
+      setIsExporting(false)
+    }
+  }, [containerRef, nodesRef, isExporting, transform, setTransform, chartName])
+
   const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null
   const editingNode  = editingNodeId ? nodeMap[editingNodeId] ?? null : null
@@ -552,7 +647,7 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
     <div
       ref={containerRef}
       style={{
-        position: 'relative', width: '100%', height: '100%', overflow: 'hidden',
+        position: 'relative', width: '100%', height: '100%', overflow: exportOverflow ? 'visible' : 'hidden',
         background: 'var(--bg)',
         cursor: activeTool === 'pan' ? 'grab' : activeTool === 'zoom' ? 'zoom-in' : connectingFrom ? 'crosshair' : 'default',
       }}
@@ -560,14 +655,16 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      <UpgradeModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        onUpgrade={() => navigate('/pricing')}
-        feature="More nodes"
-        requiredTier="starter"
-        currentTier={currentTier}
-      />
+      <div data-export-ignore>
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          onUpgrade={() => navigate('/pricing')}
+          feature="More nodes"
+          requiredTier="starter"
+          currentTier={currentTier}
+        />
+      </div>
 
       {/* Grid background */}
       <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
@@ -641,11 +738,12 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
         nodeCount={nodes.length}
         maxNodesPerChart={plan.maxNodesPerChart}
         currentTier={currentTier}
+        onExport={handleExport}
       />
 
       {/* 80% node limit warning banner */}
       {!readOnly && currentTier === 'free' && nodes.length >= Math.floor(plan.maxNodesPerChart * 0.8) && nodes.length < plan.maxNodesPerChart && (
-        <div style={{
+        <div data-export-ignore style={{
           position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)',
           background: 'var(--warn-bg)', border: '1px solid var(--warn)',
           borderRadius: 8, padding: '7px 16px', zIndex: 19,
@@ -666,7 +764,7 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
 
       {/* Connect mode banner */}
       {connectingFrom && (
-        <div style={{
+        <div data-export-ignore style={{
           position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
           background: 'var(--purple)', borderRadius: 20, padding: '6px 16px',
           fontSize: 12, fontWeight: 600, color: '#fff', zIndex: 20,
@@ -678,7 +776,7 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
 
       {/* Selected edge hint */}
       {selectedEdgeId && !connectingFrom && (
-        <div style={{
+        <div data-export-ignore style={{
           position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 20, padding: '6px 16px', fontSize: 12, color: 'var(--muted)', zIndex: 20,
@@ -689,40 +787,46 @@ export function OrgChart({ chartId = '', initialNodes = [], initialEdges = [], d
       )}
 
       {/* JD panel */}
-      <JDPanel
-        node={selectedNode}
-        allNodes={nodes}
-        onClose={() => setSelectedId(null)}
-        onEditNode={node => setEditingNodeId(node.id)}
-      />
+      <div data-export-ignore>
+        <JDPanel
+          node={selectedNode}
+          allNodes={nodes}
+          onClose={() => setSelectedId(null)}
+          onEditNode={node => setEditingNodeId(node.id)}
+        />
+      </div>
 
       {/* Add node modal */}
-      <NodeModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        mode="add"
-        departments={departments}
-        allNodes={nodes}
-        allEdges={edges}
-        onAdd={handleAddSubmit}
-        onUpdate={() => {}}
-        onDelete={() => {}}
-      />
-
-      {/* Edit node modal */}
-      {editingNode && (
+      <div data-export-ignore>
         <NodeModal
-          isOpen={!!editingNodeId}
-          onClose={() => setEditingNodeId(null)}
-          mode="edit"
-          node={editingNode}
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          mode="add"
           departments={departments}
           allNodes={nodes}
           allEdges={edges}
-          onAdd={() => {}}
-          onUpdate={handleUpdateSubmit}
-          onDelete={handleDeleteNode}
+          onAdd={handleAddSubmit}
+          onUpdate={() => {}}
+          onDelete={() => {}}
         />
+      </div>
+
+      {/* Edit node modal */}
+      {editingNode && (
+        <div data-export-ignore>
+          <NodeModal
+            isOpen={!!editingNodeId}
+            onClose={() => setEditingNodeId(null)}
+            mode="edit"
+            node={editingNode}
+            departments={departments}
+            allNodes={nodes}
+            allEdges={edges}
+            onAdd={() => {}}
+            onUpdate={handleUpdateSubmit}
+            onDelete={handleDeleteNode}
+          />
+        </div>
       )}
     </div>
   )

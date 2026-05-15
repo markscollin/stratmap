@@ -312,6 +312,7 @@ export function NodeModal({
     >
       <div
         onClick={e => e.stopPropagation()}
+        onWheel={e => e.stopPropagation()}
         style={{
           background: 'var(--surface)', borderRadius: 20,
           border: '1px solid var(--border-hover)',
