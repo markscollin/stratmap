@@ -5,6 +5,13 @@ import App from './App.tsx'
 import { useUserStore } from './store/userStore'
 import { useBillingStore, FREE_PLAN, STARTER_PLAN, GROWTH_PLAN } from './store/billingStore'
 
+// Restore path after 404.html SPA redirect (production direct-URL navigation)
+const spaRedirect = sessionStorage.getItem('spa-redirect')
+if (spaRedirect) {
+  sessionStorage.removeItem('spa-redirect')
+  window.history.replaceState(null, '', spaRedirect)
+}
+
 if (import.meta.env.DEV) {
   (window as any).__devTools = {
     setPermission: (p: string) => useUserStore.setState({ permission: p as any }),

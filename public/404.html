@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>StratMap</title>
+    <script>
+      // Vercel serves this for unknown paths. Save the intended path and redirect
+      // to the root — the SPA will pick it up from sessionStorage and navigate there.
+      var path = window.location.pathname + window.location.search + window.location.hash;
+      if (path !== '/') {
+        sessionStorage.setItem('spa-redirect', path);
+      }
+      window.location.replace('/');
+    </script>
+  </head>
+  <body></body>
+</html>

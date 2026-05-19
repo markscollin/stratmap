@@ -9,7 +9,7 @@ interface UserStore {
 
   setUser: (user: User | null, permission?: Permission) => void
   setPermission: (permission: Permission) => void
-  setWorkspace: (workspace: Workspace) => void
+  setWorkspace: (workspace: Workspace | null) => void
   signOut: () => void
   addPendingInvite: (invite: PendingInvite) => void
   removePendingInvite: (email: string) => void
@@ -39,18 +39,22 @@ export const useUserStore = create<UserStore>((set) => ({
   setPermission: (permission) => set({ permission }),
 
   setWorkspace: (workspace) => {
-    // Persist to localStorage
-    if (workspace) {
-      try {
+    try {
+      if (workspace) {
         localStorage.setItem('stratmap_workspace', JSON.stringify(workspace))
-      } catch {
-        // localStorage full or unavailable, continue anyway
+      } else {
+        localStorage.removeItem('stratmap_workspace')
       }
+    } catch {
+      // localStorage full or unavailable, continue anyway
     }
     set({ workspace })
   },
 
-  signOut: () => set({ user: null, isAuthenticated: false, permission: 'viewer', workspace: null }),
+  signOut: () => {
+    try { localStorage.removeItem('stratmap_workspace') } catch { /* ignore */ }
+    set({ user: null, isAuthenticated: false, permission: 'viewer', workspace: null })
+  },
 
   addPendingInvite: (invite) =>
     set((state) => {

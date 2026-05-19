@@ -5,6 +5,7 @@ import { useUserStore } from '../store/userStore'
 import { useToastStore } from '../store/toastStore'
 import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
+import { api } from '../lib/apiClient'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
 import { mockDepartments } from '../data/mockOrg'
 
@@ -72,11 +73,32 @@ export function OnboardingPage() {
     })
   }
 
-  function complete(sendInvites: boolean) {
-    buildWorkspace(sendInvites)
-    const firstName = user?.name.split(' ')[0] ?? 'there'
-    addToast(`Welcome to StratMap, ${firstName}!`, 'success')
-    navigate('/charts')
+  async function complete(sendInvites: boolean) {
+    const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
+    try {
+      const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string }>(
+        '/api/workspace',
+        { name: workspaceName.trim(), ownerRole, size, email: user?.email ?? '', userName: user?.name ?? '' }
+      )
+      const now = new Date().toISOString()
+      setWorkspace({
+        id: ws.id,
+        name: ws.name,
+        ownerRole: ws.ownerRole as WorkspaceRole,
+        size: ws.size as CompanySize,
+        members: user
+          ? [{ user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl }, permission: 'owner', joinedAt: now }]
+          : [],
+        pendingInvites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
+        createdAt: ws.createdAt ?? now,
+      })
+      const firstName = user?.name.split(' ')[0] ?? 'there'
+      addToast(`Welcome to StratMap, ${firstName}!`, 'success')
+      navigate('/charts')
+    } catch (err) {
+      console.error('[onboarding] workspace creation failed:', err)
+      addToast('Failed to create workspace. Please try again.', 'error')
+    }
   }
 
   function completeWithQuickStart(sendInvites: boolean) {

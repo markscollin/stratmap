@@ -124,7 +124,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
         onClick={() => navigate(`/charts/${chart.id}`)}
         style={{ height: 108, background: 'var(--bg)', position: 'relative', borderBottom: '1px solid var(--border)', padding: 10, overflow: 'hidden' }}
       >
-        <div style={{ position: 'absolute', inset: 14 }}><MiniChartThumb id={parseInt(chart.id)} /></div>
+        <div style={{ position: 'absolute', inset: 14 }}><MiniChartThumb id={chart.id} /></div>
         {chart.status === 'live' && (
           <div style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: '50%', background: '#10B981', animation: 'livePulse 2s ease-in-out infinite' }} />
         )}
@@ -401,7 +401,7 @@ function makeTemplateData(template: string): { nodes: OrgNode[]; edges: OrgEdge[
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChartView() {
-  const { charts, updateChartStatus, addChart } = useChartStore()
+  const { charts, loading, loaded, fetchCharts, createChart, updateChartStatus } = useChartStore()
   const navigate = useNavigate()
   const { canEdit, canAdmin } = usePermission()
   const { isAtChartLimit, currentTier } = usePlanLimits()
@@ -411,6 +411,7 @@ export function ChartView() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   useEffect(() => { document.title = 'StratMap — Org Charts' }, [])
+  useEffect(() => { if (!loaded) fetchCharts() }, [loaded, fetchCharts])
   const [focusSearch, setFocusSearch] = useState(false)
 
   const filtered = charts
@@ -422,26 +423,13 @@ export function ChartView() {
     return acc
   }, {})
 
-  const handleCreate = (name: string, template: string) => {
+  const handleCreate = async (name: string, template: string) => {
     const { nodes, edges } = makeTemplateData(template)
-    const id = Date.now().toString()
-    const newChart: OrgChart = {
-      id,
-      name,
-      status: 'draft',
-      version: 1,
-      departments: mockDepartments,
-      nodes,
-      edges,
-      owner: 'Jamie D',
-      creator: 'Jamie D',
-      collaborators: ['JD'],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    const chart = await createChart(name, nodes, edges, mockDepartments)
+    if (chart) {
+      setShowModal(false)
+      navigate(`/charts/${chart.id}`)
     }
-    addChart(newChart)
-    setShowModal(false)
-    navigate(`/charts/${id}`)
   }
 
   return (
@@ -461,7 +449,7 @@ export function ChartView() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 4 }}>Org Charts</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <p style={{ fontSize: 13, color: 'var(--muted)' }}>{charts.length} charts in your workspace</p>
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>{loading ? 'Loading…' : `${charts.length} charts in your workspace`}</p>
             {currentTier === 'free' && (
               <p style={{ fontSize: 12, color: 'var(--dim)', background: 'var(--raised)', padding: '4px 10px', borderRadius: 6 }}>
                 {charts.length} of 1 chart

@@ -14,7 +14,26 @@ vi.mock('react-router-dom', async () => {
 
 // Provide a signed-in user for useAuth
 vi.mock('../../features/auth/useAuth', () => ({
+  IS_DEV_BYPASS: false,
   useAuth: () => ({ user: { id: 'u-1', name: 'Dev User', email: 'dev@example.com', initials: 'DU' }, isSignedIn: true }),
+}))
+
+// Mock the API client so complete() doesn't make real HTTP calls
+vi.mock('../../lib/apiClient', () => ({
+  api: {
+    post: vi.fn().mockImplementation((_url: string, body: Record<string, unknown>) =>
+      Promise.resolve({
+        id: 'ws-test-123',
+        name: body?.name ?? 'Test Workspace',
+        ownerRole: body?.ownerRole ?? 'Founder/CEO',
+        size: body?.size ?? '11-50',
+        createdAt: new Date().toISOString(),
+      })
+    ),
+    get: vi.fn().mockResolvedValue({}),
+    put: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
+  },
 }))
 
 function renderPage() {

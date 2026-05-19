@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
 import { IS_DEV_BYPASS } from './useAuth'
+import { api } from '../../lib/apiClient'
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 
@@ -21,7 +22,7 @@ function DevBypassProvider({ children }: { children: ReactNode }) {
 // ── Clerk sync: hydrates userStore from Clerk's useUser ────────────────────
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
-  const { setUser, signOut: storeSignOut, workspace } = useUserStore()
+  const { setUser, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
@@ -51,6 +52,27 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
         },
         'owner'
       )
+      // Load workspace from API (replaces localStorage-only approach)
+      api.get<{ id: string; name: string; ownerRole: string; size: string }>('/api/workspace')
+        .then(ws => {
+          setWorkspace({
+            id: ws.id,
+            name: ws.name,
+            ownerRole: ws.ownerRole as import('../../types').WorkspaceRole,
+            size: ws.size as import('../../types').CompanySize,
+            members: [],
+            pendingInvites: [],
+            createdAt: new Date().toISOString(),
+          })
+        })
+        .catch((err: Error) => {
+          if (err.message === 'no-workspace') {
+            // User authenticated but no workspace in DB → clear stale cache and go to onboarding
+            setWorkspace(null)
+          } else {
+            console.error('[auth] workspace fetch failed:', err)
+          }
+        })
     }
   }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate])
 

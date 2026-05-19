@@ -13,6 +13,7 @@ import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
 import { useToastStore } from '../../store/toastStore'
 import { calculateLayout } from '../../utils/layout'
+import { api } from '../../lib/apiClient'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -432,7 +433,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       if (!readOnly) {
         if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
         if (mod &&  e.shiftKey && e.key === 'z') { e.preventDefault(); redo() }
-        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) removeEdge(selectedEdgeId)
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) {
+          removeEdge(selectedEdgeId)
+          if (chartId) {
+            api.delete(`/api/charts/${chartId}/edges/${selectedEdgeId}`)
+              .catch(err => console.error('[canvas] removeEdge failed:', err))
+          }
+        }
         if (e.key === 'c' && !mod) setActiveTool('connect')
       }
       if (e.key === 'Escape') { setConnectingFrom(null); setSelectedId(null) }
@@ -517,9 +524,17 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   const handlePointerUp = useCallback(() => {
     const ia = interactionRef.current
-    if (ia.mode === 'dragging' && ia.hasMoved) commitDrag(nodesRef.current)
+    if (ia.mode === 'dragging' && ia.hasMoved) {
+      commitDrag(nodesRef.current)
+      if (chartId) {
+        const positions = nodesRef.current.map(n => ({ id: n.id, x: n.x, y: n.y }))
+        api.put(`/api/charts/${chartId}/nodes`, positions).catch(err =>
+          console.error('[canvas] position sync failed:', err)
+        )
+      }
+    }
     interactionRef.current = { mode: 'idle', nodeId: null, lastX: 0, lastY: 0, hasMoved: false, startX: 0, startY: 0 }
-  }, [commitDrag])
+  }, [commitDrag, chartId])
 
   const handleNodeClick = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (interactionRef.current.hasMoved) return
@@ -530,6 +545,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         setConnectingFrom(nodeId)
       } else if (connectingFrom !== nodeId) {
         addEdge(connectingFrom, nodeId)
+        if (chartId) {
+          api.post(`/api/charts/${chartId}/edges`, { sourceId: connectingFrom, targetId: nodeId })
+            .catch(err => console.error('[canvas] addEdge failed:', err))
+        }
         setConnectingFrom(null)
         setActiveTool('select')
       }
@@ -566,25 +585,50 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     const pos = addNodePosRef.current
     const newId = addNode({ ...data, x: pos.x, y: pos.y })
     if (reportsToId && newId) addEdge(reportsToId, newId)
+    if (chartId && newId) {
+      api.post(`/api/charts/${chartId}/nodes`, { ...data, id: newId, x: pos.x, y: pos.y })
+        .catch(err => console.error('[canvas] addNode failed:', err))
+      if (reportsToId) {
+        api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: newId })
+          .catch(err => console.error('[canvas] addEdge (reports-to) failed:', err))
+      }
+    }
     setIsAddModalOpen(false)
-  }, [addNode, addEdge])
+  }, [addNode, addEdge, chartId])
 
   const handleUpdateSubmit = useCallback((nodeId: string, updates: Partial<import('../../types').OrgNode>, reportsToId: string) => {
     updateNode(nodeId, updates)
-    // Remove old manager edge, add new one if changed
     const oldEdge = edges.find(e => e.targetId === nodeId)
     const oldManagerId = oldEdge?.sourceId ?? ''
     if (oldManagerId !== reportsToId) {
       if (oldEdge) removeEdge(oldEdge.id)
       if (reportsToId) addEdge(reportsToId, nodeId)
     }
+    if (chartId) {
+      api.put(`/api/charts/${chartId}/nodes/${nodeId}`, updates)
+        .catch(err => console.error('[canvas] updateNode failed:', err))
+      if (oldManagerId !== reportsToId) {
+        if (oldEdge) {
+          api.delete(`/api/charts/${chartId}/edges/${oldEdge.id}`)
+            .catch(err => console.error('[canvas] removeEdge (update) failed:', err))
+        }
+        if (reportsToId) {
+          api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: nodeId })
+            .catch(err => console.error('[canvas] addEdge (update) failed:', err))
+        }
+      }
+    }
     setEditingNodeId(null)
-  }, [updateNode, deleteNode, edges, removeEdge, addEdge]) // eslint-disable-line
+  }, [updateNode, deleteNode, edges, removeEdge, addEdge, chartId]) // eslint-disable-line
 
   const handleDeleteNode = useCallback((nodeId: string) => {
     deleteNode(nodeId)
     setEditingNodeId(null)
-  }, [deleteNode])
+    if (chartId) {
+      api.delete(`/api/charts/${chartId}/nodes/${nodeId}`)
+        .catch(err => console.error('[canvas] deleteNode failed:', err))
+    }
+  }, [deleteNode, chartId])
 
   const handleAutoLayout = useCallback(() => {
     if (upgradeRequired('auto-layout')) {
@@ -593,9 +637,16 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     }
     const positions = calculateLayout(nodesRef.current, edges)
     applyLayout(positions)
-    // Fit after React re-renders with new positions
     setTimeout(fitToView, 50)
     addToast('Layout applied', 'success')
+    if (chartId) {
+      const posArr = nodesRef.current.map(n => {
+        const p = positions.get(n.id)
+        return { id: n.id, x: p?.x ?? n.x, y: p?.y ?? n.y }
+      })
+      api.put(`/api/charts/${chartId}/nodes`, posArr)
+        .catch(err => console.error('[canvas] layout sync failed:', err))
+    }
   }, [upgradeRequired, edges, applyLayout, fitToView, addToast])
 
   const [isExporting,    setIsExporting]    = useState(false)

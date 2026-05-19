@@ -99,6 +99,15 @@ src/
 - Full approval workflow: draft → in-review → approved → published → hired
 - Status badge + version display (v1, v2…) in JD panel
 
+### Sprint 8: PNG/PDF Export + Bug Fixes ✅ (2026-05-15)
+- **Export**: Download icon in canvas toolbar → dropdown (Export as PNG / Export as PDF)
+  - `src/utils/export.ts`: `html-to-image` (SVG foreignObject) + `jsPDF`
+  - Before capture: `scale=1` + `overflow:visible` set via React state (not DOM mutation) — avoids ResizeObserver → fitToView override
+  - UI chrome excluded via `data-export-ignore` on toolbar, minimap, zoom controls, panels, modals
+  - `chartName` prop on OrgChart used as filename slug
+- **Q3 Hiring Plan**: populated 31 nodes/30 edges in mock data (was `nodes:[]`, causing blank canvas)
+- **NodeModal scroll**: `onWheel={e.stopPropagation()}` on scroll container — canvas non-passive wheel listener was intercepting modal scroll
+
 ### Sprint 6: AI JD Drafting + Template Library ✅ Code Complete, ⚠️ Not E2E Tested
 - AIJDDraft: Anthropic streaming (claude-sonnet-4-6), tone selector, ghostPulse animation, cancel support
 - Dev session limit: 10 AI drafts/session via `sessionStorage` (prevents token burn)
@@ -141,13 +150,13 @@ src/
 
 ## What's Not Done (Next Priorities)
 
-1. **Sprint 6 end-to-end verification** — verify Anthropic billing, add API key, test AI drafting
-2. **Git commits** — Sprint 6 + Sprint 7 uncommitted pending user verification
-3. **Share Link + PNG Export** — viral growth: public read-only view, copy link, export image
-4. **Backend/persistence** — data resets on page reload; no DB yet (mock data only)
-5. **Stripe webhooks** — handle payment completion + automatic plan upgrade
-6. **Approval email notifications** — wire status transitions to email
-7. **Filter tool** — canvas filter button exists but is a no-op
+1. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `VITE_ANTHROPIC_API_KEY` to `.env.local`, test AI drafting
+2. **Share Link** — URL-encoded chart state (base64/compressed); no backend needed
+3. **Backend/persistence** — data resets on page reload; no DB yet (mock data only)
+4. **Stripe webhooks** — handle payment completion + automatic plan upgrade
+5. **Approval email notifications** — wire status transitions to email
+6. **Filter tool** — canvas filter button exists but is a no-op
+7. **Populate remaining mock charts** — Post-Series B, Board Overview, Eng Reorg, 2024 Structure all have `nodes:[]`
 8. **Salary band** — locked placeholder, needs backend compensation data
 9. **Headcount forecasting** — planned for HeadcountView
 

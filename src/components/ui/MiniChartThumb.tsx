@@ -15,8 +15,11 @@ const CONFIGS = [
 
 const COLOURS = ['#0EA5E9','#10B981','#8B5CF6','#F59E0B','#EF4444']
 
-export function MiniChartThumb({ id }: { id: number }) {
-  const cfg = CONFIGS[(id - 1) % CONFIGS.length]
+export function MiniChartThumb({ id }: { id: string | number }) {
+  const hash = typeof id === 'string'
+    ? id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+    : id
+  const cfg = CONFIGS[((hash % CONFIGS.length) + CONFIGS.length) % CONFIGS.length]
   return (
     <svg viewBox="0 0 96 84" style={{ width: '100%', height: '100%', display: 'block' }}>
       {cfg.lines.map(([x1,y1,x2,y2], i) => (
