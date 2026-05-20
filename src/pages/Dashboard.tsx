@@ -5,7 +5,7 @@ import { useChartStore } from '../store'
 import { useHeadcountStore } from '../store/headcountStore'
 import { STATUS_META } from '../constants/statusMeta'
 import { api } from '../lib/apiClient'
-import type { ChartStatus, OrgChart } from '../types'
+import type { ChartStatus } from '../types'
 
 interface DeptStat {
   id: string
@@ -15,10 +15,18 @@ interface DeptStat {
   open: number
 }
 
+interface RoleTypeBreakdown {
+  'new-headcount': number
+  backfill: number
+  contractor: number
+  tbd: number
+}
+
 interface WorkspaceStats {
   totalHeadcount: number
   totalOpen: number
   deptBreakdown: DeptStat[]
+  roleTypeBreakdown: RoleTypeBreakdown
 }
 
 export function Dashboard() {
@@ -180,7 +188,7 @@ export function Dashboard() {
               ))}
             </div>
 
-            <RoleTypeBreakdown charts={charts} />
+            {stats?.roleTypeBreakdown && <RoleTypeBreakdown breakdown={stats.roleTypeBreakdown} />}
           </div>
 
           {/* Chart status summary */}
@@ -247,15 +255,8 @@ function QuickActions({
   )
 }
 
-function RoleTypeBreakdown({ charts }: { charts: OrgChart[] }) {
-  const allNodes = charts.flatMap(c => c.nodes)
-  const counts = {
-    'new-headcount': allNodes.filter(n => n.roleType === 'new-headcount').length,
-    'backfill':      allNodes.filter(n => n.roleType === 'backfill').length,
-    'contractor':    allNodes.filter(n => n.roleType === 'contractor').length,
-    'tbd':           allNodes.filter(n => n.roleType === 'tbd').length,
-  }
-  const nonZero = Object.entries(counts).filter(([, v]) => v > 0)
+function RoleTypeBreakdown({ breakdown }: { breakdown: RoleTypeBreakdown }) {
+  const nonZero = Object.entries(breakdown).filter(([, v]) => v > 0)
   if (nonZero.length === 0) return null
 
   const badges: Record<string, { label: string; color: string; bg: string }> = {
@@ -270,7 +271,7 @@ function RoleTypeBreakdown({ charts }: { charts: OrgChart[] }) {
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>By role type</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {nonZero.map(([type, count]) => {
-          const b = badges[type]
+          const b = badges[type as keyof typeof badges]
           return (
             <span key={type} style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,

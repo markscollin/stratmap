@@ -96,6 +96,7 @@ export function CanvasView() {
         initialEdges={fullChart.edges}
         departments={depts}
         readOnly={!canEdit}
+        isPublic={chartMeta?.isPublic ?? false}
       />
     </div>
   )

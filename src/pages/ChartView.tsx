@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
-  Clock, ExternalLink, Copy, GitBranch, Trash2,
+  Clock, ExternalLink, Copy, GitBranch, Trash2, Globe,
 } from 'lucide-react'
 import { useChartStore } from '../store'
 import { CHART_DISPLAY } from '../data/mockOrg'
@@ -177,6 +177,15 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
           <StatusBadge status={chart.status} />
           <VersionPill version={chart.version} />
+          {chart.isPublic && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+              background: 'var(--brand-bg)', color: 'var(--brand)',
+            }}>
+              <Globe size={9} /> Public
+            </span>
+          )}
         </div>
 
         {/* Meta grid */}

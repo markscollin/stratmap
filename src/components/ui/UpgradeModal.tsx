@@ -37,6 +37,7 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, requiredTier
 
   return (
     <div
+      data-canvas-overlay
       style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}
     >

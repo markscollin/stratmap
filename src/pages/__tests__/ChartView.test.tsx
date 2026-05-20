@@ -20,6 +20,7 @@ const REVIEW_CHART = {
   name: 'Q3 Plan',
   status: 'review' as const,
   version: 1,
+  isPublic: false,
   departments: [],
   nodes: [],
   edges: [],

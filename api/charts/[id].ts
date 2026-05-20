@@ -36,13 +36,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PUT') {
-      const { name, status } = req.body as { name?: string; status?: string }
+      const { name, status, isPublic } = req.body as { name?: string; status?: string; isPublic?: boolean }
 
       const [updated] = await db
         .update(charts)
         .set({
           ...(name !== undefined && { name }),
           ...(status !== undefined && { status: status as typeof charts.$inferInsert['status'] }),
+          ...(isPublic !== undefined && { isPublic }),
           updatedAt: new Date(),
         })
         .where(eq(charts.id, chartId))

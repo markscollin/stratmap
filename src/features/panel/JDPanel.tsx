@@ -166,7 +166,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }} onWheel={e => e.stopPropagation()}>
-            {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} />}
+            {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} jd={jd} canAdmin={canAdmin} onUpdateJD={updateJD} />}
 
             {(tab === 'responsibilities' || tab === 'requirements') && jd && (
               <>
@@ -454,10 +454,15 @@ const ROLE_TYPE_LABEL: Record<string, string> = {
   'tbd':           'TBD',
 }
 
-function OverviewTab({ node, dept, allNodes }: {
+const CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'SGD', 'AED']
+
+function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
   node: OrgNode
   dept: { name: string; colour: string } | null | undefined
   allNodes: OrgNode[]
+  jd: JobDescription | undefined
+  canAdmin: boolean
+  onUpdateJD: (nodeId: string, updates: Partial<Pick<JobDescription, 'salaryBandMin' | 'salaryBandMax' | 'salaryCurrency'>>) => void
 }) {
   const manager = node.managerId ? allNodes.find(n => n.id === node.managerId) : null
   const fields = [
@@ -467,6 +472,14 @@ function OverviewTab({ node, dept, allNodes }: {
     { label: 'Department',      value: dept?.name ?? node.departmentId },
     { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'No manager (root)' },
   ]
+
+  const inputStyle: React.CSSProperties = {
+    flex: 1, fontSize: 13, padding: '6px 8px',
+    background: 'var(--bg)', border: '1px solid var(--border)',
+    borderRadius: 6, color: 'var(--text)', outline: 'none',
+    width: '100%',
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -477,9 +490,52 @@ function OverviewTab({ node, dept, allNodes }: {
           </div>
         ))}
       </div>
+
       <div style={{ marginTop: 20, padding: '14px', background: 'var(--raised)', borderRadius: 10, border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>Salary band</div>
-        <div style={{ fontSize: 13, color: 'var(--muted)' }}>Admin access required to view compensation data.</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Salary band</div>
+        {canAdmin ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Min</div>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={jd?.salaryBandMin ?? ''}
+                  onChange={e => onUpdateJD(node.id, { salaryBandMin: e.target.value ? Number(e.target.value) : undefined })}
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Max</div>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={jd?.salaryBandMax ?? ''}
+                  onChange={e => onUpdateJD(node.id, { salaryBandMax: e.target.value ? Number(e.target.value) : undefined })}
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ width: 80 }}>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Currency</div>
+                <select
+                  value={jd?.salaryCurrency ?? 'USD'}
+                  onChange={e => onUpdateJD(node.id, { salaryCurrency: e.target.value })}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                >
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+            {jd?.salaryBandMin && jd?.salaryBandMax && (
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {jd.salaryCurrency ?? 'USD'} {jd.salaryBandMin.toLocaleString()} – {jd.salaryBandMax.toLocaleString()}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>Admin access required to view compensation data.</div>
+        )}
       </div>
     </div>
   )

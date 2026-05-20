@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { User, Briefcase, Clock, RefreshCw } from 'lucide-react'
 import type { OrgNode, RoleType } from '../../types'
-import { mockDepartments } from '../../data/mockOrg'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 
 function initials(name: string): string {
@@ -56,6 +55,8 @@ export function NodeCard({
   selected,
   connecting,
   isConnectTarget,
+  dimmed,
+  departments = [],
   onPointerDown,
   onClick,
   onDoubleClick,
@@ -64,13 +65,15 @@ export function NodeCard({
   selected: boolean
   connecting: boolean
   isConnectTarget: boolean
+  dimmed?: boolean
+  departments?: Array<{ id: string; colour: string }>
   onPointerDown: (e: React.PointerEvent) => void
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: (e: React.MouseEvent) => void
 }) {
   const [hov, setHov] = useState(false)
 
-  const dept          = mockDepartments.find(d => d.id === node.departmentId)
+  const dept          = departments.find(d => d.id === node.departmentId)
   const deptColour    = dept?.colour ?? '#94A3B8'
   const isUnfilled    = node.status === 'open' || node.status === 'planned'
   const label         = isUnfilled ? node.title : node.name
@@ -104,8 +107,9 @@ export function NodeCard({
         boxShadow: shadow,
         display: 'flex', overflow: 'hidden',
         cursor: 'grab',
-        transition: 'border-color .12s, box-shadow .12s, transform .12s',
+        transition: 'border-color .12s, box-shadow .12s, transform .12s, opacity .2s',
         transform: hov && !selected ? 'translateY(-1px)' : 'none',
+        opacity: dimmed ? 0.25 : 1,
         userSelect: 'none', touchAction: 'none',
       }}
       onPointerDown={onPointerDown}

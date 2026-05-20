@@ -10,6 +10,7 @@ const mockChart: OrgChart = {
   name: 'Test Chart',
   status: 'draft',
   version: 1,
+  isPublic: false,
   departments: [],
   nodes: Array(25)
     .fill(null)

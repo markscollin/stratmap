@@ -38,6 +38,7 @@ export interface OrgChart {
   name: string
   status: ChartStatus
   version: number
+  isPublic: boolean
   departments: Department[]
   nodes: OrgNode[]
   edges: OrgEdge[]

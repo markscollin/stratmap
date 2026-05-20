@@ -12,6 +12,7 @@ interface ChartStore {
   deleteChart: (id: string) => Promise<void>
   setActiveChart: (id: string | null) => void
   updateChartStatus: (id: string, status: ChartStatus) => void
+  updateChartPublic: (id: string, isPublic: boolean) => Promise<void>
   duplicateChart: (id: string) => Promise<void>
 
   // kept for backwards compat (canvas uses this to merge fetched data)
@@ -33,6 +34,7 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         name: String(c.name),
         status: c.status as ChartStatus,
         version: Number(c.version ?? 1),
+        isPublic: Boolean(c.isPublic ?? false),
         departments: [],
         nodes: [],
         edges: [],
@@ -63,6 +65,7 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         name: String(raw.name),
         status: raw.status as ChartStatus,
         version: Number(raw.version ?? 1),
+        isPublic: Boolean(raw.isPublic ?? false),
         departments,
         nodes,
         edges,
@@ -100,6 +103,15 @@ export const useChartStore = create<ChartStore>((set, get) => ({
     api.put(`/api/charts/${id}`, { status }).catch(err =>
       console.error('[chartStore] updateChartStatus failed:', err)
     )
+  },
+
+  async updateChartPublic(id, isPublic) {
+    set(s => ({
+      charts: s.charts.map(c =>
+        c.id === id ? { ...c, isPublic, updatedAt: new Date().toISOString() } : c
+      ),
+    }))
+    await api.put(`/api/charts/${id}`, { isPublic })
   },
 
   async duplicateChart(id) {

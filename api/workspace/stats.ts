@@ -20,13 +20,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let totalHeadcount = 0
     let totalOpen = 0
-    let nodeList: { status: string; departmentId: string | null }[] = []
+    let nodeList: { status: string; departmentId: string | null; roleType: string | null }[] = []
     let chartDeptList: { id: string; workspaceDepartmentId: string | null }[] = []
 
     if (liveChartIds.length > 0) {
       const [ns, ds] = await Promise.all([
         db
-          .select({ status: nodes.status, departmentId: nodes.departmentId })
+          .select({ status: nodes.status, departmentId: nodes.departmentId, roleType: nodes.roleType })
           .from(nodes)
           .where(inArray(nodes.chartId, liveChartIds)),
         db
@@ -70,7 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       open: deptCounts[d.id]?.open ?? 0,
     }))
 
-    return res.json({ totalHeadcount, totalOpen, deptBreakdown })
+    const roleTypeBreakdown = {
+      'new-headcount': nodeList.filter(n => n.roleType === 'new-headcount').length,
+      backfill:        nodeList.filter(n => n.roleType === 'backfill').length,
+      contractor:      nodeList.filter(n => n.roleType === 'contractor').length,
+      tbd:             nodeList.filter(n => n.roleType === 'tbd').length,
+    }
+
+    return res.json({ totalHeadcount, totalOpen, deptBreakdown, roleTypeBreakdown })
   } catch (err) {
     console.error('/api/workspace/stats', err)
     return res.status(500).json({ error: 'Internal server error' })

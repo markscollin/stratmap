@@ -11,6 +11,8 @@ export const TEST_CHART_ID = 'chart-test'
 export const TEST_NODE_ID = 'node-test'
 export const TEST_EDGE_ID = 'edge-test'
 export const TEST_JD_ID = 'jd-test'
+export const TEST_DEPT_ID = 'dept-test'
+export const TEST_PLAN_ID = 'plan-test'
 
 const SCHEMA_SQL = `
 DO $$ BEGIN CREATE TYPE chart_status AS ENUM('draft','editing','review','rejected','approved','live','archived'); EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -20,6 +22,7 @@ DO $$ BEGIN CREATE TYPE permission AS ENUM('owner','admin','editor','commenter',
 DO $$ BEGIN CREATE TYPE plan_tier AS ENUM('free','starter','growth','enterprise'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE role_status AS ENUM('draft','in-review','approved','published','hired'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE role_type AS ENUM('existing','new-headcount','backfill','contractor','tbd'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE headcount_status AS ENUM('planned','approved','filled'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id text PRIMARY KEY,
@@ -57,17 +60,26 @@ CREATE TABLE IF NOT EXISTS charts (
   name text NOT NULL,
   status chart_status NOT NULL DEFAULT 'draft',
   version integer NOT NULL DEFAULT 1,
+  is_public boolean NOT NULL DEFAULT false,
   owner_id text NOT NULL,
   creator_id text NOT NULL,
   created_at timestamp NOT NULL DEFAULT now(),
   updated_at timestamp NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS workspace_departments (
+  id text PRIMARY KEY,
+  workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  colour text NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS departments (
   id text PRIMARY KEY,
   chart_id text NOT NULL REFERENCES charts(id) ON DELETE CASCADE,
   name text NOT NULL,
-  colour text NOT NULL
+  colour text NOT NULL,
+  workspace_department_id text REFERENCES workspace_departments(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS nodes (
@@ -124,6 +136,29 @@ CREATE TABLE IF NOT EXISTS role_templates (
   updated_at timestamp NOT NULL DEFAULT now(),
   uses integer NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS headcount_plans (
+  id text PRIMARY KEY,
+  workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  department_id text REFERENCES workspace_departments(id) ON DELETE SET NULL,
+  role_type role_type NOT NULL DEFAULT 'new-headcount',
+  target_quarter text NOT NULL,
+  chart_id text REFERENCES charts(id) ON DELETE SET NULL,
+  status headcount_status NOT NULL DEFAULT 'planned',
+  notes text,
+  created_by text NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS shared_links (
+  id text PRIMARY KEY,
+  chart_id text NOT NULL REFERENCES charts(id) ON DELETE CASCADE,
+  created_by text NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  expires_at timestamp
+);
 `
 
 let schemaReady = false
@@ -135,11 +170,14 @@ export async function setupSchema() {
 }
 
 export async function cleanDb() {
+  await testDb.delete(schema.sharedLinks)
+  await testDb.delete(schema.headcountPlans)
   await testDb.delete(schema.jobDescriptions)
   await testDb.delete(schema.edges)
   await testDb.delete(schema.nodes)
   await testDb.delete(schema.departments)
   await testDb.delete(schema.roleTemplates)
+  await testDb.delete(schema.workspaceDepartments)
   await testDb.delete(schema.charts)
   await testDb.delete(schema.pendingInvites)
   await testDb.delete(schema.workspaceMembers)
@@ -183,6 +221,26 @@ export async function seedNode() {
     title: 'CTO',
     x: 100,
     y: 100,
+  })
+}
+
+export async function seedWorkspaceDept() {
+  await testDb.insert(schema.workspaceDepartments).values({
+    id: TEST_DEPT_ID,
+    workspaceId: TEST_WS_ID,
+    name: 'Engineering',
+    colour: '#0EA5E9',
+  })
+}
+
+export async function seedHeadcountPlan() {
+  await testDb.insert(schema.headcountPlans).values({
+    id: TEST_PLAN_ID,
+    workspaceId: TEST_WS_ID,
+    title: 'Senior Engineer',
+    roleType: 'new-headcount',
+    targetQuarter: '2026-Q2',
+    createdBy: TEST_USER_ID,
   })
 }
 

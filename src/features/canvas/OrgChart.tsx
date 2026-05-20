@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download } from 'lucide-react'
+import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
-import type { OrgNode, OrgEdge, Department } from '../../types'
+import { useChartStore } from '../../store/chartStore'
+import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
 import { NODE_W, NODE_H } from '../../data/mockNodes'
 import { useCanvasState } from './useCanvasState'
 import { NodeCard } from '../nodes/NodeCard'
@@ -12,12 +13,22 @@ import { UpgradeModal } from '../../components/ui/UpgradeModal'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
 import { useToastStore } from '../../store/toastStore'
+import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
+import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type Transform = { x: number; y: number; scale: number }
+
+type ActiveFilters = {
+  depts: Set<string>
+  roleTypes: Set<RoleType>
+  statuses: Set<NodeStatus>
+}
+
+const EMPTY_FILTERS: ActiveFilters = { depts: new Set(), roleTypes: new Set(), statuses: new Set() }
 
 function toScreen(cx: number, cy: number, t: Transform) {
   return { x: cx * t.scale + t.x, y: cy * t.scale + t.y }
@@ -33,13 +44,14 @@ function hexToRgba(hex: string, alpha: number): string {
 // ─── Edge SVG ─────────────────────────────────────────────────────────────────
 
 function EdgePath({
-  source, target, transform, selected, hovered, deptColour,
+  source, target, transform, selected, hovered, deptColour, opacity,
   onClick, onMouseEnter, onMouseLeave, onDelete,
 }: {
   source: OrgNode; target: OrgNode
   transform: Transform
   selected: boolean; hovered: boolean
   deptColour: string
+  opacity?: number
   onClick: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
@@ -61,7 +73,7 @@ function EdgePath({
   const arrowPath = `M ${e.x} ${e.y} L ${e.x - 5} ${e.y - 9 * arrowDir} L ${e.x + 5} ${e.y - 9 * arrowDir} Z`
 
   return (
-    <g>
+    <g opacity={opacity ?? 1} style={{ transition: 'opacity .2s' }}>
       {/* Invisible wide hit area */}
       <path d={d} fill="none" stroke="transparent" strokeWidth={14}
         style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
@@ -217,12 +229,320 @@ function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) 
   )
 }
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport }: {
+function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [code, setCode] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const updateChartPublic = useChartStore(s => s.updateChartPublic)
+  const showUpgrade = useToastStore(s => s.addToast)
+
+  const isPlanGated = false // Starter+ gate — wire to billing store when ready
+
+  const shareUrl = code ? `${window.location.origin}/share/${code}` : null
+
+  const fetchOrCreateCode = async () => {
+    if (code) return code
+    try {
+      const res = await fetch(`/api/charts/${chartId}/share`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json() as { code: string }
+      setCode(data.code)
+      return data.code
+    } catch {
+      return null
+    }
+  }
+
+  const handleToggle = async () => {
+    if (isPlanGated) {
+      showUpgrade('Link sharing is available on Starter and above. Upgrade to enable.', 'info')
+      return
+    }
+    setBusy(true)
+    try {
+      if (!isPublic) {
+        const c = await fetchOrCreateCode()
+        if (c) await updateChartPublic(chartId, true)
+      } else {
+        await fetch(`/api/charts/${chartId}/share`, { method: 'DELETE' })
+        setCode(null)
+        await updateChartPublic(chartId, false)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleOpen = async () => {
+    setOpen(o => !o)
+    if (!open && isPublic && !code) {
+      setBusy(true)
+      try { await fetchOrCreateCode() } finally { setBusy(false) }
+    }
+  }
+
+  const copy = async () => {
+    if (!shareUrl) return
+    await navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        title="Share settings"
+        onClick={handleOpen}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 30, height: 30, borderRadius: 6,
+          background: isPublic ? 'var(--brand-bg)' : 'transparent',
+          border: isPublic ? '1px solid var(--brand)' : '1px solid transparent',
+          color: isPublic ? 'var(--brand)' : 'var(--muted)',
+          cursor: 'pointer', transition: 'all .12s',
+        }}
+        onMouseEnter={e => { if (!isPublic) (e.currentTarget as HTMLButtonElement).style.background = 'var(--nav-hover)' }}
+        onMouseLeave={e => { if (!isPublic) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        <Share2 size={13} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div
+            data-canvas-overlay
+            style={{
+              position: 'absolute', top: 38, right: 0,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 12, padding: 16, zIndex: 50,
+              boxShadow: 'var(--shadow)', minWidth: 300,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>Share settings</p>
+                <p style={{ fontSize: 11, color: 'var(--muted)' }}>Control who can view this chart</p>
+              </div>
+              {isPlanGated && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: 'var(--purple-bg)', color: 'var(--purple)' }}>Starter+</span>
+              )}
+            </div>
+
+            {/* Toggle row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 12px', background: 'var(--raised)', borderRadius: 8, marginBottom: 12,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {isPublic
+                  ? <Globe size={14} color="var(--brand)" />
+                  : <Lock size={14} color="var(--muted)" />
+                }
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                    {isPublic ? 'Public link active' : 'Private'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {isPublic ? 'Anyone with the link can view' : 'Only workspace members'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleToggle}
+                disabled={busy}
+                style={{
+                  width: 38, height: 22, borderRadius: 11,
+                  background: isPublic ? 'var(--brand)' : 'var(--dim)',
+                  border: 'none', cursor: busy ? 'wait' : 'pointer',
+                  position: 'relative', transition: 'background .2s',
+                  opacity: busy ? 0.6 : 1,
+                }}
+              >
+                <div style={{
+                  position: 'absolute', top: 3, left: isPublic ? 19 : 3,
+                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                  transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)',
+                }} />
+              </button>
+            </div>
+
+            {/* Link display */}
+            {isPublic && (
+              <div>
+                {shareUrl ? (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      readOnly
+                      value={shareUrl}
+                      onClick={e => (e.target as HTMLInputElement).select()}
+                      style={{
+                        flex: 1, fontSize: 11, padding: '6px 8px',
+                        background: 'var(--raised)', border: '1px solid var(--border)',
+                        borderRadius: 6, color: 'var(--muted)', outline: 'none',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    />
+                    <button
+                      onClick={copy}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px',
+                        background: copied ? 'var(--success-bg)' : 'var(--brand)',
+                        border: 'none', borderRadius: 6,
+                        color: copied ? 'var(--success)' : '#fff',
+                        fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        transition: 'all .2s', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {copied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', padding: 8 }}>Generating link…</div>
+                )}
+                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+                  This is a live link — viewers always see the latest version.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Filter ───────────────────────────────────────────────────────────────────
+
+const STATUS_FILTER_OPTIONS: Array<{ value: NodeStatus; label: string; dot: string }> = [
+  { value: 'active',   label: 'Active',   dot: 'var(--success)' },
+  { value: 'open',     label: 'Open',     dot: 'var(--warn)'    },
+  { value: 'planned',  label: 'Planned',  dot: 'var(--purple)'  },
+  { value: 'backfill', label: 'Backfill', dot: 'var(--brand)'   },
+]
+
+const ROLE_TYPE_FILTER_OPTIONS: Array<{ value: RoleType; label: string; dot: string }> = [
+  { value: 'existing',      label: 'Existing',   dot: 'var(--muted)'   },
+  { value: 'new-headcount', label: 'New HC',     dot: 'var(--success)' },
+  { value: 'backfill',      label: 'Backfill',   dot: 'var(--warn)'    },
+  { value: 'contractor',    label: 'Contractor', dot: 'var(--purple)'  },
+  { value: 'tbd',           label: 'TBD',        dot: 'var(--dim)'     },
+]
+
+function FilterRow({ checked, onChange, dot, label }: {
+  checked: boolean; onChange: () => void; dot: string; label: string
+}) {
+  const [hov, setHov] = useState(false)
+  return (
+    <label
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '3px 6px', borderRadius: 5, cursor: 'pointer',
+        background: hov ? 'var(--nav-hover)' : 'transparent',
+      }}
+    >
+      <input
+        type="checkbox" checked={checked} onChange={onChange}
+        style={{ accentColor: 'var(--brand)', width: 12, height: 12, margin: 0, flexShrink: 0, cursor: 'pointer' }}
+      />
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 12, color: 'var(--text)' }}>{label}</span>
+    </label>
+  )
+}
+
+function FilterBtn({
+  open, onOpenChange, departments, filters, onFiltersChange,
+}: {
+  open: boolean; onOpenChange: (open: boolean) => void
+  departments: Department[]; filters: ActiveFilters; onFiltersChange: (f: ActiveFilters) => void
+}) {
+  const hasFilters = filters.depts.size > 0 || filters.roleTypes.size > 0 || filters.statuses.size > 0
+
+  const toggleDept = (id: string) => {
+    const next = new Set(filters.depts)
+    next.has(id) ? next.delete(id) : next.add(id)
+    onFiltersChange({ ...filters, depts: next })
+  }
+  const toggleRoleType = (rt: RoleType) => {
+    const next = new Set(filters.roleTypes)
+    next.has(rt) ? next.delete(rt) : next.add(rt)
+    onFiltersChange({ ...filters, roleTypes: next })
+  }
+  const toggleStatus = (s: NodeStatus) => {
+    const next = new Set(filters.statuses)
+    next.has(s) ? next.delete(s) : next.add(s)
+    onFiltersChange({ ...filters, statuses: next })
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <ToolBtn Icon={Layers} label="Filter (F)" active={hasFilters || open} onClick={() => onOpenChange(!open)} />
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => onOpenChange(false)} />
+          <div
+            data-canvas-overlay
+            style={{
+              position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '12px 14px', zIndex: 50,
+              boxShadow: 'var(--shadow)', minWidth: 200,
+              maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Filters</span>
+              {hasFilters && (
+                <button
+                  onClick={() => onFiltersChange(EMPTY_FILTERS)}
+                  style={{ fontSize: 11, color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {departments.length > 0 && (
+              <>
+                <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', margin: '0 0 4px' }}>Department</p>
+                {departments.map(d => (
+                  <FilterRow key={d.id} checked={filters.depts.has(d.id)} onChange={() => toggleDept(d.id)} dot={d.colour} label={d.name} />
+                ))}
+                <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+              </>
+            )}
+
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', margin: '0 0 4px' }}>Status</p>
+            {STATUS_FILTER_OPTIONS.map(s => (
+              <FilterRow key={s.value} checked={filters.statuses.has(s.value)} onChange={() => toggleStatus(s.value)} dot={s.dot} label={s.label} />
+            ))}
+
+            <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', margin: '0 0 4px' }}>Role type</p>
+            {ROLE_TYPE_FILTER_OPTIONS.map(r => (
+              <FilterRow key={r.value} checked={filters.roleTypes.has(r.value)} onChange={() => toggleRoleType(r.value)} dot={r.dot} label={r.label} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Toolbar ──────────────────────────────────────────────────────────────────
+
+function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
   onAddNode: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
   onExport: (format: 'png' | 'pdf') => void
+  chartId: string; isPublic: boolean
+  filterOpen: boolean; onFilterOpenChange: (open: boolean) => void
+  departments: Department[]; filters: ActiveFilters; onFiltersChange: (f: ActiveFilters) => void
 }) {
   const editTools: ActiveTool[] = readOnly
     ? ['select', 'pan', 'zoom']
@@ -250,7 +570,10 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, o
         return <ToolBtn key={id} Icon={Icon} label={label} active={activeTool === id} onClick={() => setActiveTool(id)} />
       })}
       <Divider />
-      <ToolBtn Icon={Layers} label="Filter (F)" active={false} onClick={() => {}} />
+      <FilterBtn
+        open={filterOpen} onOpenChange={onFilterOpenChange}
+        departments={departments} filters={filters} onFiltersChange={onFiltersChange}
+      />
       {!readOnly && <>
         <ToolBtn
           Icon={LayoutGrid}
@@ -260,6 +583,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, o
         />
       </>}
       <ExportBtn onExport={onExport} />
+      <ShareSettingsBtn chartId={chartId} isPublic={isPublic} />
       {!readOnly ? <>
         <Divider />
         <button onClick={onAddNode} style={{
@@ -342,13 +666,14 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false }: {
   chartId?: string
   chartName?: string
   initialNodes?: OrgNode[]
   initialEdges?: OrgEdge[]
   departments?: Department[]
   readOnly?: boolean
+  isPublic?: boolean
 }) {
   const {
     nodes, edges, transform, setTransform,
@@ -388,10 +713,39 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const addNodePosRef = useRef({ x: 400, y: 200 })
 
+  // Filter state
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>(EMPTY_FILTERS)
+
+  const matchedNodeIds = useMemo<Set<string> | null>(() => {
+    const { depts, roleTypes, statuses } = activeFilters
+    if (depts.size === 0 && roleTypes.size === 0 && statuses.size === 0) return null
+    return new Set(
+      nodes
+        .filter(n => {
+          if (depts.size > 0 && !depts.has(n.departmentId)) return false
+          if (roleTypes.size > 0 && !roleTypes.has(n.roleType ?? 'existing')) return false
+          if (statuses.size > 0 && !statuses.has(n.status)) return false
+          return true
+        })
+        .map(n => n.id)
+    )
+  }, [nodes, activeFilters])
+
   // Plan limits
   const { isAtNodeLimit, currentTier, upgradeRequired } = usePlanLimits()
   const plan = useBillingStore((state) => state.plan)
   const navigate = useNavigate()
+
+  // Workspace departments for NodeCard colour lookup
+  const { departments: wsDepts, fetch: fetchWsDepts } = useWorkspaceDepartmentStore()
+  useEffect(() => { fetchWsDepts() }, []) // eslint-disable-line
+
+  // Push chartId into JD store so JD actions know which chart to hit
+  const setJDChartId = useJobDescriptionStore(s => s.setChartId)
+  useEffect(() => {
+    if (chartId) setJDChartId(chartId)
+  }, [chartId, setJDChartId])
 
   // Single vs double click disambiguation
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -421,7 +775,16 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     setTransform({ x: tx, y: ty, scale })
   }, [vpSize, setTransform])
 
-  useEffect(() => { fitToView() }, [vpSize.w]) // eslint-disable-line
+  // Fit once when the real viewport size first arrives from ResizeObserver.
+  // After that, preserve the user's zoom — spurious ResizeObserver firings
+  // (e.g. from DOM changes after adding nodes) must not reset the view.
+  const initialFitDone = useRef(false)
+  useEffect(() => {
+    if (!initialFitDone.current) {
+      initialFitDone.current = true
+      fitToView()
+    }
+  }, [vpSize.w]) // eslint-disable-line
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
@@ -442,9 +805,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         }
         if (e.key === 'c' && !mod) setActiveTool('connect')
       }
-      if (e.key === 'Escape') { setConnectingFrom(null); setSelectedId(null) }
+      if (e.key === 'Escape') { setConnectingFrom(null); setSelectedId(null); setFilterOpen(false) }
       if (e.key === 'v' && !mod) setActiveTool('select')
       if (e.key === 'h' && !mod) setActiveTool('pan')
+      if (e.key === 'f' && !mod) setFilterOpen(o => !o)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -470,6 +834,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     const el = containerRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
+      // Don't intercept wheel events inside modals/overlays rendered within the canvas DOM
+      if ((e.target as Element).closest('[data-canvas-overlay]')) return
       e.preventDefault()
       const rect = el.getBoundingClientRect()
       applyZoom(-e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
@@ -575,11 +941,19 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       setShowUpgradeModal(true)
       return
     }
-    const cx = (-transform.x + vpSize.w / 2) / transform.scale - NODE_W / 2
-    const cy = (-transform.y + vpSize.h / 2) / transform.scale - NODE_H / 2
-    addNodePosRef.current = { x: cx, y: cy }
+    if (nodes.length === 0) {
+      const cx = (-transform.x + vpSize.w / 2) / transform.scale - NODE_W / 2
+      const cy = (-transform.y + vpSize.h / 2) / transform.scale - NODE_H / 2
+      addNodePosRef.current = { x: cx, y: cy }
+    } else {
+      const maxY  = Math.max(...nodes.map(n => n.y))
+      const minX  = Math.min(...nodes.map(n => n.x))
+      const maxX  = Math.max(...nodes.map(n => n.x)) + NODE_W
+      const centreX = (minX + maxX) / 2 - NODE_W / 2
+      addNodePosRef.current = { x: centreX, y: maxY + NODE_H + 60 }
+    }
     setIsAddModalOpen(true)
-  }, [transform, vpSize, chartId, isAtNodeLimit])
+  }, [nodes, transform, vpSize, chartId, isAtNodeLimit])
 
   const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
     const pos = addNodePosRef.current
@@ -736,6 +1110,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
             const tgt = nodeMap[edge.targetId]
             if (!src || !tgt) return null
             const deptColour = deptColourMap[src.departmentId] ?? '#94A3B8'
+            const edgeDimmed = matchedNodeIds !== null &&
+              (!matchedNodeIds.has(edge.sourceId) || !matchedNodeIds.has(edge.targetId))
             return (
               <EdgePath
                 key={edge.id}
@@ -744,6 +1120,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
                 selected={edge.id === selectedEdgeId}
                 hovered={edge.id === hovEdgeId}
                 deptColour={deptColour}
+                opacity={edgeDimmed ? 0.1 : 1}
                 onClick={() => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
                 onMouseEnter={() => setHovEdgeId(edge.id)}
                 onMouseLeave={() => setHovEdgeId(null)}
@@ -773,6 +1150,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
             selected={node.id === selectedId}
             connecting={node.id === connectingFrom}
             isConnectTarget={!!connectingFrom && node.id !== connectingFrom}
+            dimmed={matchedNodeIds !== null && !matchedNodeIds.has(node.id)}
+            departments={wsDepts}
             onPointerDown={e => handleNodePointerDown(e, node.id)}
             onClick={e => handleNodeClick(e, node.id)}
             onDoubleClick={e => handleNodeDoubleClick(e, node.id)}
@@ -790,6 +1169,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         maxNodesPerChart={plan.maxNodesPerChart}
         currentTier={currentTier}
         onExport={handleExport}
+        chartId={chartId}
+        isPublic={isPublic}
+        filterOpen={filterOpen} onFilterOpenChange={setFilterOpen}
+        departments={departments} filters={activeFilters} onFiltersChange={setActiveFilters}
       />
 
       {/* 80% node limit warning banner */}

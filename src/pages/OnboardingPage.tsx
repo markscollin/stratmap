@@ -120,7 +120,7 @@ export function OnboardingPage() {
     ]
     const chartId = `chart-qs-${Date.now()}`
     addChart({
-      id: chartId, name: 'Current Structure', status: 'editing', version: 1,
+      id: chartId, name: 'Current Structure', status: 'editing', version: 1, isPublic: false,
       departments: mockDepartments, nodes, edges,
       owner: user?.id ?? 'dev', creator: user?.id ?? 'dev',
       collaborators: [], createdAt: now, updatedAt: now,

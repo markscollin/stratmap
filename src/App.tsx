@@ -13,12 +13,16 @@ import { OnboardingPage }  from './pages/OnboardingPage'
 import { SignInPage, SignUpPage } from './pages/SignInPage'
 import { PricingPage }     from './pages/PricingPage'
 import { BillingSuccessPage } from './pages/BillingSuccessPage'
+import { SharePage } from './pages/SharePage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Public share view — no auth, no layout */}
+          <Route path="/share/:token" element={<SharePage />} />
+
           {/* Auth routes — no sidebar layout */}
           {/* Clerk uses sub-routes like /sign-in/factor-one, so match with wildcard */}
           <Route path="/sign-in/*"   element={<SignInPage />} />

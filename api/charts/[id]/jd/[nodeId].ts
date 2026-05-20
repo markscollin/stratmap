@@ -27,7 +27,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(and(eq(jobDescriptions.nodeId, nodeId), eq(jobDescriptions.chartId, chartId)))
         .limit(1)
 
-      return jd ? res.json(jd) : res.status(404).json({ error: 'No JD found' })
+      if (jd) return res.json(jd)
+
+      // No JD persisted yet — return a default so the client avoids a 404 console error
+      return res.json({
+        id: null,
+        nodeId,
+        chartId,
+        status: 'draft',
+        responsibilities: '',
+        requirements: '',
+        version: 1,
+        updatedBy: '',
+        updatedAt: new Date().toISOString(),
+      })
     }
 
     if (req.method === 'PUT') {
@@ -40,9 +53,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(1)
 
       if (existing) {
+        // Only bump version when explicitly requested (e.g. client passes higher version on draft revert)
+        const version = body.version !== undefined ? body.version : existing.version
         const [updated] = await db
           .update(jobDescriptions)
-          .set({ ...body, version: existing.version + 1, updatedAt: new Date(), updatedBy: auth.userId })
+          .set({ ...body, version, updatedAt: new Date(), updatedBy: auth.userId })
           .where(eq(jobDescriptions.id, existing.id))
           .returning()
         return res.json(updated)

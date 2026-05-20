@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**StratMap** is a collaborative org chart and people planning tool. This is the frontend React + TypeScript application.
+**StratMap** is a collaborative org chart and people planning tool. Full-stack: React + TypeScript frontend, Vercel Serverless API, Neon Postgres via Drizzle ORM.
 
 **GitHub:** https://github.com/markscollin/stratmap  
 **Repo owner:** markscollin (SSH keys already configured)  
-**Dev server:** `npm run dev` → http://localhost:5173
+**Dev server:** `npm run dev:local` (= `vercel dev`) → http://localhost:3000
 
 ---
 
@@ -62,10 +62,13 @@ src/
 - **TipTap 3** (rich text editor)
 - **Clerk** (auth) + dev-bypass mode (no Clerk key needed in dev)
 - **Anthropic SDK** (AI JD drafting — requires `VITE_ANTHROPIC_API_KEY` in `.env.local`)
+- **Vercel Serverless Functions** (`api/` directory, `@vercel/node`)
+- **Neon Postgres** (`@neondatabase/serverless`) + **Drizzle ORM** (`drizzle-orm`, `drizzle-kit`)
+- **PGlite** (`@electric-sql/pglite`) — in-process Postgres for backend tests
 
 ---
 
-## What's Complete (Sprints 1–7)
+## What's Complete (Sprints 1–8 + Backend Phase 2)
 
 ### Sprints 1–2: Canvas + Node Management ✅
 - Draggable nodes, SVG edges, zoom/pan, minimap, fit-to-view
@@ -130,19 +133,35 @@ src/
   - Dashboard: "By role type" breakdown with coloured pill counts
 - **Page titles**: `document.title` set on all main pages (Dashboard, ChartView, CanvasView dynamic, RolesView, PricingPage, OnboardingPage)
 
+### Backend Phase 2: API + Auth + Persistence ✅ (2026-05-19)
+- Vercel Serverless API: `api/workspace.ts`, `api/charts/index.ts`, `api/charts/[id].ts`, nodes, edges, JD
+- `api/_lib/auth.ts` — `requireAuth` (JWT + workspace lookup) + `requireUser` (JWT only, for onboarding)
+- Dev bypass: absent `CLERK_SECRET_KEY` or `x-dev-user: true` header → `u-dev`/`ws-dev` identity
+- `src/lib/apiClient.ts` — typed fetch wrapper (Clerk Bearer token or dev bypass header)
+- All stores and pages wired to real API — data persists across reloads
+- SPA routing: `vercel.json = {}` (dev), `public/404.html` → sessionStorage redirect (production)
+- 111 backend tests using PGlite (`npm run test:api`)
+- Schema: `src/lib/db/schema.ts` (13 tables, 8 enums); push with `npx drizzle-kit push`
+  - Tables: workspaces, workspaceMembers, pendingInvites, workspaceDepartments, charts, departments, nodes, edges, jobDescriptions, roleTemplates, headcountPlans, **sharedLinks** (new)
+  - `charts` table has `isPublic boolean NOT NULL DEFAULT false` (new)
+
 **Key files:**
 - `src/utils/layout.ts` — auto-layout algorithm
-- `src/types/chart.ts` — OrgNode, RoleType, all chart types
-- `src/features/canvas/OrgChart.tsx` — main canvas (toolbar, modals, JD panel)
+- `src/types/chart.ts` — OrgNode, RoleType, OrgChart (inc. `isPublic`), all chart types
+- `src/features/canvas/OrgChart.tsx` — main canvas (toolbar incl. `ShareSettingsBtn`, modals, JD panel)
 - `src/features/canvas/useCanvasState.ts` — canvas state + history + applyLayout
 - `src/features/nodes/NodeCard.tsx` — node card with role type badges
 - `src/features/nodes/NodeModal.tsx` — add/edit modal with role type selector
-- `src/features/panel/JDPanel.tsx` — JD panel with template picker + AI draft
+- `src/features/panel/JDPanel.tsx` — JD panel with template picker, AI draft, editable salary band
 - `src/features/jd/AIJDDraft.tsx` — Anthropic streaming component
+- `src/store/chartStore.ts` — chart CRUD + `updateChartPublic(id, isPublic)`
 - `src/store/templateStore.ts` — template CRUD + seeding
 - `src/store/billingStore.ts` — plan tier + usage + AI draft limits
 - `src/hooks/usePlanLimits.ts` — feature gates + upgrade detection
-- `src/pages/Dashboard.tsx` — dashboard with role type breakdown
+- `src/pages/Dashboard.tsx` — dashboard with API-backed role type breakdown
+- `src/pages/SharePage.tsx` — public share view; detects short codes vs legacy URL tokens
+- `api/charts/[id]/share.ts` — POST (create link), DELETE (revoke)
+- `api/share/[code].ts` — GET (public, no auth) returns chart snapshot
 - `src/pages/PricingPage.tsx` — pricing with logo bar + FAQ
 - `src/pages/OnboardingPage.tsx` — 2-step onboarding + quick-start chart
 
@@ -150,15 +169,39 @@ src/
 
 ## What's Not Done (Next Priorities)
 
-1. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `VITE_ANTHROPIC_API_KEY` to `.env.local`, test AI drafting
-2. **Share Link** — URL-encoded chart state (base64/compressed); no backend needed
-3. **Backend/persistence** — data resets on page reload; no DB yet (mock data only)
-4. **Stripe webhooks** — handle payment completion + automatic plan upgrade
-5. **Approval email notifications** — wire status transitions to email
-6. **Filter tool** — canvas filter button exists but is a no-op
-7. **Populate remaining mock charts** — Post-Series B, Board Overview, Eng Reorg, 2024 Structure all have `nodes:[]`
-8. **Salary band** — locked placeholder, needs backend compensation data
-9. **Headcount forecasting** — planned for HeadcountView
+1. ~~**JD store API sync**~~ ✅ Done (2026-05-20)
+2. ~~**Template store API sync**~~ ✅ Done (2026-05-20)
+3. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `VITE_ANTHROPIC_API_KEY` to `.env.local`, test AI drafting
+4. ~~**Share Link (basic)**~~ ✅ Done (2026-05-20) — URL-encoded snapshot via `src/utils/shareLink.ts` + `/share/:token` route + `SharePage.tsx`
+5. **Stripe webhooks** — handle payment completion + automatic plan upgrade
+6. ~~**Filter tool**~~ ✅ Done (2026-05-20) — dept/status/role-type filter panel with opacity dimming on canvas
+7. ~~**Salary band**~~ ✅ Done (2026-05-20) — editable min/max/currency inputs for admin/owner in JDPanel OverviewTab; locked for others
+8. ~~**Headcount forecasting**~~ ✅ Done (2026-05-20) — full kanban HeadcountView, workspace departments, API routes, stores, 111 backend tests total
+9. ~~**Dashboard KPIs**~~ ✅ Done (2026-05-20) — `roleTypeBreakdown` from stats API; RoleTypeBreakdown widget reads live data
+10. ~~**Share Settings Panel**~~ ✅ Done (2026-05-20) — `ShareSettingsBtn` in toolbar, Private/Public toggle, blue icon when public, `isPublic` column on charts
+11. ~~**Live Shared Links**~~ ✅ Done (2026-05-20) — `shared_links` table, `api/charts/[id]/share.ts`, `api/share/[code].ts`, SharePage detects short codes vs legacy tokens
+
+---
+
+## Remaining Work
+
+### Stripe Webhooks
+Handle payment completion → automatic plan upgrade in the database.
+- New API route: `POST /api/webhooks/stripe` — verify `Stripe-Signature` header, handle `checkout.session.completed` event
+- On success: update `workspaces.planTier` to the purchased tier
+- Requires `STRIPE_WEBHOOK_SECRET` env var (from Stripe dashboard → Webhooks)
+- Test locally with `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+
+### View-Only Workspace Role (External Invite)
+Allow external stakeholders to join a workspace as permanent viewers without a full editor seat.
+- New role tier: `external-viewer` (below `viewer`) — view only, no edit/export/templates
+- Invite flow: Settings → Members → "Invite external viewer" → magic link email (needs email provider)
+- External viewer sees stripped-down layout (chart list + read-only canvas only)
+- Does not count against seat limits
+- Backend: `workspaceMembers` table gains `isExternal: boolean`; `requireAuth` respects the role
+- **Blocked on email provider** — no email service configured yet (Resend/SendGrid/Postmark)
+
+---
 
 ---
 
@@ -168,24 +211,33 @@ src/
 # Install dependencies (first time only)
 npm install
 
-# Start dev server
-npm run dev
+# Start dev server (Vite + Vercel API functions together)
+npm run dev:local   # → http://localhost:3000
 
-# Type check
+# Type check (frontend only)
 npx tsc -p tsconfig.app.json --noEmit
 
-# Run tests (watch mode)
+# Run frontend tests (watch mode)
 npm test
 
-# Run tests once (CI / pre-commit)
-npm run test:run
+# Run frontend tests once (CI)
+npm run test:run       # 141 tests
+
+# Run backend API tests
+npm run test:api       # 62 tests (PGlite, no network)
+
+# Run all tests
+npm run test:all       # 203 tests total
 
 # Build for production
 npm run build
 
+# Schema changes — push to Neon after editing src/lib/db/schema.ts
+npx drizzle-kit push
+
 # Git workflow
-git add src/
-git commit -m "Your message"
+git add -p            # stage selectively
+git commit -m "message"
 git push
 ```
 
@@ -193,11 +245,16 @@ git push
 
 ## Testing
 
-**Stack:** Vitest + React Testing Library. `vite.config.ts` uses `defineConfig` from `vitest/config` (not `vite`).
+**Two test suites:**
 
-Tests live in `__tests__/` directories co-located with source. **141 tests, all passing.**
+| Suite | Config | Environment | Count | Command |
+|---|---|---|---|---|
+| Frontend | `vite.config.ts` | jsdom | 141 | `npm run test:run` |
+| Backend API | `vitest.api.config.ts` | node | 111 | `npm run test:api` |
 
-**Convention:** add a `__tests__/` folder alongside any new feature file with meaningful logic. Reset Zustand stores in `beforeEach` using `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for timer-dependent behaviour.
+Frontend tests: Vitest + RTL, co-located `__tests__/` folders in `src/`. Reset Zustand stores in `beforeEach` with `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for timers.
+
+Backend tests: PGlite (in-process Postgres) via `drizzle-orm/pglite`. Helpers in `api/__tests__/helpers/`. Mock `../../src/lib/db/index` and `../_lib/auth` in each test file. See `testing_strategy` memory for the full pattern.
 
 ---
 
@@ -237,11 +294,16 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 
 - **Do not commit** until user confirms features are working — per project git policy
 - **SSH auth** — No token setup needed. Just run `git` commands directly.
-- **Dev server** — `npm run dev` (may start on 5174 if 5173 is in use)
-- **Canvas data is template-based** — New charts load nodes/edges from templates; state is in-memory only (resets on reload)
+- **Dev server** — `npm run dev:local` (vercel dev, port 3000). Vite alone (`npm run dev`) works for frontend-only but API calls will fail.
+- **Canvas data is API-backed** — charts, nodes, edges all persist via Neon Postgres. No more mock data resets on reload.
 - **TypeScript** — Use `npx tsc -p tsconfig.app.json --noEmit` (not `npx tsc --noEmit`) for accurate error checking
 - **Execution preference** — Execute code changes directly. Only ask for confirmation on risky/destructive operations.
 - **Dev tools** — In browser console:
   - `__devTools.setPermission('admin'|'editor'|'viewer'|...)` — test permission levels
   - `__devTools.setPlan('free'|'starter'|'growth')` — test billing tiers
+- **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, all API requests fall back to `u-dev`/`ws-dev` identity.
 - **Sprint 6 AI drafting** — Blocked on Anthropic API key. Add `VITE_ANTHROPIC_API_KEY=sk-ant-...` to `.env.local` after verifying billing balance at console.anthropic.com
+- **Schema changes** — Edit `src/lib/db/schema.ts` then run `npx drizzle-kit push` to apply to Neon (reads `DATABASE_URL` from `.env.local`)
+- **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth). `SharePage` handles both 10-char short codes and legacy URL tokens.
+- **Salary band** — Stored on `job_descriptions` table (`salary_band_min`, `salary_band_max`, `salary_currency`). Visible/editable only to `admin`/`owner` permission in JDPanel OverviewTab. Locked placeholder shown to others.
+- **PGlite test schema** — `api/__tests__/helpers/db.ts` `SCHEMA_SQL` must be kept in sync with `src/lib/db/schema.ts`. When adding new tables/columns, update both files and reset `schemaReady = false` is not needed — PGlite starts fresh each test run.

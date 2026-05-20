@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { X, ChevronDown, MapPin } from 'lucide-react'
+import { X, ChevronDown, MapPin, Plus, Check } from 'lucide-react'
 import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus, RoleType } from '../../types'
+import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -62,11 +63,36 @@ function SegmentedControl<T extends string>({ options, value, onChange }: {
   )
 }
 
-function DeptSelect({ departments, value, onChange }: {
-  departments: Department[]; value: string; onChange: (id: string) => void
+const DEPT_COLOURS = [
+  '#0EA5E9', '#10B981', '#8B5CF6', '#F59E0B',
+  '#EF4444', '#06B6D4', '#F97316', '#EC4899',
+]
+
+function DeptSelect({ value, onChange }: {
+  value: string; onChange: (id: string) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const { departments, create } = useWorkspaceDepartmentStore()
+  const [open, setOpen]         = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName]   = useState('')
+  const [newColour, setNewColour] = useState(DEPT_COLOURS[0])
+  const [saving, setSaving]     = useState(false)
+
   const selected = departments.find(d => d.id === value)
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return
+    setSaving(true)
+    const dept = await create(newName.trim(), newColour)
+    setSaving(false)
+    if (dept) {
+      onChange(dept.id)
+      setCreating(false)
+      setNewName('')
+      setOpen(false)
+    }
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       <button type="button" onClick={() => setOpen(o => !o)} style={{
@@ -77,10 +103,16 @@ function DeptSelect({ departments, value, onChange }: {
         borderRadius: 9, cursor: 'pointer', color: 'var(--text)', fontSize: 14, textAlign: 'left',
         transition: 'all .15s',
       }}>
-        {selected && <span style={{ width: 8, height: 8, borderRadius: '50%', background: selected.colour, flexShrink: 0 }} />}
-        <span style={{ flex: 1 }}>{selected?.name ?? 'Select department'}</span>
+        {selected
+          ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: selected.colour, flexShrink: 0 }} />
+          : <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--dim)', flexShrink: 0 }} />
+        }
+        <span style={{ flex: 1, color: selected ? 'var(--text)' : 'var(--dim)' }}>
+          {selected?.name ?? 'Select department'}
+        </span>
         <ChevronDown size={13} color="var(--muted)" />
       </button>
+
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100,
@@ -88,19 +120,81 @@ function DeptSelect({ departments, value, onChange }: {
           borderRadius: 9, boxShadow: 'var(--shadow)', overflow: 'hidden',
           animation: 'slideDown .12s ease-out',
         }}>
+          {/* Existing departments */}
           {departments.map(dept => (
-            <button key={dept.id} type="button" onClick={() => { onChange(dept.id); setOpen(false) }} style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 12px', background: dept.id === value ? 'var(--brand-bg)' : 'transparent',
-              border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 14, textAlign: 'left',
-            }}
+            <button key={dept.id} type="button"
+              onClick={() => { onChange(dept.id); setOpen(false); setCreating(false) }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 12px',
+                background: dept.id === value ? 'var(--brand-bg)' : 'transparent',
+                border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 14, textAlign: 'left',
+              }}
               onMouseEnter={e => { if (dept.id !== value) e.currentTarget.style.background = 'var(--raised)' }}
               onMouseLeave={e => { e.currentTarget.style.background = dept.id === value ? 'var(--brand-bg)' : 'transparent' }}
             >
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: dept.colour, flexShrink: 0 }} />
-              {dept.name}
+              <span style={{ flex: 1 }}>{dept.name}</span>
+              {dept.id === value && <Check size={12} color="var(--brand)" />}
             </button>
           ))}
+
+          {departments.length > 0 && <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />}
+
+          {/* Inline create */}
+          {!creating ? (
+            <button type="button" onClick={() => setCreating(true)} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px', background: 'transparent',
+              border: 'none', cursor: 'pointer', color: 'var(--brand)', fontSize: 13, textAlign: 'left',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--raised)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Plus size={12} /> New department
+            </button>
+          ) : (
+            <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
+              <input
+                autoFocus
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                placeholder="Department name"
+                style={{
+                  width: '100%', padding: '7px 10px', fontSize: 13,
+                  background: 'var(--input-bg)', border: '1px solid var(--border)',
+                  borderRadius: 7, color: 'var(--text)', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {DEPT_COLOURS.map(c => (
+                  <button key={c} type="button" onClick={() => setNewColour(c)} style={{
+                    width: 20, height: 20, borderRadius: '50%', background: c,
+                    border: 'none', cursor: 'pointer', flexShrink: 0,
+                    outline: newColour === c ? `2px solid ${c}` : '2px solid transparent',
+                    outlineOffset: 2,
+                  }} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button type="button" onClick={() => { setCreating(false); setNewName('') }} style={{
+                  flex: 1, padding: '6px', fontSize: 12, background: 'transparent',
+                  border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer',
+                }}>Cancel</button>
+                <button type="button" onClick={handleCreate}
+                  disabled={!newName.trim() || saving}
+                  style={{
+                    flex: 2, padding: '6px', fontSize: 12, fontWeight: 600,
+                    background: newName.trim() ? 'var(--brand)' : 'var(--raised)',
+                    border: 'none', borderRadius: 6,
+                    color: newName.trim() ? '#fff' : 'var(--dim)',
+                    cursor: newName.trim() ? 'pointer' : 'default',
+                  }}
+                >{saving ? 'Creating…' : 'Create'}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -230,10 +324,11 @@ function RoleTypeControl({ value, onChange }: { value: RoleType; onChange: (v: R
 }
 
 export function NodeModal({
-  isOpen, onClose, mode, node, departments, allNodes, allEdges,
+  isOpen, onClose, mode, node, allNodes, allEdges,
   onAdd, onUpdate, onDelete,
 }: NodeModalProps) {
-  const fallbackDept = departments[0]?.id ?? 'eng'
+  const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
+  const fallbackDept = wsDepts[0]?.id ?? ''
 
   // Find the current manager edge for this node (edit mode)
   const currentManagerId = mode === 'edit' && node
@@ -251,6 +346,11 @@ export function NodeModal({
   const [isNew,          setIsNew]          = useState(false)
   const [submitted,      setSubmitted]      = useState(false)
   const [deleteConfirm,  setDeleteConfirm]  = useState(false)
+
+  // Fetch workspace departments whenever the modal opens
+  useEffect(() => {
+    if (isOpen) fetchDepts()
+  }, [isOpen]) // eslint-disable-line
 
   // Populate fields when modal opens in edit mode
   useEffect(() => {
@@ -307,6 +407,7 @@ export function NodeModal({
 
   return (
     <div
+      data-canvas-overlay
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}
     >
@@ -355,7 +456,7 @@ export function NodeModal({
         </Field>
 
         <Field label="Department">
-          <DeptSelect departments={departments} value={deptId} onChange={setDeptId} />
+          <DeptSelect value={deptId} onChange={setDeptId} />
         </Field>
 
         <Field label="Employment type">

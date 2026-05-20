@@ -17,6 +17,7 @@ export const roleStatusEnum = pgEnum('role_status', ['draft', 'in-review', 'appr
 export const chartStatusEnum = pgEnum('chart_status', ['draft', 'editing', 'review', 'rejected', 'approved', 'live', 'archived'])
 export const permissionEnum = pgEnum('permission', ['owner', 'admin', 'editor', 'commenter', 'viewer'])
 export const planTierEnum = pgEnum('plan_tier', ['free', 'starter', 'growth', 'enterprise'])
+export const headcountStatusEnum = pgEnum('headcount_status', ['planned', 'approved', 'filled'])
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
 
@@ -50,6 +51,15 @@ export const pendingInvites = pgTable('pending_invites', {
   sentAt: timestamp('sent_at').notNull().defaultNow(),
 })
 
+// ─── Workspace Departments ────────────────────────────────────────────────────
+
+export const workspaceDepartments = pgTable('workspace_departments', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  colour: text('colour').notNull(),
+})
+
 // ─── Charts ──────────────────────────────────────────────────────────────────
 
 export const charts = pgTable('charts', {
@@ -58,6 +68,7 @@ export const charts = pgTable('charts', {
   name: text('name').notNull(),
   status: chartStatusEnum('status').notNull().default('draft'),
   version: integer('version').notNull().default(1),
+  isPublic: boolean('is_public').notNull().default(false),
   ownerId: text('owner_id').notNull(),         // Clerk userId
   creatorId: text('creator_id').notNull(),     // Clerk userId
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -69,6 +80,7 @@ export const departments = pgTable('departments', {
   chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   colour: text('colour').notNull(),
+  workspaceDepartmentId: text('workspace_department_id').references(() => workspaceDepartments.id, { onDelete: 'set null' }),
 })
 
 // ─── Nodes & Edges ───────────────────────────────────────────────────────────
@@ -117,6 +129,23 @@ export const jobDescriptions = pgTable('job_descriptions', {
   updatedBy: text('updated_by').notNull(),
 })
 
+// ─── Headcount Plans ─────────────────────────────────────────────────────────
+
+export const headcountPlans = pgTable('headcount_plans', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  departmentId: text('department_id').references(() => workspaceDepartments.id, { onDelete: 'set null' }),
+  roleType: roleTypeEnum('role_type').notNull().default('new-headcount'),
+  targetQuarter: text('target_quarter').notNull(),  // e.g. "2026-Q2"
+  chartId: text('chart_id').references(() => charts.id, { onDelete: 'set null' }),
+  status: headcountStatusEnum('status').notNull().default('planned'),
+  notes: text('notes'),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
 // ─── Role Templates ──────────────────────────────────────────────────────────
 
 export const roleTemplates = pgTable('role_templates', {
@@ -131,6 +160,16 @@ export const roleTemplates = pgTable('role_templates', {
   updatedBy: text('updated_by').notNull(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   uses: integer('uses').notNull().default(0),
+})
+
+// ─── Shared Links ────────────────────────────────────────────────────────────
+
+export const sharedLinks = pgTable('shared_links', {
+  id: text('id').primaryKey(),                 // short code, e.g. "abc12345"
+  chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at'),
 })
 
 // ─── Inferred types (for use in Phase 2 API routes) ─────────────────────────
@@ -150,3 +189,9 @@ export type JobDescription = typeof jobDescriptions.$inferSelect
 export type NewJobDescription = typeof jobDescriptions.$inferInsert
 export type RoleTemplate = typeof roleTemplates.$inferSelect
 export type NewRoleTemplate = typeof roleTemplates.$inferInsert
+export type WorkspaceDepartment = typeof workspaceDepartments.$inferSelect
+export type NewWorkspaceDepartment = typeof workspaceDepartments.$inferInsert
+export type HeadcountPlan = typeof headcountPlans.$inferSelect
+export type NewHeadcountPlan = typeof headcountPlans.$inferInsert
+export type SharedLink = typeof sharedLinks.$inferSelect
+export type NewSharedLink = typeof sharedLinks.$inferInsert

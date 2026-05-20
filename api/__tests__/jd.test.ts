@@ -31,10 +31,14 @@ beforeEach(async () => {
 })
 
 describe('GET /api/charts/[id]/jd/[nodeId]', () => {
-  it('returns 404 when no JD exists for the node', async () => {
+  it('returns a default with null id when no JD exists for the node', async () => {
     const res = createRes()
     await handler(createReq({ query: { id: TEST_CHART_ID, nodeId: TEST_NODE_ID } }) as never, res as never)
-    expect(res._status).toBe(404)
+    expect(res._status).toBe(200)
+    const body = res._body as { id: null; nodeId: string; status: string }
+    expect(body.id).toBeNull()
+    expect(body.nodeId).toBe(TEST_NODE_ID)
+    expect(body.status).toBe('draft')
   })
 
   it('returns the JD when one exists', async () => {
@@ -75,7 +79,7 @@ describe('PUT /api/charts/[id]/jd/[nodeId]', () => {
     expect(body.version).toBe(1)
   })
 
-  it('updates existing JD and bumps version', async () => {
+  it('updates existing JD without bumping version for content-only saves', async () => {
     await testDb.insert(schema.jobDescriptions).values({
       id: TEST_JD_ID,
       nodeId: TEST_NODE_ID,
@@ -94,6 +98,27 @@ describe('PUT /api/charts/[id]/jd/[nodeId]', () => {
     expect(res._status).toBe(200)
     const body = res._body as { responsibilities: string; version: number }
     expect(body.responsibilities).toBe('Updated')
+    expect(body.version).toBe(1)
+  })
+
+  it('bumps version when client explicitly sends a higher version', async () => {
+    await testDb.insert(schema.jobDescriptions).values({
+      id: TEST_JD_ID,
+      nodeId: TEST_NODE_ID,
+      chartId: TEST_CHART_ID,
+      responsibilities: 'Original',
+      requirements: '',
+      version: 1,
+      updatedBy: TEST_USER_ID,
+    })
+
+    const res = createRes()
+    await handler(
+      createReq({ method: 'PUT', query: { id: TEST_CHART_ID, nodeId: TEST_NODE_ID }, body: { status: 'draft', version: 2 } }) as never,
+      res as never,
+    )
+    expect(res._status).toBe(200)
+    const body = res._body as { version: number }
     expect(body.version).toBe(2)
   })
 
