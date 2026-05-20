@@ -9,6 +9,7 @@ interface ChartStore {
 
   fetchCharts: () => Promise<void>
   createChart: (name: string, nodes: OrgNode[], edges: OrgEdge[], departments: Department[]) => Promise<OrgChart | null>
+  deleteChart: (id: string) => Promise<void>
   setActiveChart: (id: string | null) => void
   updateChartStatus: (id: string, status: ChartStatus) => void
   duplicateChart: (id: string) => Promise<void>
@@ -76,6 +77,15 @@ export const useChartStore = create<ChartStore>((set, get) => ({
     } catch (err) {
       console.error('[chartStore] createChart failed:', err)
       return null
+    }
+  },
+
+  async deleteChart(id) {
+    set(s => ({ charts: s.charts.filter(c => c.id !== id) }))
+    try {
+      await api.delete(`/api/charts/${id}`)
+    } catch (err) {
+      console.error('[chartStore] deleteChart failed:', err)
     }
   },
 

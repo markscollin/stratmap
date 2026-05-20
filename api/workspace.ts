@@ -76,6 +76,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json(ws)
     }
 
+    if (req.method === 'PUT') {
+      const auth = await requireAuth(req, res)
+      if (!auth) return
+
+      const { name } = req.body as { name?: string }
+      if (!name?.trim()) return res.status(400).json({ error: 'name is required' })
+
+      const [updated] = await db
+        .update(workspaces)
+        .set({ name: name.trim(), updatedAt: new Date() })
+        .where(eq(workspaces.id, auth.workspaceId))
+        .returning()
+
+      return res.json(updated)
+    }
+
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
     console.error('/api/workspace', err)

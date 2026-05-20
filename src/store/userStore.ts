@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { User, Permission, Workspace, PendingInvite } from '../types'
+import { api } from '../lib/apiClient'
 
 interface UserStore {
   user: User | null
@@ -80,7 +81,7 @@ export const useUserStore = create<UserStore>((set) => ({
       }
     }),
 
-  updateMemberPermission: (userId, permission) =>
+  updateMemberPermission: (userId, permission) => {
     set((state) => {
       if (!state.workspace) return state
       return {
@@ -91,9 +92,13 @@ export const useUserStore = create<UserStore>((set) => ({
           ),
         },
       }
-    }),
+    })
+    api.put(`/api/workspace/members/${userId}`, { permission }).catch(err =>
+      console.error('[userStore] updateMemberPermission failed:', err)
+    )
+  },
 
-  removeMember: (userId) =>
+  removeMember: (userId) => {
     set((state) => {
       if (!state.workspace) return state
       return {
@@ -102,7 +107,11 @@ export const useUserStore = create<UserStore>((set) => ({
           members: state.workspace.members.filter((m) => m.user.id !== userId),
         },
       }
-    }),
+    })
+    api.delete(`/api/workspace/members/${userId}`).catch(err =>
+      console.error('[userStore] removeMember failed:', err)
+    )
+  },
 }))
 
 export const MOCK_WORKSPACE: Workspace = {

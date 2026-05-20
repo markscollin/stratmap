@@ -2,27 +2,51 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, Briefcase, TrendingUp, Network, ArrowRight, Plus, BarChart2 } from 'lucide-react'
 import { useChartStore } from '../store'
-import { mockDepartments } from '../data/mockOrg'
+import { useHeadcountStore } from '../store/headcountStore'
 import { STATUS_META } from '../constants/statusMeta'
+import { api } from '../lib/apiClient'
 import type { ChartStatus, OrgChart } from '../types'
 
-const PLANNED_HIRES = 6
+interface DeptStat {
+  id: string
+  name: string
+  colour: string
+  headcount: number
+  open: number
+}
+
+interface WorkspaceStats {
+  totalHeadcount: number
+  totalOpen: number
+  deptBreakdown: DeptStat[]
+}
 
 export function Dashboard() {
   const navigate = useNavigate()
   const { charts } = useChartStore()
+  const { plans, fetch: fetchPlans } = useHeadcountStore()
 
-  useEffect(() => { document.title = 'StratMap — Dashboard' }, [])
+  const [stats, setStats] = useState<WorkspaceStats | null>(null)
 
-  const totalHeadcount = mockDepartments.reduce((s, d) => s + d.headcount, 0)
-  const totalOpen      = mockDepartments.reduce((s, d) => s + d.open, 0)
+  useEffect(() => {
+    document.title = 'StratMap — Dashboard'
+    fetchPlans()
+    api.get<WorkspaceStats>('/api/workspace/stats')
+      .then(setStats)
+      .catch(err => console.error('[Dashboard] stats fetch failed:', err))
+  }, []) // eslint-disable-line
+
+  const totalHeadcount = stats?.totalHeadcount ?? 0
+  const totalOpen      = stats?.totalOpen ?? 0
   const liveCharts     = charts.filter(c => c.status === 'live').length
+  const plannedHires   = plans.filter(p => p.status !== 'filled').length
+  const deptBreakdown  = stats?.deptBreakdown ?? []
 
-  const nodeTotal = totalHeadcount + totalOpen + PLANNED_HIRES
+  const nodeTotal = totalHeadcount + totalOpen + plannedHires
   const nodePipeline = [
-    { label: 'Active',  count: totalHeadcount, color: 'var(--success)', pct: Math.round(totalHeadcount / nodeTotal * 100) },
-    { label: 'Open',    count: totalOpen,       color: 'var(--warn)',    pct: Math.round(totalOpen / nodeTotal * 100) },
-    { label: 'Planned', count: PLANNED_HIRES,   color: 'var(--purple)', pct: Math.round(PLANNED_HIRES / nodeTotal * 100) },
+    { label: 'Active',  count: totalHeadcount, color: 'var(--success)', pct: nodeTotal ? Math.round(totalHeadcount / nodeTotal * 100) : 0 },
+    { label: 'Open',    count: totalOpen,       color: 'var(--warn)',    pct: nodeTotal ? Math.round(totalOpen / nodeTotal * 100) : 0 },
+    { label: 'Planned', count: plannedHires,    color: 'var(--purple)', pct: nodeTotal ? Math.round(plannedHires / nodeTotal * 100) : 0 },
   ]
 
   const chartStatusCounts = charts.reduce<Record<string, number>>((acc, c) => {
@@ -31,10 +55,10 @@ export function Dashboard() {
   }, {})
 
   const kpis = [
-    { label: 'Total headcount', value: totalHeadcount, sub: 'across all departments',   color: 'var(--brand)',   bg: 'var(--brand-bg)',   Icon: Users,      grad: 'var(--grad-brand)' },
-    { label: 'Open roles',      value: totalOpen,       sub: 'unfilled positions',        color: 'var(--warn)',    bg: 'var(--warn-bg)',    Icon: Briefcase,  grad: 'var(--grad-warn)' },
-    { label: 'Planned hires',   value: PLANNED_HIRES,   sub: 'approved, not yet filled',  color: 'var(--purple)', bg: 'var(--purple-bg)', Icon: TrendingUp, grad: 'var(--grad-purple)' },
-    { label: 'Live org charts', value: liveCharts,      sub: 'currently published',       color: 'var(--success)',bg: 'var(--success-bg)',Icon: Network,    grad: 'var(--grad-success)' },
+    { label: 'Total headcount', value: totalHeadcount, sub: 'active roles in live charts',   color: 'var(--brand)',   bg: 'var(--brand-bg)',   Icon: Users,      grad: 'var(--grad-brand)' },
+    { label: 'Open roles',      value: totalOpen,       sub: 'unfilled positions',             color: 'var(--warn)',    bg: 'var(--warn-bg)',    Icon: Briefcase,  grad: 'var(--grad-warn)' },
+    { label: 'Planned hires',   value: plannedHires,    sub: 'in headcount plan',              color: 'var(--purple)', bg: 'var(--purple-bg)', Icon: TrendingUp, grad: 'var(--grad-purple)' },
+    { label: 'Live org charts', value: liveCharts,      sub: 'currently published',            color: 'var(--success)',bg: 'var(--success-bg)',Icon: Network,    grad: 'var(--grad-success)' },
   ]
 
   const quickActions = [
@@ -43,6 +67,8 @@ export function Dashboard() {
     { label: 'Invite teammate', Icon: Users,     color: 'var(--success)', bg: 'var(--success-bg)', path: '/settings' },
     { label: 'View headcount',  Icon: BarChart2, color: 'var(--warn)',    bg: 'var(--warn-bg)',    path: '/headcount' },
   ]
+
+  const isLoading = !stats
 
   return (
     <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
@@ -66,7 +92,9 @@ export function Dashboard() {
             <div style={{ width: 38, height: 38, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               <Icon size={18} color={color} />
             </div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)', lineHeight: 1, letterSpacing: '-1px', marginBottom: 4 }}>{value}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: isLoading ? 'var(--dim)' : 'var(--text)', lineHeight: 1, letterSpacing: '-1px', marginBottom: 4 }}>
+              {isLoading ? '—' : value}
+            </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{label}</div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>{sub}</div>
           </div>
@@ -80,44 +108,54 @@ export function Dashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <div>
               <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Departments</h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Headcount and open roles</p>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Headcount and open roles in live charts</p>
             </div>
             <button
               onClick={() => navigate('/charts')}
               style={{ fontSize: 12, color: 'var(--brand)', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
             >
-              View chart <ArrowRight size={12} />
+              View charts <ArrowRight size={12} />
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {mockDepartments.map(d => {
-              const total = d.headcount + d.open
-              const hcPct = Math.round((d.headcount / (total || 1)) * 100)
-              return (
-                <div key={d.id}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: d.colour, flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{d.name}</span>
+            {isLoading ? (
+              [1, 2, 3].map(i => (
+                <div key={i} style={{ height: 36, background: 'var(--raised)', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              ))
+            ) : deptBreakdown.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--dim)', textAlign: 'center', padding: '16px 0' }}>
+                No live charts yet. Publish a chart to see department data.
+              </p>
+            ) : (
+              deptBreakdown.map(d => {
+                const total = d.headcount + d.open
+                const hcPct = total ? Math.round((d.headcount / total) * 100) : 0
+                return (
+                  <div key={d.id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, background: d.colour, flexShrink: 0 }} />
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{d.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{d.headcount} active</span>
+                        {d.open > 0 && (
+                          <span style={{ fontSize: 11, color: 'var(--warn)', background: 'var(--warn-bg)', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
+                            +{d.open} open
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{d.headcount} active</span>
-                      {d.open > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--warn)', background: 'var(--warn-bg)', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
-                          +{d.open} open
-                        </span>
-                      )}
+                    <div style={{ height: 6, background: 'var(--raised)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', height: '100%' }}>
+                        <div style={{ width: `${hcPct}%`, background: d.colour, borderRadius: 3, transition: 'width .6s ease-out' }} />
+                        <div style={{ flex: 1, background: `${d.colour}30` }} />
+                      </div>
                     </div>
                   </div>
-                  <div style={{ height: 6, background: 'var(--raised)', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', height: '100%' }}>
-                      <div style={{ width: `${hcPct}%`, background: d.colour, borderRadius: 3, transition: 'width .6s ease-out' }} />
-                      <div style={{ flex: 1, background: `${d.colour}30` }} />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
         </div>
 
@@ -126,7 +164,7 @@ export function Dashboard() {
           {/* Role pipeline */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
             <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Role pipeline</h2>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>Across your live org chart</p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>Across your live org charts</p>
             <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 14 }}>
               {nodePipeline.map(({ color, pct }, i) => (
                 <div key={i} style={{ width: `${pct}%`, background: color, transition: 'width .6s ease-out' }} />
@@ -142,7 +180,6 @@ export function Dashboard() {
               ))}
             </div>
 
-            {/* Role type breakdown */}
             <RoleTypeBreakdown charts={charts} />
           </div>
 
@@ -161,23 +198,27 @@ export function Dashboard() {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(Object.entries(chartStatusCounts) as [ChartStatus, number][]).map(([status, count]) => {
-                const m = STATUS_META[status]
-                if (!m) return null
-                const Icon = m.Icon
-                return (
-                  <div key={status} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 12px', background: 'var(--raised)', borderRadius: 9,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon size={13} color={m.color} />
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>{m.label}</span>
+              {Object.keys(chartStatusCounts).length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--dim)', textAlign: 'center', padding: '12px 0' }}>No charts yet</p>
+              ) : (
+                (Object.entries(chartStatusCounts) as [ChartStatus, number][]).map(([status, count]) => {
+                  const m = STATUS_META[status]
+                  if (!m) return null
+                  const Icon = m.Icon
+                  return (
+                    <div key={status} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', background: 'var(--raised)', borderRadius: 9,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Icon size={13} color={m.color} />
+                        <span style={{ fontSize: 13, color: 'var(--text)' }}>{m.label}</span>
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: m.color, background: m.bg, padding: '2px 10px', borderRadius: 10 }}>{count}</span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: m.color, background: m.bg, padding: '2px 10px', borderRadius: 10 }}>{count}</span>
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
           </div>
         </div>

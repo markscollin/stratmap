@@ -25,14 +25,11 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
   const { setUser, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const isAuthPage = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-
-  // Skip all auth logic on sign-in/sign-up pages — let Clerk work undisturbed
-  if (isAuthPage) {
-    return <>{children}</>
-  }
+  const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
+  const isPublicPage = pathname.startsWith('/share')
 
   useEffect(() => {
+    if (isAuthPage || isPublicPage) return
     if (!isLoaded) return
 
     if (!isSignedIn) {
@@ -53,16 +50,23 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
         'owner'
       )
       // Load workspace from API (replaces localStorage-only approach)
-      api.get<{ id: string; name: string; ownerRole: string; size: string }>('/api/workspace')
+      api.get<{
+        id: string; name: string; ownerRole: string; size: string; createdAt: string
+        members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
+      }>('/api/workspace')
         .then(ws => {
           setWorkspace({
             id: ws.id,
             name: ws.name,
             ownerRole: ws.ownerRole as import('../../types').WorkspaceRole,
             size: ws.size as import('../../types').CompanySize,
-            members: [],
+            members: (ws.members ?? []).map(m => ({
+              user: { id: m.userId, name: m.name ?? '', email: m.email, avatarUrl: m.avatarUrl ?? undefined },
+              permission: m.permission as import('../../types').Permission,
+              joinedAt: m.joinedAt,
+            })),
             pendingInvites: [],
-            createdAt: new Date().toISOString(),
+            createdAt: ws.createdAt ?? new Date().toISOString(),
           })
         })
         .catch((err: Error) => {
@@ -74,15 +78,21 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
           }
         })
     }
-  }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate])
+  }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate, isAuthPage, isPublicPage])
 
   // Once loaded + signed in, redirect to onboarding if no workspace set
   useEffect(() => {
+    if (isAuthPage || isPublicPage) return
     if (!isLoaded || !isSignedIn) return
     if (!workspace && pathname !== '/onboarding') {
       navigate('/onboarding')
     }
-  }, [isLoaded, isSignedIn, workspace, navigate, pathname])
+  }, [isLoaded, isSignedIn, workspace, navigate, pathname, isAuthPage, isPublicPage])
+
+  // All hooks called above — safe to conditionally return now
+  if (isAuthPage || isPublicPage) {
+    return <>{children}</>
+  }
 
   if (!isLoaded) {
     return (

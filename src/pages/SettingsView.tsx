@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, Sparkles, X, Lock, ChevronDown } from 'lucide-react'
+import { Plus, Users, Sparkles, X, Lock, ChevronDown, Check } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
+import { api } from '../lib/apiClient'
 import type { Permission } from '../types'
 
 type Tab = 'general' | 'members' | 'billing' | 'notifications'
@@ -71,17 +72,51 @@ function FocusInput({ id, label, type, placeholder, value, onChange, focus, setF
 }
 
 function GeneralTab() {
-  const [wName, setWName] = useState('')
-  const [email, setEmail] = useState('')
+  const { workspace, setWorkspace } = useUserStore()
+  const [wName, setWName] = useState(workspace?.name ?? '')
   const [focus, setFocus] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  // Sync input when workspace loads asynchronously (e.g. dev bypass hydration)
+  useEffect(() => {
+    if (workspace?.name && !wName) setWName(workspace.name)
+  }, [workspace?.name])
+
+  const handleSave = async () => {
+    if (!wName.trim() || saving) return
+    setSaving(true)
+    try {
+      await api.put('/api/workspace', { name: wName.trim() })
+      if (workspace) setWorkspace({ ...workspace, name: wName.trim() })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      console.error('[SettingsView] save workspace failed:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div style={{ maxWidth: 500 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 22 }}>Workspace</h3>
-        <FocusInput id="name"  label="Workspace name" type="text"  placeholder="My Organisation" value={wName} onChange={setWName} focus={focus} setFocus={setFocus} />
-        <FocusInput id="email" label="Primary email"  type="email" placeholder="you@company.com"  value={email} onChange={setEmail} focus={focus} setFocus={setFocus} />
-        <button style={{ padding: '9px 20px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-          Save changes
+        <FocusInput id="name" label="Workspace name" type="text" placeholder="My Organisation" value={wName} onChange={setWName} focus={focus} setFocus={setFocus} />
+        <button
+          onClick={handleSave}
+          disabled={!wName.trim() || saving}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            padding: '9px 20px', border: 'none', borderRadius: 8,
+            background: saved ? 'var(--success)' : (wName.trim() ? 'var(--grad-brand)' : 'var(--raised)'),
+            color: wName.trim() ? '#fff' : 'var(--dim)',
+            fontSize: 14, fontWeight: 600,
+            cursor: wName.trim() && !saving ? 'pointer' : 'default',
+            transition: 'background .2s',
+          }}
+        >
+          {saved ? <><Check size={14} /> Saved</> : saving ? 'Saving…' : 'Save changes'}
         </button>
       </div>
     </div>

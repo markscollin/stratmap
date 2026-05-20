@@ -88,10 +88,11 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   canEdit: boolean
   canAdmin: boolean
 }) {
-  const [hov, setHov]   = useState(false)
-  const [menu, setMenu] = useState(false)
-  const navigate        = useNavigate()
-  const { duplicateChart } = useChartStore()
+  const [hov, setHov]               = useState(false)
+  const [menu, setMenu]             = useState(false)
+  const [confirmDelete, setConfirm] = useState(false)
+  const navigate                    = useNavigate()
+  const { duplicateChart, deleteChart } = useChartStore()
   const { permission } = usePermission()
   const actions = (STATUS_ACTIONS[chart.status] || []).filter(
     a => PERMISSION_RANK[permission] >= PERMISSION_RANK[a.minPermission]
@@ -143,20 +144,31 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
           >{chart.name}</h3>
           <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button
+              data-testid="chart-overflow-btn"
               onClick={() => setMenu(!menu)}
               style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${menu ? 'var(--border-hover)' : 'transparent'}`, background: menu ? 'var(--raised)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--muted)' }}
             >
               <MoreHorizontal size={13} />
             </button>
-            {menu && (
+            {menu && !confirmDelete && (
               <OverflowMenu
                 actions={actions}
                 canAdmin={canAdmin}
                 onAction={next => { onAction(chart.id, next); setMenu(false) }}
                 onOpen={() => { navigate(`/charts/${chart.id}`); setMenu(false) }}
                 onDuplicate={() => { duplicateChart(chart.id); setMenu(false) }}
+                onDelete={() => { setConfirm(true); setMenu(false) }}
                 onClose={() => setMenu(false)}
               />
+            )}
+            {confirmDelete && (
+              <div data-testid="chart-delete-confirm" style={{ position: 'absolute', top: 30, right: 0, zIndex: 100, background: 'var(--surface)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: '14px 16px', minWidth: 220, boxShadow: 'var(--shadow)', animation: 'slideDown .15s ease-out' }}>
+                <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.4 }}>Delete <strong>{chart.name}</strong>? This cannot be undone.</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => setConfirm(false)} style={{ flex: 1, padding: '6px', fontSize: 12, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={() => { deleteChart(chart.id); setConfirm(false) }} style={{ flex: 1, padding: '6px', fontSize: 12, fontWeight: 600, background: 'var(--danger)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer' }}>Delete</button>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -189,19 +201,20 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   )
 }
 
-function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onClose }: {
+function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDelete, onClose }: {
   actions: { next: ChartStatus; label: string; color: string }[]
   canAdmin: boolean
   onAction: (next: ChartStatus) => void
   onOpen: () => void
   onDuplicate: () => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const secondaryItems = [
     { Icon: ExternalLink, label: 'Open chart',   color: 'var(--text)',    fn: onOpen },
     { Icon: Copy,         label: 'Duplicate',    color: 'var(--text)',    fn: onDuplicate },
     { Icon: GitBranch,    label: 'New scenario', color: 'var(--text)',    fn: onClose },
-    ...(canAdmin ? [{ Icon: Trash2, label: 'Delete', color: 'var(--danger)', fn: onClose }] : []),
+    ...(canAdmin ? [{ Icon: Trash2, label: 'Delete', color: 'var(--danger)', fn: onDelete }] : []),
   ]
   return (
     <div style={{ position: 'absolute', top: 30, right: 0, zIndex: 100, background: 'var(--surface)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: 5, minWidth: 190, boxShadow: 'var(--shadow)', animation: 'slideDown .15s ease-out' }}>

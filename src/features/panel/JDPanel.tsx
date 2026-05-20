@@ -3,10 +3,10 @@ import { X, Briefcase, MapPin, Clock, FileText, Search } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import type { RoleStatus } from '../../types/chart'
 import type { JobDescription } from '../../types/jd'
-import { mockDepartments } from '../../data/mockOrg'
 import { usePermission } from '../../hooks/usePermission'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
+import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { JDEditor } from '../jd/JDEditor'
 import { AIJDDraft } from '../jd/AIJDDraft'
 
@@ -38,7 +38,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
   const [draftVersion,     setDraftVersion]     = useState(0)
   const [showTemplatePick, setShowTemplatePick] = useState(false)
 
-  const dept = node ? mockDepartments.find(d => d.id === node.departmentId) : null
+  const { departments: wsDepts } = useWorkspaceDepartmentStore()
+  const dept = node ? wsDepts.find(d => d.id === node.departmentId) : null
   const { canEdit, canAdmin } = usePermission()
 
   const initJD    = useJobDescriptionStore(s => s.initJD)
@@ -455,7 +456,7 @@ const ROLE_TYPE_LABEL: Record<string, string> = {
 
 function OverviewTab({ node, dept, allNodes }: {
   node: OrgNode
-  dept: ReturnType<typeof mockDepartments.find> | null
+  dept: { name: string; colour: string } | null | undefined
   allNodes: OrgNode[]
 }) {
   const manager = node.managerId ? allNodes.find(n => n.id === node.managerId) : null

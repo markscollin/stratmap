@@ -1,20 +1,11 @@
 import { useState, useEffect } from 'react'
 import { BookOpen, Search, Plus, FileText, X, MoreHorizontal, Copy, Trash2 } from 'lucide-react'
 import { mockRoleSearchResults } from '../data/mockJDs'
-import { DEPT_COLOURS } from '../data/mockOrg'
 import { useTemplateStore, type Template } from '../store/templateStore'
+import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 import { JDEditor } from '../features/jd/JDEditor'
 
-const DEPT_IDS: Record<string, string> = {
-  'Engineering':  'eng',
-  'Product':      'product',
-  'Design':       'design',
-  'Go-to-Market': 'go',
-  'Operations':   'ops',
-  'Finance':      'finance',
-}
-
-const DEPARTMENTS = ['Engineering', 'Product', 'Design', 'Go-to-Market', 'Operations', 'Finance']
+const FALLBACK_COLOUR = '#94A3B8'
 
 const ROLE_STATUS_META = {
   active:  { label: 'Active',  color: 'var(--success)', bg: 'var(--success-bg)' },
@@ -34,8 +25,11 @@ function TemplateModal({ mode, template, onSave, onClose }: {
   onSave: (data: Pick<Template, 'title' | 'department' | 'tags' | 'responsibilities' | 'requirements' | 'uses' | 'updatedBy'>) => void
   onClose: () => void
 }) {
+  const { departments: wsDepts } = useWorkspaceDepartmentStore()
+  const deptNames = wsDepts.map(d => d.name)
+
   const [title,            setTitle]    = useState(template?.title ?? '')
-  const [department,       setDept]     = useState(template?.department ?? 'Engineering')
+  const [department,       setDept]     = useState(template?.department ?? (wsDepts[0]?.name ?? ''))
   const [tagInput,         setTagInput] = useState(template?.tags.join(', ') ?? '')
   const [responsibilities, setResp]     = useState(template?.responsibilities ?? '')
   const [requirements,     setReq]      = useState(template?.requirements ?? '')
@@ -92,7 +86,10 @@ function TemplateModal({ mode, template, onSave, onClose }: {
 
           <Field label="Department">
             <select value={department} onChange={e => setDept(e.target.value)} style={inputStyle}>
-              {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              {deptNames.length === 0
+                ? <option value="">No departments yet</option>
+                : deptNames.map(d => <option key={d} value={d}>{d}</option>)
+              }
             </select>
           </Field>
 
@@ -267,8 +264,11 @@ export function RolesView() {
   const [editingId,    setEditingId]    = useState<string | null>(null)
   const [deletingId,   setDeletingId]   = useState<string | null>(null)
 
-  const { templates, addTemplate, updateTemplate, deleteTemplate, duplicateTemplate } = useTemplateStore()
+  const { templates, loading, fetchTemplates, addTemplate, updateTemplate, deleteTemplate, duplicateTemplate } = useTemplateStore()
+  const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const templateList = Object.values(templates)
+
+  useEffect(() => { fetchTemplates(); fetchDepts() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs = [
     { id: 'templates' as RoleTab, Icon: BookOpen, label: 'Template library' },
@@ -353,7 +353,9 @@ export function RolesView() {
             </p>
           </div>
 
-          {templateList.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--dim)', fontSize: 13 }}>Loading templates…</div>
+          ) : templateList.length === 0 ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '56px 40px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--brand-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <FileText size={24} color="var(--brand)" />
@@ -367,8 +369,7 @@ export function RolesView() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {templateList.map((role, i) => {
-                const deptId = DEPT_IDS[role.department]
-                const colour = DEPT_COLOURS[deptId] ?? DEPT_COLOURS.eng
+                const colour = wsDepts.find(d => d.name === role.department)?.colour ?? FALLBACK_COLOUR
                 const isHov  = hovTemplate === role.id
                 return (
                   <div
