@@ -583,7 +583,7 @@ npm install @tiptap/extension-placeholder @tiptap/extension-character-count
 **Prompt:** Build AI-assisted job description drafting
 
 - [ ] Install Anthropic SDK: `npm install @anthropic-ai/sdk`
-- [ ] Add VITE_ANTHROPIC_API_KEY to .env.local (note: frontend call only for dev)
+- [x] Add ANTHROPIC_API_KEY (server-side, no VITE_ prefix) to .env.local/Vercel — drafting runs through api/ai/draft.ts, never the browser
 - [ ] Create src/features/jd/AIJDDraft.tsx component
 - [ ] Build "Draft with AI" button:
   - [ ] Shown when JD in draft status + empty or <100 chars

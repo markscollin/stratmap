@@ -2,7 +2,10 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from './components/layout/Layout'
 import { ToastStack } from './components/ui/Toast'
 import { Spotlight } from './components/ui/Spotlight'
+import { CookieConsent } from './components/ui/CookieConsent'
 import { AuthProvider } from './features/auth/AuthProvider'
+import { PrivacyPage, TermsPage } from './pages/LegalPages'
+import { LandingPage }     from './pages/LandingPage'
 import { Dashboard }       from './pages/Dashboard'
 import { ChartView }       from './pages/ChartView'
 import { CanvasView }      from './pages/CanvasView'
@@ -23,6 +26,11 @@ export default function App() {
           {/* Public share view — no auth, no layout */}
           <Route path="/share/:token" element={<SharePage />} />
 
+          {/* Public marketing + legal pages — no auth, no layout */}
+          <Route path="/"        element={<LandingPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms"   element={<TermsPage />} />
+
           {/* Auth routes — no sidebar layout */}
           {/* Clerk uses sub-routes like /sign-in/factor-one, so match with wildcard */}
           <Route path="/sign-in/*"   element={<SignInPage />} />
@@ -31,7 +39,7 @@ export default function App() {
 
           {/* App routes — with sidebar layout */}
           <Route element={<Layout />}>
-            <Route path="/"           element={<Dashboard />} />
+            <Route path="/dashboard"  element={<Dashboard />} />
             <Route path="/charts"     element={<ChartView />} />
             <Route path="/charts/:id" element={<CanvasView />} />
             <Route path="/roles"      element={<RolesView />} />
@@ -43,6 +51,7 @@ export default function App() {
         </Routes>
         <ToastStack />
         <Spotlight />
+        <CookieConsent />
       </AuthProvider>
     </BrowserRouter>
   )

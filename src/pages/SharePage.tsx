@@ -110,6 +110,9 @@ export function SharePage() {
         <a href="/" style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', textDecoration: 'none', letterSpacing: '-.2px' }}>
           StratMap
         </a>
+        <span style={{ fontSize: 12, color: 'var(--dim)' }}>·</span>
+        <a href="/privacy" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Privacy</a>
+        <a href="/terms" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Terms</a>
       </div>
     </div>
   )

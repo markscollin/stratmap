@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS workspaces (
   owner_role text NOT NULL,
   size text NOT NULL,
   plan_tier plan_tier NOT NULL DEFAULT 'free',
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  trial_plan plan_tier,
+  trial_ends_at timestamp,
   created_at timestamp NOT NULL DEFAULT now(),
   updated_at timestamp NOT NULL DEFAULT now()
 );

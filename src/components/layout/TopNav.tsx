@@ -8,7 +8,7 @@ import { useUserStore } from '../../store/userStore'
 import { useClerk } from '@clerk/clerk-react'
 
 const PAGE_LABELS: Record<string, string> = {
-  '/':          'Dashboard',
+  '/dashboard': 'Dashboard',
   '/charts':    'Org Charts',
   '/roles':     'Roles',
   '/headcount': 'Headcount',
@@ -58,9 +58,13 @@ export function TopNav() {
   const { user } = useAuth()
   const { signOut: storeSignOut } = useUserStore()
 
-  // Get Clerk signOut — works in real Clerk mode, undefined in dev-bypass
+  // Get Clerk signOut — works in real Clerk mode, undefined in dev-bypass.
+  // IS_DEV_BYPASS is a module-level build constant, so the hook order is stable
+  // across renders. We can't call useClerk() unconditionally because it throws
+  // when no ClerkProvider is mounted (dev-bypass renders DevBypassProvider instead).
   let clerkSignOut: (() => Promise<void>) | undefined
   if (!IS_DEV_BYPASS) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const clerk = useClerk()
     clerkSignOut = () => clerk.signOut({ redirectUrl: '/sign-in' })
   }

@@ -32,6 +32,22 @@ async function request<T>(
   return res.json() as Promise<T>
 }
 
+// Returns the raw Response so callers can read a streaming body (res.body).
+// Does not throw on non-2xx — the caller inspects res.status / res.ok itself.
+async function postStream(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const authHeaders = await getAuthHeaders()
+  return fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify(body),
+    signal,
+  })
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
@@ -39,4 +55,5 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  postStream,
 }

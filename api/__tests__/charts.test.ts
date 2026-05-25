@@ -12,7 +12,7 @@ vi.mock('../_lib/auth', () => ({
 
 import { requireAuth } from '../_lib/auth'
 import handler from '../charts/index'
-import { setupSchema, cleanDb, seedWorkspace, seedChart, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
+import { setupSchema, cleanDb, seedWorkspace, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'

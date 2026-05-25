@@ -49,6 +49,32 @@ describe('GET /api/workspace', () => {
     await handler(createReq({ method: 'DELETE' }) as never, res as never)
     expect(res._status).toBe(405)
   })
+
+  it('resolves an active admin trial as the effective planTier', async () => {
+    await seedWorkspace()
+    const future = new Date()
+    future.setDate(future.getDate() + 30)
+    await testDb.update(schema.workspaces)
+      .set({ planTier: 'free', trialPlan: 'growth', trialEndsAt: future })
+      .where(eq(schema.workspaces.id, TEST_WS_ID))
+
+    const res = createRes()
+    await handler(createReq() as never, res as never)
+    expect((res._body as { planTier: string }).planTier).toBe('growth')
+  })
+
+  it('falls back to the base planTier when the trial has expired', async () => {
+    await seedWorkspace()
+    const past = new Date()
+    past.setDate(past.getDate() - 1)
+    await testDb.update(schema.workspaces)
+      .set({ planTier: 'starter', trialPlan: 'growth', trialEndsAt: past })
+      .where(eq(schema.workspaces.id, TEST_WS_ID))
+
+    const res = createRes()
+    await handler(createReq() as never, res as never)
+    expect((res._body as { planTier: string }).planTier).toBe('starter')
+  })
 })
 
 describe('POST /api/workspace', () => {

@@ -2,6 +2,8 @@ import { useEffect, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
+import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
+import type { PlanTier } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
 import { api } from '../../lib/apiClient'
 
@@ -23,10 +25,11 @@ function DevBypassProvider({ children }: { children: ReactNode }) {
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
   const { setUser, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
+  const { setPlan } = useBillingStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-  const isPublicPage = pathname.startsWith('/share')
+  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/privacy') || pathname.startsWith('/terms')
 
   useEffect(() => {
     if (isAuthPage || isPublicPage) return
@@ -52,6 +55,7 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
       // Load workspace from API (replaces localStorage-only approach)
       api.get<{
         id: string; name: string; ownerRole: string; size: string; createdAt: string
+        planTier: PlanTier
         members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
       }>('/api/workspace')
         .then(ws => {
@@ -68,6 +72,8 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
             pendingInvites: [],
             createdAt: ws.createdAt ?? new Date().toISOString(),
           })
+          // Sync billing plan from DB — source of truth for planTier
+          setPlan(PLAN_BY_TIER[ws.planTier] ?? FREE_PLAN)
         })
         .catch((err: Error) => {
           if (err.message === 'no-workspace') {

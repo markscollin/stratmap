@@ -10,6 +10,54 @@
 
 ---
 
+## Current State (updated 2026-05-24)
+
+The app has been through a "prepare for paid launch" hardening pass. Tests:
+**143 frontend + 143 backend = 286 passing**; `tsc` clean; `lint` 0 errors; build OK.
+
+**Routing changed:** `/` is now the **public marketing landing page**; the authed
+Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
+`/share/:token`, `/privacy`, `/terms`. These are whitelisted in `AuthProvider`'s
+`isPublicPage`.
+
+**Done in code (this pass):**
+- **AI drafting is server-side** — `api/ai/draft.ts` streams from a server-only
+  `ANTHROPIC_API_KEY` (the old browser `dangerouslyAllowBrowser` client was removed).
+  Plan-gated server-side (free → 403).
+- **Stripe billing** — `api/checkout.ts`, `api/webhooks/stripe.ts`,
+  `api/admin/grant-trial.ts` (admin trial override via `x-admin-secret`). Effective
+  plan resolved in `api/workspace.ts` (trial overrides base tier). Fully tested.
+- **Auth bypass hardened** — dev bypass (`x-dev-user`) now only works on local/unset
+  envs, never on `preview` or `production` (`api/_lib/auth.ts`).
+- **Plan tiers centralized** — `PLAN_BY_TIER` + `ENTERPRISE_PLAN` exported from
+  `billingStore`; `usePlanLimits` treats `-1` as unlimited.
+- **Legal + consent** — `/privacy`, `/terms` (`LegalPages.tsx`, template content,
+  needs lawyer review) + app-wide `CookieConsent` banner.
+- **Sentry** — `@sentry/react` init in `main.tsx` (`VITE_SENTRY_DSN`) + ErrorBoundary;
+  `api/_lib/sentry.ts` `reportError` wired into checkout/webhook/ai-draft/invites.
+- **Email (Resend)** — `api/_lib/email.ts` (graceful no-key fallback) + real
+  `POST /api/workspace/invites` (persists `pending_invites`, emails invitees);
+  onboarding now sends invites.
+
+**Env vars (all no-op until set):** `ANTHROPIC_API_KEY` (server), `RESEND_API_KEY`
+(server) + optional `EMAIL_FROM`, `SENTRY_DSN` (server), `VITE_SENTRY_DSN` (client).
+Stripe + Clerk + `ADMIN_SECRET` + `DATABASE_URL` already in `.env.local`.
+
+**Launch gates still requiring YOU (dashboard/ops, not code):** Clerk production keys
+(currently `pk_test_`), Vercel Pro upgrade, custom domain. Plus: have the legal page
+content reviewed by a lawyer.
+
+**Known issue — e2e:** `npm run test:e2e` currently fails because `vercel dev` loads
+the real `VITE_CLERK_PUBLISHABLE_KEY` from `.env.local`, so dev-bypass never engages
+and authed routes redirect to Clerk sign-in. The e2e setup needs a way to run without
+the real Clerk key before the suite is reliable again.
+
+**Deferred:** Stripe webhook idempotency — add a `stripe_events` table + dedup guard
+*when* billing-receipt emails are wired (replays would double-send). Not needed yet
+(handlers are idempotent set-ops).
+
+---
+
 ## Repository Access
 
 ✅ **SSH is configured and working.** All git operations (push, pull, commit) work automatically without tokens or credential sharing. Your SSH private key is on your local machine at `~/.ssh/`; git uses it automatically.
@@ -61,7 +109,7 @@ src/
 - **Lucide React** (icons)
 - **TipTap 3** (rich text editor)
 - **Clerk** (auth) + dev-bypass mode (no Clerk key needed in dev)
-- **Anthropic SDK** (AI JD drafting — requires `VITE_ANTHROPIC_API_KEY` in `.env.local`)
+- **Anthropic SDK** (AI JD drafting — server-side via `api/ai/draft.ts`; requires `ANTHROPIC_API_KEY` in `.env.local`/Vercel env. Never use a `VITE_` prefix — that would bundle the key into the public client.)
 - **Vercel Serverless Functions** (`api/` directory, `@vercel/node`)
 - **Neon Postgres** (`@neondatabase/serverless`) + **Drizzle ORM** (`drizzle-orm`, `drizzle-kit`)
 - **PGlite** (`@electric-sql/pglite`) — in-process Postgres for backend tests
@@ -117,7 +165,7 @@ src/
 - templateStore: CRUD with localStorage, seeded from mockRoleTemplates
 - RolesView: full template management UI (create/edit/duplicate/delete)
 - JDPanel: inline template picker + AI draft button gated by plan tier
-- **⚠️ Requires `VITE_ANTHROPIC_API_KEY=sk-ant-...` in `.env.local` for AI drafting to work**
+- **⚠️ Requires `ANTHROPIC_API_KEY=sk-ant-...` (server-side, no `VITE_` prefix) in `.env.local` for AI drafting to work**
 - User has Anthropic account + $21 payment — verify billing balance at console.anthropic.com before testing
 
 ### Sprint 7: Auto-layout + Role Types + Launch Polish ✅
@@ -153,7 +201,8 @@ src/
 - `src/features/nodes/NodeCard.tsx` — node card with role type badges
 - `src/features/nodes/NodeModal.tsx` — add/edit modal with role type selector
 - `src/features/panel/JDPanel.tsx` — JD panel with template picker, AI draft, editable salary band
-- `src/features/jd/AIJDDraft.tsx` — Anthropic streaming component
+- `src/features/jd/AIJDDraft.tsx` — AI draft UI; streams from `/api/ai/draft` (no SDK in the browser)
+- `api/ai/draft.ts` — server-side Anthropic streaming route (plan-gated, reads `ANTHROPIC_API_KEY`)
 - `src/store/chartStore.ts` — chart CRUD + `updateChartPublic(id, isPublic)`
 - `src/store/templateStore.ts` — template CRUD + seeding
 - `src/store/billingStore.ts` — plan tier + usage + AI draft limits
@@ -171,9 +220,9 @@ src/
 
 1. ~~**JD store API sync**~~ ✅ Done (2026-05-20)
 2. ~~**Template store API sync**~~ ✅ Done (2026-05-20)
-3. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `VITE_ANTHROPIC_API_KEY` to `.env.local`, test AI drafting
+3. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `ANTHROPIC_API_KEY` (server-side) to Vercel env, test AI drafting in production
 4. ~~**Share Link (basic)**~~ ✅ Done (2026-05-20) — URL-encoded snapshot via `src/utils/shareLink.ts` + `/share/:token` route + `SharePage.tsx`
-5. **Stripe webhooks** — handle payment completion + automatic plan upgrade
+5. **Stripe webhooks** — handle payment completion + automatic plan upgrade [Phase 1 launch gate]
 6. ~~**Filter tool**~~ ✅ Done (2026-05-20) — dept/status/role-type filter panel with opacity dimming on canvas
 7. ~~**Salary band**~~ ✅ Done (2026-05-20) — editable min/max/currency inputs for admin/owner in JDPanel OverviewTab; locked for others
 8. ~~**Headcount forecasting**~~ ✅ Done (2026-05-20) — full kanban HeadcountView, workspace departments, API routes, stores, 111 backend tests total
@@ -183,23 +232,107 @@ src/
 
 ---
 
-## Remaining Work
+## Commercial Launch Roadmap
 
-### Stripe Webhooks
-Handle payment completion → automatic plan upgrade in the database.
+**Direction:** Go straight to paid. No waitlist. Launch with all tiers live (Free, Starter, Growth, Enterprise). Friends and early adopters receive access via Stripe promotion codes or admin-granted trial overrides — not a separate product mode.
+
+---
+
+### Phase 1: Critical Blockers — must all land before launch
+
+> **Status (2026-05-25):** Code is done for #1 (Stripe webhooks + checkout + admin
+> trial), #3 (Resend email + invites), and #6 (legal pages + cookie consent + landing).
+> Remaining are dashboard/ops actions only the owner can do: **#2 Clerk production keys,
+> #4 Vercel Pro, #5 custom domain** — plus a lawyer review of the legal page content.
+> See the "Current State" section at the top for the full picture.
+
+#### 1. Stripe Webhooks (highest priority)
+Handle payment completion → automatic plan upgrade.
 - New API route: `POST /api/webhooks/stripe` — verify `Stripe-Signature` header, handle `checkout.session.completed` event
-- On success: update `workspaces.planTier` to the purchased tier
+- On success: update `workspaces.planTier` to the purchased tier, store `stripeCustomerId` and `stripeSubscriptionId`
 - Requires `STRIPE_WEBHOOK_SECRET` env var (from Stripe dashboard → Webhooks)
-- Test locally with `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+- Test locally: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+- Schema changes needed: add `stripe_customer_id`, `stripe_subscription_id`, `plan_expires_at` to `workspaces` table
 
-### View-Only Workspace Role (External Invite)
-Allow external stakeholders to join a workspace as permanent viewers without a full editor seat.
-- New role tier: `external-viewer` (below `viewer`) — view only, no edit/export/templates
-- Invite flow: Settings → Members → "Invite external viewer" → magic link email (needs email provider)
-- External viewer sees stripped-down layout (chart list + read-only canvas only)
-- Does not count against seat limits
-- Backend: `workspaceMembers` table gains `isExternal: boolean`; `requireAuth` respects the role
-- **Blocked on email provider** — no email service configured yet (Resend/SendGrid/Postmark)
+#### 2. Clerk Production Instance
+Current key is `pk_test_` — test-mode Clerk sessions are not production-safe.
+- Create a Clerk production application in Clerk dashboard
+- Swap `VITE_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` to production keys in Vercel env
+- Enable Google OAuth in the Clerk production app
+- Verify sign-up → onboarding → workspace creation flow end-to-end
+
+#### 3. Email Provider (Resend)
+No transactional email is wired. Blocks: workspace invites, billing receipts.
+- Install: `npm install resend`
+- Add `RESEND_API_KEY` to Vercel env
+- Emails needed at launch: workspace invite (magic link), billing confirmation
+- Create `api/_lib/email.ts` — thin wrapper around Resend SDK
+- View-only external-viewer invite flow unblocked once email is live
+
+#### 4. Vercel Pro Upgrade
+Current plan is Hobby — Vercel ToS prohibits commercial use on Hobby.
+- Upgrade to Pro ($20/mo) in Vercel billing settings
+- No code changes required
+
+#### 5. Custom Domain
+Currently `stratmap-seven.vercel.app` — not suitable for a commercial product.
+- Purchase domain (e.g. `stratmap.app`)
+- Add to Vercel project → Domains
+- Update all hardcoded URLs (share links, OG tags, email templates)
+
+#### 6. Legal Pages
+Required before charging users, especially EU (GDPR).
+- `/privacy` — Privacy Policy
+- `/terms` — Terms of Service
+- Cookie consent banner (required for EU)
+- Add links to these in the footer of SharePage, PricingPage, OnboardingPage
+
+---
+
+### Friend & Early Adopter Access
+
+Two mechanisms — choose based on situation:
+
+**A. Stripe Promotion Codes (preferred for paying customers)**
+Stripe natively supports coupons and promotion codes:
+- Create a coupon in Stripe dashboard (e.g. `100% off for 3 months`, `50% off forever`)
+- Generate promotion codes from that coupon (e.g. `EARLYBIRD`, `FRIEND2026`)
+- Add `allowPromotionCodes: true` to Stripe checkout session creation in `CheckoutButton.tsx`
+- User enters the code at Stripe checkout — no backend code needed
+
+**B. Admin Trial Override (for gifted/comped access)**
+For friends who shouldn't go through Stripe at all:
+- Add `trial_plan` (`planTier`) and `trial_ends_at` (`timestamp`) columns to `workspaces` table
+- In `api/_lib/auth.ts` `requireAuth`, resolve effective plan: if `trial_ends_at > now()`, use `trial_plan`, else use `plan_tier`
+- New internal API route: `POST /api/admin/grant-trial` — protected by a `ADMIN_SECRET` env var header, sets `trial_plan` + `trial_ends_at` on a workspace
+- This lets you curl/Postman a workspace into Growth for 90 days without touching Stripe
+
+Both mechanisms work independently and can coexist.
+
+---
+
+### Phase 2: Pre-Launch Polish (after Phase 1 is live)
+
+| Item | Notes |
+|---|---|
+| AI drafting e2e | Add `ANTHROPIC_API_KEY` (server-side) to Vercel env; verify streaming works in production build |
+| Free tier PNG watermark | Add "Made with StratMap" overlay to PNG export when plan = free |
+| Landing/marketing page | Public `/` (currently redirects to sign-in). Needs value prop, screenshot/demo, pricing link, CTA |
+| Error monitoring | Sentry — catch production errors. Add `SENTRY_DSN` to Vercel env |
+| Soft launch checklist | Run through BACKLOG.md checklist: OAuth, mobile sidebar, Playwright e2e clean pass |
+| Stripe live mode | Swap from Stripe test keys to live keys in Vercel env |
+
+---
+
+### Phase 3: Post-Launch Growth (roadmap, not launch blockers)
+
+- **Real-time collaboration** — Growth plan feature, currently unbuilt. Likely needs Liveblocks or PartyKit (WebSockets).
+- **Comments** — commenter permission role exists in schema but feature not built
+- **View-only external-viewer role** — requires email provider (Phase 1) + `isExternal` flag on `workspaceMembers`
+- **HRIS integrations** — Rippling, BambooHR, Workday. Enterprise upsell.
+- **SSO / SAML** — Enterprise tier gate; use WorkOS or BoxyHQ
+- **Audit log** — Enterprise compliance requirement
+- **Mobile canvas** — read-only at minimum; editing stays desktop-only
 
 ---
 
@@ -221,13 +354,13 @@ npx tsc -p tsconfig.app.json --noEmit
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 141 tests
+npm run test:run       # 143 tests
 
 # Run backend API tests
-npm run test:api       # 62 tests (PGlite, no network)
+npm run test:api       # 143 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 203 tests total
+npm run test:all       # 286 tests total
 
 # Build for production
 npm run build
@@ -249,8 +382,8 @@ git push
 
 | Suite | Config | Environment | Count | Command |
 |---|---|---|---|---|
-| Frontend | `vite.config.ts` | jsdom | 141 | `npm run test:run` |
-| Backend API | `vitest.api.config.ts` | node | 111 | `npm run test:api` |
+| Frontend | `vite.config.ts` | jsdom | 143 | `npm run test:run` |
+| Backend API | `vitest.api.config.ts` | node | 143 | `npm run test:api` |
 
 Frontend tests: Vitest + RTL, co-located `__tests__/` folders in `src/`. Reset Zustand stores in `beforeEach` with `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for timers.
 
@@ -302,7 +435,7 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
   - `__devTools.setPermission('admin'|'editor'|'viewer'|...)` — test permission levels
   - `__devTools.setPlan('free'|'starter'|'growth')` — test billing tiers
 - **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, all API requests fall back to `u-dev`/`ws-dev` identity.
-- **Sprint 6 AI drafting** — Blocked on Anthropic API key. Add `VITE_ANTHROPIC_API_KEY=sk-ant-...` to `.env.local` after verifying billing balance at console.anthropic.com
+- **Sprint 6 AI drafting** — Runs server-side via `api/ai/draft.ts` (plan-gated, streams). Add `ANTHROPIC_API_KEY=sk-ant-...` (server-side, no `VITE_` prefix) to `.env.local`/Vercel after verifying billing balance at console.anthropic.com
 - **Schema changes** — Edit `src/lib/db/schema.ts` then run `npx drizzle-kit push` to apply to Neon (reads `DATABASE_URL` from `.env.local`)
 - **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth). `SharePage` handles both 10-char short codes and legacy URL tokens.
 - **Salary band** — Stored on `job_descriptions` table (`salary_band_min`, `salary_band_max`, `salary_currency`). Visible/editable only to `admin`/`owner` permission in JDPanel OverviewTab. Locked placeholder shown to others.

@@ -23,7 +23,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from(workspaceMembers)
         .where(eq(workspaceMembers.workspaceId, auth.workspaceId))
 
-      return res.json({ ...ws, members })
+      // Resolve effective plan: admin trial overrides Stripe plan when active
+      const isTrialActive = ws.trialEndsAt && ws.trialEndsAt > new Date() && ws.trialPlan
+      const effectivePlanTier = isTrialActive ? ws.trialPlan! : ws.planTier
+
+      return res.json({ ...ws, planTier: effectivePlanTier, members })
     }
 
     if (req.method === 'POST') {

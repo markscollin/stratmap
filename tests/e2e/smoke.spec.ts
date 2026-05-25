@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Dashboard', () => {
   test('loads and shows all four stat cards', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/dashboard')
     await expect(page.getByText('Total headcount', { exact: true })).toBeVisible()
     await expect(page.getByText('Open roles', { exact: true })).toBeVisible()
     await expect(page.getByText('Planned hires', { exact: true })).toBeVisible()
@@ -13,7 +13,7 @@ test.describe('Dashboard', () => {
   })
 
   test('sidebar navigation is visible', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/dashboard')
     await expect(page.getByRole('button', { name: 'Org Charts', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Roles', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Headcount', exact: true })).toBeVisible()

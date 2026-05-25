@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
 
 const NAV_ITEMS = [
-  { path: '/',          label: 'Dashboard', Icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { path: '/charts',    label: 'Org Charts', Icon: Network },
   { path: '/roles',     label: 'Roles',      Icon: Briefcase },
   { path: '/headcount', label: 'Headcount',  Icon: BarChart2 },

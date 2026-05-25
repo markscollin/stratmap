@@ -28,6 +28,12 @@ export const workspaces = pgTable('workspaces', {
   ownerRole: text('owner_role').notNull(),     // WorkspaceRole
   size: text('size').notNull(),                // CompanySize
   planTier: planTierEnum('plan_tier').notNull().default('free'),
+  // Stripe billing
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)
+  trialPlan: planTierEnum('trial_plan'),
+  trialEndsAt: timestamp('trial_ends_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

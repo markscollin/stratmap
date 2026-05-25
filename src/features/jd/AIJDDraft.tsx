@@ -1,19 +1,15 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sparkles, Lock, ChevronDown, ChevronUp } from 'lucide-react'
-import Anthropic from '@anthropic-ai/sdk'
 import type { OrgNode } from '../../types'
 import type { JobDescription } from '../../types/jd'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
+import { api } from '../../lib/apiClient'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 
-// NOTE: In production this should route through a backend proxy to protect the API key.
-// Direct browser calls are for development only.
-const client = new Anthropic({
-  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY ?? '',
-  dangerouslyAllowBrowser: true,
-})
+// The Anthropic key lives server-side only — drafting routes through /api/ai/draft,
+// which streams the response back. The key is never exposed to the browser.
 
 type Tone = 'Professional' | 'Direct' | 'Startup' | 'Inclusive'
 const TONES: Tone[] = ['Professional', 'Direct', 'Startup', 'Inclusive']
@@ -63,8 +59,9 @@ export function AIJDDraft({
   const [isGenerating, setGenerating]   = useState(false)
   const [streamText,   setStreamText]   = useState('')
   const [showUpgrade,  setShowUpgrade]  = useState(false)
-  const accRef    = useRef('')
-  const streamRef = useRef<ReturnType<typeof client.messages.stream> | null>(null)
+  const [notConfigured, setNotConfigured] = useState(false)
+  const accRef     = useRef('')
+  const abortRef   = useRef<AbortController | null>(null)
 
   const { canUseAIDrafting, currentTier } = usePlanLimits()
   const { usage, incrementUsage }         = useBillingStore()
@@ -72,7 +69,6 @@ export function AIJDDraft({
 
   const isLocked   = !canUseAIDrafting()
   const totalChars = jd.responsibilities.length + jd.requirements.length
-  const hasApiKey  = !!import.meta.env.VITE_ANTHROPIC_API_KEY
   const devBlocked = isDevLimitHit()
 
   if (jd.status !== 'draft' || totalChars >= 100) return null
@@ -83,44 +79,35 @@ export function AIJDDraft({
   }
 
   const handleGenerate = async () => {
-    if (!hasApiKey || devBlocked) return
+    if (devBlocked) return
     setGenerating(true)
+    setNotConfigured(false)
     accRef.current = ''
     setStreamText('')
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
-      const stream = client.messages.stream({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: 'You are an expert HR professional writing job descriptions for a modern tech company. Write clearly, inclusively, and concisely. Do not include salary information. Do not use jargon.',
-        messages: [{
-          role: 'user',
-          content: `Write a job description for a ${node.title} role in the ${deptName} department. Tone: ${tone}.${notes ? ` Additional context: ${notes}` : ''}
+      const res = await api.postStream(
+        '/api/ai/draft',
+        { title: node.title, deptName, tone, notes },
+        controller.signal,
+      )
 
-Output EXACTLY this format with no preamble:
+      if (res.status === 503) { setNotConfigured(true); return }
+      if (res.status === 403) { setShowUpgrade(true); return }
+      if (!res.ok || !res.body) throw new Error(`AI draft failed (${res.status})`)
 
-RESPONSIBILITIES:
-- [bullet 1]
-- [bullet 2]
-- [bullet 3]
-- [bullet 4]
-- [bullet 5]
-
-REQUIREMENTS:
-- [bullet 1]
-- [bullet 2]
-- [bullet 3]
-- [bullet 4]`,
-        }],
-      })
-      streamRef.current = stream
-
-      stream.on('text', (text) => {
-        accRef.current += text
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        accRef.current += decoder.decode(value, { stream: true })
         setStreamText(accRef.current)
-      })
+      }
 
-      await stream.finalMessage()
       const { responsibilities, requirements } = parseAIDraft(accRef.current)
       onDraftComplete(responsibilities, requirements)
       incrementUsage('aiDraftsUsed')
@@ -133,12 +120,12 @@ REQUIREMENTS:
       }
     } finally {
       setGenerating(false)
-      streamRef.current = null
+      abortRef.current = null
     }
   }
 
   const handleCancel = () => {
-    streamRef.current?.abort()
+    abortRef.current?.abort()
     setGenerating(false)
     setIsOpen(false)
     setStreamText('')
@@ -251,23 +238,23 @@ REQUIREMENTS:
               </button>
               <button
                 onClick={handleGenerate}
-                disabled={isGenerating || !hasApiKey || devBlocked}
+                disabled={isGenerating || devBlocked}
                 style={{
                   flex: 2, padding: '7px',
-                  background: isGenerating || !hasApiKey || devBlocked ? 'var(--raised)' : 'var(--grad-purple)',
+                  background: isGenerating || devBlocked ? 'var(--raised)' : 'var(--grad-purple)',
                   border: 'none', borderRadius: 7,
-                  color: isGenerating || !hasApiKey || devBlocked ? 'var(--muted)' : '#fff',
+                  color: isGenerating || devBlocked ? 'var(--muted)' : '#fff',
                   fontSize: 12, fontWeight: 600,
-                  cursor: isGenerating || !hasApiKey || devBlocked ? 'default' : 'pointer',
+                  cursor: isGenerating || devBlocked ? 'default' : 'pointer',
                 }}
               >
                 {isGenerating ? 'Writing…' : 'Generate draft'}
               </button>
             </div>
 
-            {!hasApiKey && (
+            {notConfigured && (
               <p style={{ marginTop: 8, fontSize: 10, color: 'var(--warn)', textAlign: 'center', lineHeight: 1.4 }}>
-                Add VITE_ANTHROPIC_API_KEY to .env.local to enable AI drafting
+                AI drafting isn’t configured on the server yet
               </p>
             )}
             {devBlocked && (

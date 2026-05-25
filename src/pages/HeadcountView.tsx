@@ -517,7 +517,7 @@ function ChartFilter({ value, onChange }: { value: Set<string>; onChange: (v: Se
 
   const toggle = (id: string) => {
     const next = new Set(value)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id); else next.add(id)
     onChange(next)
   }
 

@@ -462,17 +462,17 @@ function FilterBtn({
 
   const toggleDept = (id: string) => {
     const next = new Set(filters.depts)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id); else next.add(id)
     onFiltersChange({ ...filters, depts: next })
   }
   const toggleRoleType = (rt: RoleType) => {
     const next = new Set(filters.roleTypes)
-    next.has(rt) ? next.delete(rt) : next.add(rt)
+    if (next.has(rt)) next.delete(rt); else next.add(rt)
     onFiltersChange({ ...filters, roleTypes: next })
   }
   const toggleStatus = (s: NodeStatus) => {
     const next = new Set(filters.statuses)
-    next.has(s) ? next.delete(s) : next.add(s)
+    if (next.has(s)) next.delete(s); else next.add(s)
     onFiltersChange({ ...filters, statuses: next })
   }
 

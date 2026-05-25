@@ -92,6 +92,17 @@ export function OnboardingPage() {
         pendingInvites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
         createdAt: ws.createdAt ?? now,
       })
+      // Persist + email invites (best-effort — failure shouldn't block onboarding)
+      if (filledInvites.length > 0) {
+        try {
+          await api.post('/api/workspace/invites', {
+            invites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission })),
+          })
+        } catch (inviteErr) {
+          console.error('[onboarding] sending invites failed:', inviteErr)
+        }
+      }
+
       const firstName = user?.name.split(' ')[0] ?? 'there'
       addToast(`Welcome to StratMap, ${firstName}!`, 'success')
       navigate('/charts')
@@ -193,6 +204,11 @@ export function OnboardingPage() {
             canAddMore={invites.length < 5}
           />
         )}
+      </div>
+
+      <div style={{ marginTop: 24, display: 'flex', gap: 14, fontSize: 12, color: 'var(--muted)' }}>
+        <a href="/privacy" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Privacy Policy</a>
+        <a href="/terms" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Terms of Service</a>
       </div>
     </div>
   )

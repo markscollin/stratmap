@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Check, X } from 'lucide-react'
 import { CheckoutButton } from '../features/billing/CheckoutButton'
 import { usePlanLimits } from '../hooks/usePlanLimits'
+import { LegalFooter } from './LegalPages'
 
 export function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
@@ -291,6 +292,10 @@ export function PricingPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div style={{ maxWidth: 700, margin: '40px auto 0' }}>
+        <LegalFooter />
       </div>
     </div>
   )

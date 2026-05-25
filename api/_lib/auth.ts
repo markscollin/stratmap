@@ -11,6 +11,14 @@ export interface AuthContext {
 const DEV_USER_ID = 'u-dev'
 const DEV_WORKSPACE_ID = 'ws-dev'
 
+// Dev auth bypass is allowed only on local/unset environments — never on deployed
+// Vercel environments. Preview deployments have public URLs, so they must require
+// real auth just like production.
+function isDevBypassAllowed(): boolean {
+  const env = process.env.VERCEL_ENV
+  return env !== 'production' && env !== 'preview'
+}
+
 async function ensureDevWorkspace() {
   const [existing] = await db
     .select({ id: workspaces.id })
@@ -44,13 +52,13 @@ export async function requireUser(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<{ userId: string } | null> {
-  const isProduction = process.env.VERCEL_ENV === 'production'
+  const bypassAllowed = isDevBypassAllowed()
 
-  if (req.headers['x-dev-user'] === 'true' && !isProduction) {
+  if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
     return { userId: DEV_USER_ID }
   }
 
-  if (!process.env.CLERK_SECRET_KEY && !isProduction) {
+  if (!process.env.CLERK_SECRET_KEY && bypassAllowed) {
     return { userId: DEV_USER_ID }
   }
 
@@ -76,17 +84,17 @@ export async function requireAuth(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<AuthContext | null> {
-  const isProduction = process.env.VERCEL_ENV === 'production'
+  const bypassAllowed = isDevBypassAllowed()
 
-  // Dev bypass via header (only outside production)
-  if (req.headers['x-dev-user'] === 'true' && !isProduction) {
+  // Dev bypass via header (local/unset environments only — not preview or production)
+  if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
     await ensureDevWorkspace()
     return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID }
   }
 
-  // If no Clerk secret key and not in production, fall back to dev identity
+  // If no Clerk secret key on a local/unset environment, fall back to dev identity
   // so local development works without full Clerk setup
-  if (!process.env.CLERK_SECRET_KEY && !isProduction) {
+  if (!process.env.CLERK_SECRET_KEY && bypassAllowed) {
     console.warn('[auth] CLERK_SECRET_KEY not set — using dev identity')
     await ensureDevWorkspace()
     return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID }

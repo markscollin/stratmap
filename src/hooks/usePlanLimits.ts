@@ -15,6 +15,7 @@ export function usePlanLimits() {
 
   const isAtNodeLimit = useCallback(
     (chartId: string) => {
+      if (plan.maxNodesPerChart === -1) return false
       const chart = charts.find((c) => c.id === chartId)
       if (!chart) return false
       return chart.nodes.length >= plan.maxNodesPerChart
@@ -23,6 +24,7 @@ export function usePlanLimits() {
   )
 
   const isAtSeatLimit = useCallback(() => {
+    if (plan.seats === -1) return false
     return usage.seatsUsed >= plan.seats
   }, [plan.seats, usage.seatsUsed])
 

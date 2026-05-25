@@ -971,16 +971,15 @@ Version history indicator:
 ```
 Build AI-assisted job description drafting in StratMap.
 
-This feature calls the Anthropic API directly from the frontend.
-Use the claude-sonnet-4-20250514 model.
+This feature calls the Anthropic API from a server-side route
+(api/ai/draft.ts), which streams the result back to the frontend.
+Use the claude-sonnet-4-6 model.
 
 API call setup:
-  The API key must come from an environment variable: 
-  VITE_ANTHROPIC_API_KEY
-  
-  Important: in production, this call should go through a backend 
-  proxy to protect the API key. For now we are calling directly 
-  for development purposes only. Add a comment to this effect.
+  The API key must come from a SERVER-side environment variable:
+  ANTHROPIC_API_KEY  (never a VITE_ prefix — that bundles the key
+  into the public client). The browser never sees the key; the
+  component reads the stream from /api/ai/draft.
 
 File: src/features/jd/AIJDDraft.tsx
 

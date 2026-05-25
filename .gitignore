@@ -8,6 +8,10 @@ dist/
 dist-ssr/
 build/
 
+# Test artifacts
+test-results/
+playwright-report/
+
 # Vite
 *.local
 .vite/

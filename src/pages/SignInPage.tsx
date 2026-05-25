@@ -3,7 +3,7 @@ import { IS_DEV_BYPASS } from '../features/auth/useAuth'
 import { Navigate } from 'react-router-dom'
 
 export function SignInPage() {
-  if (IS_DEV_BYPASS) return <Navigate to="/" replace />
+  if (IS_DEV_BYPASS) return <Navigate to="/dashboard" replace />
 
   return (
     <div style={{
@@ -22,7 +22,7 @@ export function SignInPage() {
 }
 
 export function SignUpPage() {
-  if (IS_DEV_BYPASS) return <Navigate to="/" replace />
+  if (IS_DEV_BYPASS) return <Navigate to="/dashboard" replace />
 
   return (
     <div style={{

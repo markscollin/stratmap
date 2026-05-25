@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useBillingStore, FREE_PLAN, STARTER_PLAN, GROWTH_PLAN } from '../billingStore'
+import { useBillingStore, FREE_PLAN, STARTER_PLAN, GROWTH_PLAN, ENTERPRISE_PLAN, PLAN_BY_TIER } from '../billingStore'
 
 describe('billingStore', () => {
   beforeEach(() => {
@@ -57,5 +57,17 @@ describe('billingStore', () => {
     expect(GROWTH_PLAN.tier).toBe('growth')
     expect(GROWTH_PLAN.maxCharts).toBe(-1)
     expect(GROWTH_PLAN.maxNodesPerChart).toBe(500)
+  })
+
+  it('ENTERPRISE_PLAN is unlimited and PLAN_BY_TIER maps every tier', () => {
+    expect(ENTERPRISE_PLAN.tier).toBe('enterprise')
+    expect(ENTERPRISE_PLAN.seats).toBe(-1)
+    expect(ENTERPRISE_PLAN.maxCharts).toBe(-1)
+    expect(ENTERPRISE_PLAN.maxNodesPerChart).toBe(-1)
+
+    expect(PLAN_BY_TIER.free).toBe(FREE_PLAN)
+    expect(PLAN_BY_TIER.starter).toBe(STARTER_PLAN)
+    expect(PLAN_BY_TIER.growth).toBe(GROWTH_PLAN)
+    expect(PLAN_BY_TIER.enterprise).toBe(ENTERPRISE_PLAN)
   })
 })

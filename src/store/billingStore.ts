@@ -42,6 +42,25 @@ const GROWTH_PLAN: Plan = {
   renewsAt: null,
 }
 
+// -1 means unlimited (see usePlanLimits)
+const ENTERPRISE_PLAN: Plan = {
+  tier: 'enterprise',
+  seats: -1,
+  maxCharts: -1,
+  maxNodesPerChart: -1,
+  billingCycle: null,
+  renewsAt: null,
+}
+
+// Single source of truth for tier → Plan. Use this everywhere a planTier string
+// from the API needs to become a Plan object.
+export const PLAN_BY_TIER: Record<PlanTier, Plan> = {
+  free: FREE_PLAN,
+  starter: STARTER_PLAN,
+  growth: GROWTH_PLAN,
+  enterprise: ENTERPRISE_PLAN,
+}
+
 const DEFAULT_USAGE: UsageLimits = {
   chartsUsed: 0,
   seatsUsed: 1,
@@ -108,4 +127,4 @@ export const useBillingStore = create<BillingStore>((set) => {
   }
 })
 
-export { FREE_PLAN, STARTER_PLAN, GROWTH_PLAN }
+export { FREE_PLAN, STARTER_PLAN, GROWTH_PLAN, ENTERPRISE_PLAN }

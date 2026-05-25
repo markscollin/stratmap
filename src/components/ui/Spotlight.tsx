@@ -24,7 +24,7 @@ const PAGES: Result[] = [
 ]
 
 const PAGE_ROUTES: Record<string, string> = {
-  'p-dashboard': '/', 'p-charts': '/charts',
+  'p-dashboard': '/dashboard', 'p-charts': '/charts',
   'p-roles': '/roles', 'p-headcount': '/headcount', 'p-settings': '/settings',
 }
 

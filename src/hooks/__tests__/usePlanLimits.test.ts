@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { usePlanLimits } from '../usePlanLimits'
-import { useBillingStore, FREE_PLAN, STARTER_PLAN, GROWTH_PLAN } from '../../store/billingStore'
+import { useBillingStore, FREE_PLAN, STARTER_PLAN, GROWTH_PLAN, ENTERPRISE_PLAN } from '../../store/billingStore'
 import { useChartStore } from '../../store/chartStore'
 import type { OrgChart } from '../../types'
 
@@ -71,6 +71,20 @@ describe('usePlanLimits', () => {
     })
     ;({ result } = renderHook(() => usePlanLimits()))
     expect(result.current.isAtNodeLimit('chart-1')).toBe(true)
+  })
+
+  it('never reports at node or seat limit for enterprise plan (-1 = unlimited)', () => {
+    useBillingStore.setState({
+      plan: ENTERPRISE_PLAN,
+      usage: { chartsUsed: 0, seatsUsed: 999, aiDraftsUsed: 0, aiDraftsLimit: -1 },
+    })
+    useChartStore.setState({
+      charts: [{ ...mockChart, nodes: Array(1000).fill(mockChart.nodes[0]).map((n, i) => ({ ...n, id: `n-${i}` })) }],
+    })
+    const { result } = renderHook(() => usePlanLimits())
+    expect(result.current.isAtNodeLimit('chart-1')).toBe(false)
+    expect(result.current.isAtSeatLimit()).toBe(false)
+    expect(result.current.isAtChartLimit()).toBe(false)
   })
 
   it('reports at seat limit correctly', () => {

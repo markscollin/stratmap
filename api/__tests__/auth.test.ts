@@ -136,4 +136,23 @@ describe('requireAuth', () => {
     expect(result).toBeNull()
     expect(res._status).toBe(401)
   })
+
+  it('does not apply dev bypass on preview deployments', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    process.env.CLERK_SECRET_KEY = 'sk_live_test'
+    const req = createReq({ headers: { 'x-dev-user': 'true' } })
+    const res = createRes()
+    const result = await requireAuth(req as never, res as never)
+    expect(result).toBeNull()
+    expect(res._status).toBe(401)
+  })
+
+  it('does not fall back to dev identity on preview when Clerk key is absent', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    const req = createReq()
+    const res = createRes()
+    const result = await requireAuth(req as never, res as never)
+    expect(result).toBeNull()
+    expect(res._status).toBe(401)
+  })
 })
