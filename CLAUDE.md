@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**143 frontend + 281 backend = 424 passing** (after Phase 0); `tsc` clean; `lint` 0 errors; build OK.
+**143 frontend + 283 backend = 426 passing** (after Phase 0 + migrations); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -76,7 +76,15 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - **Share links** only resolve while `charts.isPublic` is true; codes are 16 chars.
 - Security headers in `vercel.json` (CSP is Report-Only for now).
 - Tests: `api/__tests__/security.test.ts`. Use `seedMember(userId, role)` to test roles.
-- ⚠️ Schema change → run `npx drizzle-kit push` before deploying.
+- Verified against a Neon dev branch with `npm run test:live` (`api/__live__/`).
+
+## Migrations (roadmap 3.2, 2026-11-05)
+
+Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
+(`vercel.json` buildCommand → `npm run vercel-build` → build, then `scripts/migrate.mjs --deploy`).
+Workflow: edit `src/lib/db/schema.ts` → `npm run db:generate` → review and commit the SQL.
+**Never `drizzle-kit push` against production.** Migrations must be additive (expand/contract),
+because they run while the old code is still live. Full details are in `docs/MIGRATIONS.md`.
 
 ---
 
@@ -211,7 +219,7 @@ src/
 - All stores and pages wired to real API — data persists across reloads
 - SPA routing: `vercel.json = {}` (dev), `public/404.html` → sessionStorage redirect (production)
 - 111 backend tests using PGlite (`npm run test:api`)
-- Schema: `src/lib/db/schema.ts` (13 tables, 8 enums); push with `npx drizzle-kit push`
+- Schema: `src/lib/db/schema.ts`; migrations in `drizzle/` (see `docs/MIGRATIONS.md`)
   - Tables: workspaces, workspaceMembers, pendingInvites, workspaceDepartments, charts, departments, nodes, edges, jobDescriptions, roleTemplates, headcountPlans, **sharedLinks** (new)
   - `charts` table has `isPublic boolean NOT NULL DEFAULT false` (new)
 
@@ -379,16 +387,21 @@ npm test
 npm run test:run       # 143 tests
 
 # Run backend API tests
-npm run test:api       # 143 tests (PGlite, no network)
+npm run test:api       # 283 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 286 tests total
+npm run test:all       # 426 tests total
+
+# Live smoke tests against DATABASE_URL (Neon dev branch only!)
+npm run test:live
 
 # Build for production
 npm run build
 
-# Schema changes — push to Neon after editing src/lib/db/schema.ts
-npx drizzle-kit push
+# Schema changes — generate a migration after editing src/lib/db/schema.ts
+npm run db:generate
+# Apply migrations to DATABASE_URL by hand (production deploys do this automatically)
+npm run db:migrate
 
 # Git workflow
 git add -p            # stage selectively
@@ -458,7 +471,7 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
   - `__devTools.setPlan('free'|'starter'|'growth')` — test billing tiers
 - **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, all API requests fall back to `u-dev`/`ws-dev` identity.
 - **Sprint 6 AI drafting** — Runs server-side via `api/ai/draft.ts` (plan-gated, streams). Add `ANTHROPIC_API_KEY=sk-ant-...` (server-side, no `VITE_` prefix) to `.env.local`/Vercel after verifying billing balance at console.anthropic.com
-- **Schema changes** — Edit `src/lib/db/schema.ts` then run `npx drizzle-kit push` to apply to Neon (reads `DATABASE_URL` from `.env.local`)
+- **Schema changes** — Edit `src/lib/db/schema.ts`, run `npm run db:generate`, and commit the SQL. Production deploys apply it. `npm run db:migrate` applies it to a dev DB.
 - **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth). `SharePage` handles both 10-char short codes and legacy URL tokens.
 - **Salary band** — Stored on `job_descriptions` table (`salary_band_min`, `salary_band_max`, `salary_currency`). Visible/editable only to `admin`/`owner` permission in JDPanel OverviewTab. Locked placeholder shown to others.
-- **PGlite test schema** — `api/__tests__/helpers/db.ts` `SCHEMA_SQL` must be kept in sync with `src/lib/db/schema.ts`. When adding new tables/columns, update both files and reset `schemaReady = false` is not needed — PGlite starts fresh each test run.
+- **PGlite test schema** — Built from the real migrations in `drizzle/` (`setupSchema()` runs the drizzle migrator). Nothing to keep in sync by hand; `api/__tests__/migrations.test.ts` fails if `schema.ts` has changes with no migration.

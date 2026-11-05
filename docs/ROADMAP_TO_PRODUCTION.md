@@ -78,8 +78,8 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 
 ### Phase 0: Security & integrity (must ship before any real customer data)
 
-> **Status (2026-11-05): code complete on branch `claude/magical-cannon-a545tb`, not yet verified in a deployed environment.**
-> Before deploying: run `npx drizzle-kit push` (new tables `rate_limits`, `ai_usage`).
+> **Status (2026-11-05): code complete on branch `claude/magical-cannon-a545tb` and verified against a real Neon dev branch** (`npm run test:live`: roles, salary redaction, plan limits, AI quota, share links, validation and rate limiting all pass on the production `neon-http` driver).
+> The new tables (`rate_limits`, `ai_usage`) are created automatically by the deploy-time migrations (3.2). No manual `push` is needed.
 > Deviations from the plan below:
 > - Share links and the Public toggle are **editor+**, not admin+, because editors create the charts.
 > - Legacy `/share/:token` links can't be revoked by design: the data lives in the URL itself. Nothing generates them any more.
@@ -130,6 +130,7 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 |---|---|---|---|---|
 | 3.1 | **CI** (GitHub Actions): `tsc`, lint, `test:run`, `test:api`, build on every PR. Use branch protection on `main`. | W16 | S | A red PR can't merge. |
 | 3.2 | **Migrations:** switch to `drizzle-kit generate` + `migrate` in CI/deploy. Generate the PGlite test schema from the migrations instead of the hand-kept `SCHEMA_SQL`. Add indexes on all FK/lookup columns. | W17 | M | No more `push` against prod. Tests use the real migrations. |
+| | ✅ **Done (2026-11-05).** `vercel-build` runs `scripts/migrate.mjs --deploy` after the build, on production only (preview is opt-in via `MIGRATE_PREVIEW_DATABASE`). Each migration is one atomic Neon HTTP transaction, and the script adopts push-managed databases at `0000_baseline`. Migrations: `0000_baseline`, `0001_phase0_usage_tables`, `0002_lookup_indexes` (12 indexes). PGlite tests build from `drizzle/`; `migrations.test.ts` fails on schema drift. See `docs/MIGRATIONS.md`. CI wiring is still part of 3.1. | | | |
 | 3.3 | **Fix e2e:** use a portable Playwright path, run with no Clerk key (bypass) or a Clerk testing token, and cover sign-up → invite-accept → create chart → share → checkout (Stripe test mode). Run in CI against preview deployments. | W18 | M | `npm run test:e2e` passes in CI. |
 | 3.4 | **Performance:** a single bulk `UPDATE ... FROM (VALUES …)` for positions; render only visible nodes on the canvas when > 300 nodes; load-test a 1,000-node chart. | W19 | M | 1,000-node chart opens in under 2 s and drags at 60 fps. |
 | 3.5 | **Clerk production instance** + Google OAuth (+ Microsoft OAuth, which HR buyers often ask for). | W20 | S | Production uses `pk_live_`. |

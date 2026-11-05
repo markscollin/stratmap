@@ -1,6 +1,6 @@
 {
-  "id": "00000000-0000-0000-0000-000000000000",
-  "prevId": "",
+  "id": "7a102c03-b718-4693-b749-4b9310b8f16b",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -41,6 +41,13 @@
           "notNull": true,
           "default": 1
         },
+        "is_public": {
+          "name": "is_public",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "owner_id": {
           "name": "owner_id",
           "type": "text",
@@ -74,7 +81,6 @@
           "name": "charts_workspace_id_workspaces_id_fk",
           "tableFrom": "charts",
           "tableTo": "workspaces",
-          "schemaTo": "public",
           "columnsFrom": [
             "workspace_id"
           ],
@@ -87,8 +93,260 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.departments": {
+      "name": "departments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chart_id": {
+          "name": "chart_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "colour": {
+          "name": "colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_department_id": {
+          "name": "workspace_department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "departments_chart_id_charts_id_fk": {
+          "name": "departments_chart_id_charts_id_fk",
+          "tableFrom": "departments",
+          "tableTo": "charts",
+          "columnsFrom": [
+            "chart_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "departments_workspace_department_id_workspace_departments_id_fk": {
+          "name": "departments_workspace_department_id_workspace_departments_id_fk",
+          "tableFrom": "departments",
+          "tableTo": "workspace_departments",
+          "columnsFrom": [
+            "workspace_department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.edges": {
+      "name": "edges",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chart_id": {
+          "name": "chart_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "edges_chart_id_charts_id_fk": {
+          "name": "edges_chart_id_charts_id_fk",
+          "tableFrom": "edges",
+          "tableTo": "charts",
+          "columnsFrom": [
+            "chart_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.headcount_plans": {
+      "name": "headcount_plans",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role_type": {
+          "name": "role_type",
+          "type": "role_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'new-headcount'"
+        },
+        "target_quarter": {
+          "name": "target_quarter",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chart_id": {
+          "name": "chart_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "headcount_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'planned'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "headcount_plans_workspace_id_workspaces_id_fk": {
+          "name": "headcount_plans_workspace_id_workspaces_id_fk",
+          "tableFrom": "headcount_plans",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "headcount_plans_department_id_workspace_departments_id_fk": {
+          "name": "headcount_plans_department_id_workspace_departments_id_fk",
+          "tableFrom": "headcount_plans",
+          "tableTo": "workspace_departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "headcount_plans_chart_id_charts_id_fk": {
+          "name": "headcount_plans_chart_id_charts_id_fk",
+          "tableFrom": "headcount_plans",
+          "tableTo": "charts",
+          "columnsFrom": [
+            "chart_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.job_descriptions": {
@@ -186,7 +444,6 @@
           "name": "job_descriptions_chart_id_charts_id_fk",
           "tableFrom": "job_descriptions",
           "tableTo": "charts",
-          "schemaTo": "public",
           "columnsFrom": [
             "chart_id"
           ],
@@ -199,8 +456,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.nodes": {
@@ -235,7 +492,7 @@
           "name": "department_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "manager_id": {
           "name": "manager_id",
@@ -312,7 +569,6 @@
           "name": "nodes_chart_id_charts_id_fk",
           "tableFrom": "nodes",
           "tableTo": "charts",
-          "schemaTo": "public",
           "columnsFrom": [
             "chart_id"
           ],
@@ -325,8 +581,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.pending_invites": {
@@ -373,7 +629,6 @@
           "name": "pending_invites_workspace_id_workspaces_id_fk",
           "tableFrom": "pending_invites",
           "tableTo": "workspaces",
-          "schemaTo": "public",
           "columnsFrom": [
             "workspace_id"
           ],
@@ -386,8 +641,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.role_templates": {
@@ -437,7 +692,7 @@
           "type": "text[]",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"\"}'"
+          "default": "'{}'"
         },
         "created_by": {
           "name": "created_by",
@@ -472,7 +727,6 @@
           "name": "role_templates_workspace_id_workspaces_id_fk",
           "tableFrom": "role_templates",
           "tableTo": "workspaces",
-          "schemaTo": "public",
           "columnsFrom": [
             "workspace_id"
           ],
@@ -485,8 +739,117 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.shared_links": {
+      "name": "shared_links",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chart_id": {
+          "name": "chart_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "shared_links_chart_id_charts_id_fk": {
+          "name": "shared_links_chart_id_charts_id_fk",
+          "tableFrom": "shared_links",
+          "tableTo": "charts",
+          "columnsFrom": [
+            "chart_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workspace_departments": {
+      "name": "workspace_departments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "colour": {
+          "name": "colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "workspace_departments_workspace_id_workspaces_id_fk": {
+          "name": "workspace_departments_workspace_id_workspaces_id_fk",
+          "tableFrom": "workspace_departments",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.workspace_members": {
@@ -551,7 +914,6 @@
           "name": "workspace_members_workspace_id_workspaces_id_fk",
           "tableFrom": "workspace_members",
           "tableTo": "workspaces",
-          "schemaTo": "public",
           "columnsFrom": [
             "workspace_id"
           ],
@@ -564,60 +926,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
-      "isRLSEnabled": false
-    },
-    "public.departments": {
-      "name": "departments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "chart_id": {
-          "name": "chart_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "colour": {
-          "name": "colour",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "departments_chart_id_charts_id_fk": {
-          "name": "departments_chart_id_charts_id_fk",
-          "tableFrom": "departments",
-          "tableTo": "charts",
-          "schemaTo": "public",
-          "columnsFrom": [
-            "chart_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "checkConstraints": {},
-      "policies": {},
       "isRLSEnabled": false
     },
     "public.workspaces": {
@@ -662,6 +972,31 @@
           "notNull": true,
           "default": "'free'"
         },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stripe_subscription_id": {
+          "name": "stripe_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trial_plan": {
+          "name": "trial_plan",
+          "type": "plan_tier",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trial_ends_at": {
+          "name": "trial_ends_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -681,66 +1016,15 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {},
       "policies": {},
-      "isRLSEnabled": false
-    },
-    "public.edges": {
-      "name": "edges",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "chart_id": {
-          "name": "chart_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_id": {
-          "name": "source_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_id": {
-          "name": "target_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "edges_chart_id_charts_id_fk": {
-          "name": "edges_chart_id_charts_id_fk",
-          "tableFrom": "edges",
-          "tableTo": "charts",
-          "schemaTo": "public",
-          "columnsFrom": [
-            "chart_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "checkConstraints": {},
-      "policies": {},
       "isRLSEnabled": false
     }
   },
   "enums": {
     "public.chart_status": {
       "name": "chart_status",
+      "schema": "public",
       "values": [
         "draft",
         "editing",
@@ -749,71 +1033,79 @@
         "approved",
         "live",
         "archived"
-      ],
-      "schema": "public"
+      ]
     },
     "public.employment_type": {
       "name": "employment_type",
+      "schema": "public",
       "values": [
         "full-time",
         "part-time",
         "contractor",
         "advisor"
-      ],
-      "schema": "public"
+      ]
+    },
+    "public.headcount_status": {
+      "name": "headcount_status",
+      "schema": "public",
+      "values": [
+        "planned",
+        "approved",
+        "filled"
+      ]
     },
     "public.node_status": {
       "name": "node_status",
+      "schema": "public",
       "values": [
         "active",
         "open",
         "planned",
         "backfill"
-      ],
-      "schema": "public"
+      ]
     },
     "public.permission": {
       "name": "permission",
+      "schema": "public",
       "values": [
         "owner",
         "admin",
         "editor",
         "commenter",
         "viewer"
-      ],
-      "schema": "public"
+      ]
     },
     "public.plan_tier": {
       "name": "plan_tier",
+      "schema": "public",
       "values": [
         "free",
         "starter",
         "growth",
         "enterprise"
-      ],
-      "schema": "public"
+      ]
     },
     "public.role_status": {
       "name": "role_status",
+      "schema": "public",
       "values": [
         "draft",
         "in-review",
         "approved",
         "published",
         "hired"
-      ],
-      "schema": "public"
+      ]
     },
     "public.role_type": {
       "name": "role_type",
+      "schema": "public",
       "values": [
         "existing",
         "new-headcount",
         "backfill",
         "contractor",
         "tbd"
-      ],
-      "schema": "public"
+      ]
     }
   },
   "schemas": {},
@@ -822,21 +1114,8 @@
   "policies": {},
   "views": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
-  },
-  "internal": {
-    "tables": {
-      "role_templates": {
-        "columns": {
-          "tags": {
-            "isArray": true,
-            "dimensions": 1,
-            "rawType": "text"
-          }
-        }
-      }
-    }
+    "tables": {}
   }
 }
