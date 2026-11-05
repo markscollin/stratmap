@@ -13,6 +13,7 @@ import { MiniChartThumb } from '../components/ui/MiniChartThumb'
 import { UpgradeModal } from '../components/ui/UpgradeModal'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
+import { useChartLimit } from '../hooks/useChartLimit'
 import type { OrgChart, ChartStatus } from '../types'
 import { buildChartTemplate, type ChartTemplateId } from '../lib/chartTemplates'
 import { formatUpdated } from '../utils/formatUpdated'
@@ -99,7 +100,9 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   const { permission } = usePermission()
   const approvalLocked = !usePlanLimits().hasFeature('approval-workflow')
   const [showApprovalUpgrade, setShowApprovalUpgrade] = useState(false)
-  const actions = (STATUS_ACTIONS[chart.status] || []).filter(
+  // Over the chart limit (1.6): no status changes or copies, only open and delete.
+  const { frozen } = useChartLimit()
+  const actions = frozen ? [] : (STATUS_ACTIONS[chart.status] || []).filter(
     a => PERMISSION_RANK[permission] >= PERMISSION_RANK[a.minPermission]
   )
   const display = {
@@ -163,6 +166,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
               <OverflowMenu
                 actions={actions.map(a => ({ ...a, locked: approvalLocked && isApprovalStatus(a.next) }))}
                 canAdmin={canAdmin}
+                canDuplicate={!frozen}
                 onAction={next => {
                   setMenu(false)
                   // Free plan: review/approve/publish is the paid approval workflow.
@@ -225,9 +229,10 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   )
 }
 
-function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDelete, onClose }: {
+function OverflowMenu({ actions, canAdmin, canDuplicate = true, onAction, onOpen, onDuplicate, onDelete, onClose }: {
   actions: { next: ChartStatus; label: string; color: string; locked?: boolean }[]
   canAdmin: boolean
+  canDuplicate?: boolean
   onAction: (next: ChartStatus) => void
   onOpen: () => void
   onDuplicate: () => void
@@ -236,8 +241,10 @@ function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDele
 }) {
   const secondaryItems = [
     { Icon: ExternalLink, label: 'Open chart',   color: 'var(--text)',    fn: onOpen },
-    { Icon: Copy,         label: 'Duplicate',    color: 'var(--text)',    fn: onDuplicate },
-    { Icon: GitBranch,    label: 'New scenario', color: 'var(--text)',    fn: onClose },
+    ...(canDuplicate ? [
+      { Icon: Copy,         label: 'Duplicate',    color: 'var(--text)',    fn: onDuplicate },
+      { Icon: GitBranch,    label: 'New scenario', color: 'var(--text)',    fn: onClose },
+    ] : []),
     ...(canAdmin ? [{ Icon: Trash2, label: 'Delete', color: 'var(--danger)', fn: onDelete }] : []),
   ]
   return (

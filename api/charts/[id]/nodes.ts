@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, count } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
-import { requireRole, getEffectivePlan, sendPlanLimit } from '../../_lib/access'
+import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
 import { parseBody } from '../../_lib/validate'
 import { NodeCreate, NodePositions } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
@@ -25,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       if (!(await requireRole(auth, res, 'editor'))) return
+      if (!(await requireChartsEditable(auth.workspaceId, res))) return
       const body = parseBody(NodeCreate, req, res)
       if (!body) return
 
@@ -54,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PUT') {
       // Bulk position update — used when saving canvas state after drag/auto-layout
       if (!(await requireRole(auth, res, 'editor'))) return
+      if (!(await requireChartsEditable(auth.workspaceId, res))) return
       if (!Array.isArray(req.body)) {
         return res.status(400).json({ error: 'Expected array of { id, x, y }' })
       }

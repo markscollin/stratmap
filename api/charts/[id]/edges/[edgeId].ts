@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
-import { requireRole } from '../../../_lib/access'
+import { requireRole, requireChartsEditable } from '../../../_lib/access'
 import { db } from '../../../_lib/db'
 import { charts, edges } from '../../../../src/lib/db/schema'
 
@@ -23,6 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       if (!(await requireRole(auth, res, 'editor'))) return
+      if (!(await requireChartsEditable(auth.workspaceId, res))) return
       await db.delete(edges).where(and(eq(edges.id, edgeId), eq(edges.chartId, chartId)))
       await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
       return res.status(204).end()

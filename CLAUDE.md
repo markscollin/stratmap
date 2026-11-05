@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**196 frontend + 371 backend = 567 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks, the billing life-cycle and seat caps); `tsc` clean; `lint` 0 errors; build OK.
+**204 frontend + 382 backend = 586 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -119,6 +119,16 @@ See `docs/BILLING.md`. Summary:
 - **Idempotency:** `stripe_events` dedups webhook deliveries. A failed-payment email goes to owners and admins on the first attempt only.
 - **Seats (1.5):** flat tiers with a hard cap (`PLAN_LIMITS[tier].seats`). A seat is a member or a live pending invite (`getSeatUsage()`).
   The cap is checked on invite, on accept and on resending an expired invite. Going over returns `402 plan-limit` with `limit: 'seats'`. Nobody is ever removed.
+
+## Over the limit after a downgrade (roadmap 1.6, 2026-11-05)
+
+Nothing is ever deleted. Tests: `api/__tests__/over-limit.test.ts`, `src/features/billing/__tests__/ChartLimitBanner.test.tsx`.
+- **More charts than the plan allows:** every chart is view-only. `requireChartsEditable()` (api/_lib/access.ts) returns
+  `402 { error: 'plan-frozen', limit: 'charts', count, max }`. Call it after `requireRole()` on any new chart-content write.
+  Allowed while frozen: viewing, deleting a chart, `isPublic: false`, revoking a share link.
+- **More roles on a chart than allowed:** only adding is blocked (the existing node-create limit). Edit, move, connect and delete still work.
+- **Client:** `useChartLimit()` gives `{ count, max, atLimit, frozen }` from the real chart list. `ChartLimitBanner` sits in `Layout`.
+  `CanvasView` and `JDPanel` go read-only when `frozen`.
 
 ## No mock data in production (roadmap 1.7 + 1.8, 2026-11-05)
 
@@ -436,13 +446,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 196 tests
+npm run test:run       # 204 tests
 
 # Run backend API tests
-npm run test:api       # 371 tests (PGlite, no network)
+npm run test:api       # 382 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 567 tests total
+npm run test:all       # 586 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

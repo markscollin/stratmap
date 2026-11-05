@@ -1,0 +1,40 @@
+import { useEffect } from 'react'
+import { useBillingStore } from '../store/billingStore'
+import { useChartStore } from '../store/chartStore'
+import { useUserStore } from '../store/userStore'
+
+export interface ChartLimit {
+  /** Charts in the workspace (once the list has loaded). */
+  count: number
+  /** The plan's chart limit, -1 for unlimited. */
+  max: number
+  loaded: boolean
+  /** No room for another chart. */
+  atLimit: boolean
+  /**
+   * More charts than the plan allows (after a downgrade): every chart is
+   * view-only until enough are deleted or the workspace upgrades (roadmap 1.6).
+   */
+  frozen: boolean
+}
+
+/** Chart count against the plan, from the real chart list (fetched once if needed). */
+export function useChartLimit(): ChartLimit {
+  const max = useBillingStore(s => s.plan.maxCharts)
+  const { charts, loaded, loading, fetchCharts } = useChartStore()
+  const hasWorkspace = useUserStore(s => !!s.workspace)
+
+  useEffect(() => {
+    if (hasWorkspace && !loaded && !loading) void fetchCharts()
+  }, [hasWorkspace, loaded, loading, fetchCharts])
+
+  const count = charts.length
+  const limited = max !== -1 && loaded
+  return {
+    count,
+    max,
+    loaded,
+    atLimit: limited && count >= max,
+    frozen: limited && count > max,
+  }
+}

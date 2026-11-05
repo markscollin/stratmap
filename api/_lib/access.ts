@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
 import { and, count, eq, gt, isNull, or } from 'drizzle-orm'
 import { db } from './db'
-import { workspaces, workspaceMembers, pendingInvites, permissionEnum } from '../../src/lib/db/schema'
+import { workspaces, workspaceMembers, pendingInvites, charts, permissionEnum } from '../../src/lib/db/schema'
 import { PLAN_LIMITS, PAID_FEATURES, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
 import type { AuthContext } from './auth'
 import { resolvePlanTier } from './billing'
@@ -105,6 +105,49 @@ export async function getSeatUsage(workspaceId: string): Promise<SeatUsage> {
     )),
   ])
   return { members, invites }
+}
+
+// ─── Over the chart limit after a downgrade (roadmap 1.6) ────────────────────
+//
+// Owner decision: when a workspace has more charts than its plan allows, EVERY
+// chart is view-only until it deletes charts down to the limit or upgrades.
+// Nothing is deleted for it. Deleting a chart and making a chart private stay
+// allowed, since those are how you get back under the limit or lock things down.
+
+export interface ChartUsage {
+  count: number
+  max: number
+  /** True when the workspace has more charts than its plan allows. */
+  frozen: boolean
+}
+
+export async function getChartUsage(workspaceId: string, plan?: EffectivePlan | null): Promise<ChartUsage | null> {
+  const p = plan ?? await getEffectivePlan(workspaceId)
+  if (!p) return null
+  const [{ value }] = await db.select({ value: count() }).from(charts).where(eq(charts.workspaceId, workspaceId))
+  const max = p.limits.maxCharts
+  return { count: value, max, frozen: max !== -1 && value > max }
+}
+
+/**
+ * Sends 402 { error: 'plan-frozen' } when the workspace is over its chart limit,
+ * so chart content can't change. Returns true when edits are allowed.
+ */
+export async function requireChartsEditable(workspaceId: string, res: VercelResponse): Promise<boolean> {
+  const plan = await getEffectivePlan(workspaceId)
+  const usage = await getChartUsage(workspaceId, plan)
+  if (!plan || !usage || !usage.frozen) return true
+  const extra = usage.count - usage.max
+  res.status(402).json({
+    error: 'plan-frozen',
+    limit: 'charts',
+    count: usage.count,
+    max: usage.max,
+    tier: plan.tier,
+    message: `Your ${plan.tier} plan allows ${usage.max} chart${usage.max === 1 ? '' : 's'} and this workspace has ${usage.count}. `
+      + `All charts are view-only until you delete ${extra} chart${extra === 1 ? '' : 's'} or upgrade.`,
+  })
+  return false
 }
 
 export type LimitName = 'charts' | 'nodes' | 'seats' | 'ai-drafts'

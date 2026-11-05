@@ -265,7 +265,7 @@ export function PricingPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {[
             { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime from Settings → Billing. Upgrades take effect immediately, and you pay the prorated difference. Downgrades and cancellations take effect at the end of your billing period, so you keep what you paid for until then.' },
-            { q: 'What happens to my charts if I downgrade?', a: 'Your charts are never deleted. If you exceed the node limit on a lower plan, you can view but not edit until you upgrade.' },
+            { q: 'What happens to my charts if I downgrade?', a: 'Your charts are never deleted. If you have more charts than the new plan allows, all of them become view-only until you delete enough charts or upgrade again. If a chart has more roles than the new plan allows, you can still edit and remove roles, but you can\'t add new ones until you\'re back under the limit.' },
             { q: 'Who counts towards the team member limit?', a: 'Every member of your workspace, plus every pending invite. People who only view a chart through a public share link don\'t count. Once every seat is taken, you can invite someone new after you upgrade or remove a member. If you downgrade with more members than the new plan allows, nobody is removed, but you can\'t add anyone until you\'re back under the limit.' },
             { q: 'Is there a free trial?', a: 'Our Free plan is effectively a trial. No credit card required to start.' },
             { q: 'What payment methods do you accept?', a: 'We accept all major credit cards, debit cards, and digital wallets via Stripe.' },

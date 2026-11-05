@@ -20,7 +20,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }))
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, like, sql } from 'drizzle-orm'
+import { and, eq, like, ne, sql } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { db } from '../_lib/db'
 import * as schema from '../../src/lib/db/schema'
@@ -158,6 +158,20 @@ describe('plan limits', () => {
       .where(eq(schema.workspaces.id, WS))
     expect((await call(chartsHandler, { method: 'POST', body: { name: 'Second' } }))._status).toBe(201)
     await db.update(schema.workspaces).set({ trialPlan: null, trialEndsAt: null }).where(eq(schema.workspaces.id, WS))
+  })
+
+  it('free after the trial ended with 2 charts: every chart is view-only until one is deleted (1.6)', async () => {
+    await setTier('free')
+    actAs('editor')
+    const frozen = await call(nodesHandler, { method: 'POST', query: { id: CHART }, body: { name: 'New', title: 'T', x: 0, y: 0 } })
+    expect(frozen._status).toBe(402)
+    expect(frozen._body).toMatchObject({ error: 'plan-frozen', limit: 'charts', count: 2, max: 1 })
+    expect((await call(chartHandler, { method: 'GET', query: { id: CHART } }))._status).toBe(200)
+
+    // Deleting the extra chart (admin) lifts the freeze.
+    await db.delete(schema.charts).where(and(eq(schema.charts.workspaceId, WS), ne(schema.charts.id, CHART)))
+    const ok = await call(chartHandler, { method: 'PUT', query: { id: CHART }, body: { name: 'Live' } })
+    expect(ok._status).toBe(200)
   })
 
   it('free: node limit enforced', async () => {

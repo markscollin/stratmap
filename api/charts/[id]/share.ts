@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { randomBytes } from 'node:crypto'
 import { requireAuth } from '../../_lib/auth'
-import { requireRole } from '../../_lib/access'
+import { requireRole, requireChartsEditable } from '../../_lib/access'
 import { db } from '../../_lib/db'
 import { charts, sharedLinks } from '../../../src/lib/db/schema'
 
@@ -31,6 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!(await requireRole(auth, res, 'editor'))) return
 
     if (req.method === 'POST') {
+      // Revoking (DELETE) stays allowed over the chart limit; creating a link doesn't.
+      if (!(await requireChartsEditable(auth.workspaceId, res))) return
       // Return existing link if one exists
       const [existing] = await db
         .select()
