@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
+import { requireRole } from './_lib/access'
+import { parseBody } from './_lib/validate'
+import { HeadcountCreate } from './_lib/schemas'
 import { db } from './_lib/db'
 import { headcountPlans, workspaceDepartments } from '../src/lib/db/schema'
 
@@ -34,18 +37,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { title, departmentId, roleType, targetQuarter, chartId, notes } = req.body as {
-        title: string
-        departmentId?: string
-        roleType?: string
-        targetQuarter: string
-        chartId?: string
-        notes?: string
-      }
-
-      if (!title || !targetQuarter) {
-        return res.status(400).json({ error: 'title and targetQuarter are required' })
-      }
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(HeadcountCreate, req, res)
+      if (!body) return
+      const { title, departmentId, roleType, targetQuarter, chartId, notes } = body
 
       const [plan] = await db
         .insert(headcountPlans)
@@ -54,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           workspaceId: auth.workspaceId,
           title,
           departmentId: departmentId ?? null,
-          roleType: (roleType as 'new-headcount' | 'backfill' | 'contractor' | 'tbd' | 'existing') ?? 'new-headcount',
+          roleType,
           targetQuarter,
           chartId: chartId ?? null,
           notes: notes ?? null,

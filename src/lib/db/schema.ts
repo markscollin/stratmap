@@ -6,6 +6,8 @@ import {
   real,
   boolean,
   timestamp,
+  primaryKey,
+  bigint,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -177,6 +179,24 @@ export const sharedLinks = pgTable('shared_links', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   expiresAt: timestamp('expires_at'),
 })
+
+// ─── Usage & abuse protection ────────────────────────────────────────────────
+
+// Fixed-window rate-limit counters. `key` encodes the bucket, e.g. "ai:ws-123"
+// or "share:203.0.113.7". One row per key; the window resets in place.
+// `windowId` = floor(epochSeconds / windowSeconds), so no timezone handling is needed.
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  windowId: bigint('window_id', { mode: 'number' }).notNull(),
+  count: integer('count').notNull().default(0),
+})
+
+// Server-side AI drafting quota — one row per workspace per calendar month (UTC).
+export const aiUsage = pgTable('ai_usage', {
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  period: text('period').notNull(),            // "YYYY-MM"
+  count: integer('count').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.period] })])
 
 // ─── Inferred types (for use in Phase 2 API routes) ─────────────────────────
 

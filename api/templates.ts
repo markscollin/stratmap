@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, desc } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
+import { requireRole } from './_lib/access'
+import { parseBody } from './_lib/validate'
+import { TemplateCreate } from './_lib/schemas'
 import { db } from './_lib/db'
 import { roleTemplates } from '../src/lib/db/schema'
 
@@ -20,10 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { title, department = '', responsibilities = '', requirements = '', tags = [], uses = 0 } =
-        req.body as Partial<typeof roleTemplates.$inferInsert>
-
-      if (!title) return res.status(400).json({ error: 'title is required' })
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(TemplateCreate, req, res)
+      if (!body) return
+      const { title, department, responsibilities, requirements, tags, uses } = body
 
       const [created] = await db
         .insert(roleTemplates)
@@ -31,11 +34,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id: crypto.randomUUID(),
           workspaceId: auth.workspaceId,
           title,
-          department: department ?? '',
-          responsibilities: responsibilities ?? '',
-          requirements: requirements ?? '',
-          tags: tags ?? [],
-          uses: uses ?? 0,
+          department,
+          responsibilities,
+          requirements,
+          tags,
+          uses,
           createdBy: auth.userId,
           updatedBy: auth.userId,
         })

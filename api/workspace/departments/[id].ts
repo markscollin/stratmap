@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
+import { requireRole } from '../../_lib/access'
+import { parseBody } from '../../_lib/validate'
+import { DepartmentUpdate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { workspaceDepartments } from '../../../src/lib/db/schema'
 
@@ -11,8 +14,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { id } = req.query as { id: string }
 
+    if ((req.method === 'PUT' || req.method === 'DELETE') && !(await requireRole(auth, res, 'editor'))) return
+
     if (req.method === 'PUT') {
-      const { name, colour } = req.body as { name?: string; colour?: string }
+      const body = parseBody(DepartmentUpdate, req, res)
+      if (!body) return
+      const { name, colour } = body
 
       const [updated] = await db
         .update(workspaceDepartments)

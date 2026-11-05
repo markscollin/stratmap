@@ -1,34 +1,35 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { timingSafeEqual } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { db } from '../_lib/db'
+import { parseBody } from '../_lib/validate'
+import { GrantTrial } from '../_lib/schemas'
+import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
 import { workspaces } from '../../src/lib/db/schema'
 
-type PlanTier = 'starter' | 'growth' | 'enterprise'
-const VALID_TIERS: PlanTier[] = ['starter', 'growth', 'enterprise']
+// Constant-time comparison so the secret can't be recovered via response timing.
+function secretMatches(provided: unknown): boolean {
+  const expected = process.env.ADMIN_SECRET
+  if (!expected || typeof provided !== 'string') return false
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const secret = req.headers['x-admin-secret']
-  if (!secret || secret !== process.env.ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
   try {
-    const { workspaceId, planTier, days = 90 } = req.body as {
-      workspaceId?: string
-      planTier?: PlanTier
-      days?: number
+    // Throttle before checking the secret to blunt brute-force attempts.
+    if (!(await enforceRateLimit(res, `admin:${clientIp(req)}`, 10, 60))) return
+
+    if (!secretMatches(req.headers['x-admin-secret'])) {
+      return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    if (!workspaceId || !planTier) {
-      return res.status(400).json({ error: 'workspaceId and planTier are required' })
-    }
-
-    if (!VALID_TIERS.includes(planTier)) {
-      return res.status(400).json({ error: `planTier must be one of: ${VALID_TIERS.join(', ')}` })
-    }
-
+    const body = parseBody(GrantTrial, req, res)
+    if (!body) return
+    const { workspaceId, planTier, days } = body
     const trialEndsAt = new Date()
     trialEndsAt.setDate(trialEndsAt.getDate() + days)
 

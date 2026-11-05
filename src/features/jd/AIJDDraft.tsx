@@ -5,6 +5,7 @@ import type { OrgNode } from '../../types'
 import type { JobDescription } from '../../types/jd'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
+import { useToastStore } from '../../store/toastStore'
 import { api } from '../../lib/apiClient'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 
@@ -66,6 +67,7 @@ export function AIJDDraft({
   const { canUseAIDrafting, currentTier } = usePlanLimits()
   const { usage, incrementUsage }         = useBillingStore()
   const navigate = useNavigate()
+  const addToast = useToastStore(s => s.addToast)
 
   const isLocked   = !canUseAIDrafting()
   const totalChars = jd.responsibilities.length + jd.requirements.length
@@ -97,6 +99,17 @@ export function AIJDDraft({
 
       if (res.status === 503) { setNotConfigured(true); return }
       if (res.status === 403) { setShowUpgrade(true); return }
+      // 402: monthly AI draft quota used up (enforced server-side)
+      if (res.status === 402) {
+        const body = await res.json().catch(() => ({})) as { message?: string }
+        addToast(body.message ?? 'You have used all AI drafts for this month.', 'warning')
+        setShowUpgrade(true)
+        return
+      }
+      if (res.status === 429) {
+        addToast('Too many AI drafts in a short time — please wait a minute and try again.', 'warning')
+        return
+      }
       if (!res.ok || !res.body) throw new Error(`AI draft failed (${res.status})`)
 
       const reader  = res.body.getReader()

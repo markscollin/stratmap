@@ -8,6 +8,11 @@ import { useAuth } from '../features/auth/useAuth'
 import { api } from '../lib/apiClient'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
 import { mockDepartments } from '../data/mockOrg'
+import { PLAN_LIMITS } from '../lib/plans'
+
+// New workspaces start on Free; the API rejects invites beyond the plan's seats
+// (owner + invitees), so onboarding only offers as many rows as will fit.
+const MAX_ONBOARDING_INVITES = Math.min(5, PLAN_LIMITS.free.seats - 1)
 
 type Step = 1 | 2
 
@@ -34,11 +39,9 @@ export function OnboardingPage() {
   const [ownerRole, setOwnerRole] = useState<WorkspaceRole>('Founder/CEO')
   const [size, setSize] = useState<CompanySize>('11-50')
   const [focus, setFocus] = useState<string | null>(null)
-  const [invites, setInvites] = useState<InviteRow[]>([
-    { email: '', permission: 'editor' },
-    { email: '', permission: 'editor' },
-    { email: '', permission: 'editor' },
-  ])
+  const [invites, setInvites] = useState<InviteRow[]>(() =>
+    Array.from({ length: Math.min(2, MAX_ONBOARDING_INVITES) }, () => ({ email: '', permission: 'editor' as Permission })),
+  )
 
   function handleContinue() {
     if (!workspaceName.trim()) return
@@ -50,7 +53,7 @@ export function OnboardingPage() {
   }
 
   function addInviteRow() {
-    if (invites.length >= 5) return
+    if (invites.length >= MAX_ONBOARDING_INVITES) return
     setInvites((rows) => [...rows, { email: '', permission: 'editor' }])
   }
 
@@ -201,7 +204,7 @@ export function OnboardingPage() {
             onSkip={() => complete(false)}
             onSend={() => complete(true)}
             onQuickStart={() => completeWithQuickStart(false)}
-            canAddMore={invites.length < 5}
+            canAddMore={invites.length < MAX_ONBOARDING_INVITES}
           />
         )}
       </div>

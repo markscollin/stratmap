@@ -1,8 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, count } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
+import { requireRole, getEffectivePlan, sendPlanLimit } from '../../_lib/access'
+import { parseBody } from '../../_lib/validate'
+import { NodeCreate, NodePositions } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { charts, nodes } from '../../../src/lib/db/schema'
+import { fitsLimit } from '../../../src/lib/plans'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -20,8 +24,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!chart) return res.status(404).json({ error: 'Chart not found' })
 
     if (req.method === 'POST') {
-      // Add a single node
-      const body = req.body as typeof nodes.$inferInsert
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(NodeCreate, req, res)
+      if (!body) return
+
+      const plan = await getEffectivePlan(auth.workspaceId)
+      if (!plan) return res.status(404).json({ error: 'Workspace not found' })
+      const [{ value: nodeCount }] = await db
+        .select({ value: count() })
+        .from(nodes)
+        .where(eq(nodes.chartId, chartId))
+      if (!fitsLimit(plan.limits.maxNodesPerChart, nodeCount)) {
+        return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+      }
+
+      // The client generates the id so it can draw edges optimistically; it is
+      // validated (charset/length) and always scoped to this chart.
       const [node] = await db
         .insert(nodes)
         .values({ ...body, id: body.id ?? crypto.randomUUID(), chartId })
@@ -35,10 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'PUT') {
       // Bulk position update — used when saving canvas state after drag/auto-layout
-      const positions = req.body as { id: string; x: number; y: number }[]
-      if (!Array.isArray(positions)) {
+      if (!(await requireRole(auth, res, 'editor'))) return
+      if (!Array.isArray(req.body)) {
         return res.status(400).json({ error: 'Expected array of { id, x, y }' })
       }
+      const positions = parseBody(NodePositions, req, res)
+      if (!positions) return
 
       await Promise.all(
         positions.map(({ id, x, y }) =>

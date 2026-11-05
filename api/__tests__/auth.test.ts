@@ -79,7 +79,7 @@ describe('requireAuth', () => {
     const req = createReq({ headers: { 'x-dev-user': 'true' } })
     const res = createRes()
     const result = await requireAuth(req as never, res as never)
-    expect(result).toEqual({ userId: DEV_USER_ID, workspaceId: DEV_WS_ID })
+    expect(result).toEqual({ userId: DEV_USER_ID, workspaceId: DEV_WS_ID, permission: 'owner' })
     // Dev workspace must be created in DB
     const ws = await testDb.select().from(schema.workspaces)
     expect(ws.some(w => w.id === DEV_WS_ID)).toBe(true)
@@ -92,7 +92,7 @@ describe('requireAuth', () => {
     // Second call: workspace already exists, should not throw
     const res2 = createRes()
     const result2 = await requireAuth(req as never, res2 as never)
-    expect(result2).toEqual({ userId: DEV_USER_ID, workspaceId: DEV_WS_ID })
+    expect(result2).toEqual({ userId: DEV_USER_ID, workspaceId: DEV_WS_ID, permission: 'owner' })
   })
 
   it('returns 401 when auth header is missing in production', async () => {
@@ -123,7 +123,7 @@ describe('requireAuth', () => {
     const req = createReq({ headers: { authorization: 'Bearer token' } })
     const res = createRes()
     const result = await requireAuth(req as never, res as never)
-    expect(result).toEqual({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
+    expect(result).toEqual({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID, permission: 'owner' })
   })
 
   it('does not apply dev bypass in production even with x-dev-user header', async () => {

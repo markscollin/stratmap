@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**143 frontend + 143 backend = 286 passing**; `tsc` clean; `lint` 0 errors; build OK.
+**143 frontend + 281 backend = 424 passing** (after Phase 0); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -55,6 +55,28 @@ the real Clerk key before the suite is reliable again.
 **Deferred:** Stripe webhook idempotency — add a `stripe_events` table + dedup guard
 *when* billing-receipt emails are wired (replays would double-send). Not needed yet
 (handlers are idempotent set-ops).
+
+---
+
+## Phase 0 security pass (2026-11-05)
+
+See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
+- **Server-side roles**: `api/_lib/access.ts` (`requireRole`, `ROLE_RANK`). Every
+  mutating route checks the caller's role. viewer/commenter = read-only; editor = content
+  (charts, nodes, edges, JDs, templates, headcount, departments, share links, AI);
+  admin = members, invites, salary, approvals, chart delete, workspace rename, billing.
+  You can only manage or grant roles *below* your own, and nobody can grant `owner`.
+- **Salary bands** are redacted from JD responses for non-admins (`api/charts/[id]/jd/[nodeId].ts`).
+- **Plan limits are enforced on the server.** The single source of truth is `src/lib/plans.ts`
+  (shared with `billingStore`). Going over a limit returns `402 { error: 'plan-limit', limit, max, message }`.
+- **AI quota**: `ai_usage` table, atomic per-month claim in `api/ai/draft.ts`. The model is
+  configurable via `ANTHROPIC_MODEL`.
+- **Validation**: zod schemas in `api/_lib/schemas.ts`, applied via `parseBody()`. Unknown keys are stripped.
+- **Rate limiting**: `api/_lib/rateLimit.ts` (Postgres `rate_limits` table, fails open).
+- **Share links** only resolve while `charts.isPublic` is true; codes are 16 chars.
+- Security headers in `vercel.json` (CSP is Report-Only for now).
+- Tests: `api/__tests__/security.test.ts`. Use `seedMember(userId, role)` to test roles.
+- ⚠️ Schema change → run `npx drizzle-kit push` before deploying.
 
 ---
 

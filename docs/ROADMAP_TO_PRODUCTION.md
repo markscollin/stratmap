@@ -78,6 +78,14 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 
 ### Phase 0: Security & integrity (must ship before any real customer data)
 
+> **Status (2026-11-05): code complete on branch `claude/magical-cannon-a545tb`, not yet verified in a deployed environment.**
+> Before deploying: run `npx drizzle-kit push` (new tables `rate_limits`, `ai_usage`).
+> Deviations from the plan below:
+> - Share links and the Public toggle are **editor+**, not admin+, because editors create the charts.
+> - Legacy `/share/:token` links can't be revoked by design: the data lives in the URL itself. Nothing generates them any more.
+> - The CSP ships as **Report-Only**. Switch it to enforcing after checking the browser console on production (Clerk and Sentry hosts), and add `clerk.<your-domain>` once the custom domain exists.
+> - `npm audit fix` crashes on an npm peer-dependency bug; the dependency upgrade is tracked as a separate item. Zod uses the patched v4.
+
 | ID | Task | Fixes | Effort | Done when |
 |---|---|---|---|---|
 | 0.1 | Add a `requirePermission(auth, minRole)` helper. Make `requireAuth` return the member's `permission`. Apply a role matrix to every mutating route: viewer/commenter = read-only; editor = chart/node/edge/JD/template writes; admin = members, invites, share links, departments, billing; owner = workspace delete and transfer. | W1 | M | An API test for each route shows a viewer gets 403 on every write. |

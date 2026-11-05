@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { requireRole, atLeast } from '../_lib/access'
+import { parseBody } from '../_lib/validate'
+import { HeadcountUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
-import { headcountPlans, workspaceMembers } from '../../src/lib/db/schema'
+import { headcountPlans } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -11,30 +14,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { id } = req.query as { id: string }
 
+    if (req.method !== 'PUT' && req.method !== 'DELETE') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
+
+    // editor+ to change plans; approval additionally needs admin (below)
+    const permission = await requireRole(auth, res, 'editor')
+    if (!permission) return
+
     if (req.method === 'PUT') {
-      const { title, departmentId, roleType, targetQuarter, chartId, status, notes } = req.body as {
-        title?: string
-        departmentId?: string | null
-        roleType?: string
-        targetQuarter?: string
-        chartId?: string | null
-        status?: 'planned' | 'approved' | 'filled'
-        notes?: string | null
-      }
+      const body = parseBody(HeadcountUpdate, req, res)
+      if (!body) return
+      const { title, departmentId, roleType, targetQuarter, chartId, status, notes } = body
 
       // Only admins+ can approve
-      if (status === 'approved') {
-        const [member] = await db
-          .select({ permission: workspaceMembers.permission })
-          .from(workspaceMembers)
-          .where(and(
-            eq(workspaceMembers.userId, auth.userId),
-            eq(workspaceMembers.workspaceId, auth.workspaceId),
-          ))
-          .limit(1)
-
-        const canApprove = member && ['owner', 'admin'].includes(member.permission)
-        if (!canApprove) return res.status(403).json({ error: 'Only admins can approve headcount' })
+      if (status === 'approved' && !atLeast(permission, 'admin')) {
+        return res.status(403).json({ error: 'Only admins can approve headcount' })
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() }

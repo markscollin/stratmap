@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { requireRole } from '../_lib/access'
+import { parseBody } from '../_lib/validate'
+import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
@@ -36,13 +39,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PUT') {
-      const { name, status, isPublic } = req.body as { name?: string; status?: string; isPublic?: boolean }
+      // Editors may rename, change status and toggle public sharing.
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(ChartUpdate, req, res)
+      if (!body) return
+      const { name, status, isPublic } = body
 
       const [updated] = await db
         .update(charts)
         .set({
           ...(name !== undefined && { name }),
-          ...(status !== undefined && { status: status as typeof charts.$inferInsert['status'] }),
+          ...(status !== undefined && { status }),
           ...(isPublic !== undefined && { isPublic }),
           updatedAt: new Date(),
         })
@@ -53,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
+      if (!(await requireRole(auth, res, 'admin'))) return
       // Cascade deletes nodes/edges/departments via FK
       await db.delete(charts).where(eq(charts.id, chartId))
       return res.status(204).end()

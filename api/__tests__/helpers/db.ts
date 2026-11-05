@@ -163,6 +163,19 @@ CREATE TABLE IF NOT EXISTS shared_links (
   created_at timestamp NOT NULL DEFAULT now(),
   expires_at timestamp
 );
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key text PRIMARY KEY,
+  window_id bigint NOT NULL,
+  count integer NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+  workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  period text NOT NULL,
+  count integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (workspace_id, period)
+);
 `
 
 let schemaReady = false
@@ -174,6 +187,8 @@ export async function setupSchema() {
 }
 
 export async function cleanDb() {
+  await testDb.delete(schema.rateLimits)
+  await testDb.delete(schema.aiUsage)
   await testDb.delete(schema.sharedLinks)
   await testDb.delete(schema.headcountPlans)
   await testDb.delete(schema.jobDescriptions)
@@ -263,5 +278,21 @@ export async function seedEdge() {
     chartId: TEST_CHART_ID,
     sourceId: TEST_NODE_ID,
     targetId: 'node-b',
+  })
+}
+
+/** Add another member to the test workspace with the given permission. */
+export async function seedMember(
+  userId: string,
+  permission: 'owner' | 'admin' | 'editor' | 'commenter' | 'viewer',
+  email = `${userId}@example.com`,
+) {
+  await testDb.insert(schema.workspaceMembers).values({
+    id: `wm-${userId}`,
+    workspaceId: TEST_WS_ID,
+    userId,
+    email,
+    name: userId,
+    permission,
   })
 }

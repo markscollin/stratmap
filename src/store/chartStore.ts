@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { OrgChart, OrgNode, OrgEdge, ChartStatus, Department } from '../types'
-import { api } from '../lib/apiClient'
+import { api, ApiError } from '../lib/apiClient'
+import { useToastStore } from './toastStore'
 
 interface ChartStore {
   charts: OrgChart[]
@@ -79,6 +80,12 @@ export const useChartStore = create<ChartStore>((set, get) => ({
       return chart
     } catch (err) {
       console.error('[chartStore] createChart failed:', err)
+      // Surface server-side refusals (plan limit, permissions) to the user.
+      if (err instanceof ApiError && (err.status === 402 || err.status === 403)) {
+        useToastStore.getState().addToast(err.userMessage === 'forbidden'
+          ? 'You do not have permission to create charts.'
+          : err.userMessage, 'warning')
+      }
       return null
     }
   },

@@ -1,5 +1,12 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
+// The route resolves the caller's role via api/_lib/access → db, so the db module
+// must be mocked even though these tests pass the permission on the auth context.
+vi.mock('../../src/lib/db/index', async () => {
+  const { testDb } = await import('./helpers/db')
+  return { db: testDb }
+})
+
 vi.mock('../_lib/auth', () => ({
   requireAuth: vi.fn(),
   requireUser: vi.fn(),
@@ -27,7 +34,7 @@ const PRICE_ENV = [
 ]
 
 beforeEach(() => {
-  vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
+  vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID, permission: 'owner' })
   sessionCreate.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/abc' })
   PRICE_ENV.forEach(k => delete process.env[k])
 })
@@ -35,6 +42,15 @@ beforeEach(() => {
 afterEach(() => { PRICE_ENV.forEach(k => delete process.env[k]) })
 
 describe('POST /api/checkout', () => {
+  it('returns 403 for non-admin members (billing is admin-only)', async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID, permission: 'editor' })
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, res as never)
+    expect(res._status).toBe(403)
+    expect(sessionCreate).not.toHaveBeenCalled()
+  })
+
+
   it('returns 405 for non-POST methods', async () => {
     const res = createRes()
     await handler(createReq({ method: 'GET' }) as never, res as never)

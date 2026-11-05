@@ -132,14 +132,10 @@ describe('OnboardingPage — Step 2', () => {
     expect(workspace?.pendingInvites).toHaveLength(1)
   })
 
-  it('shows Add another link and caps at 5 rows', () => {
+  it('caps invite rows at the Free plan seat limit (owner + invitees)', () => {
     goToStep2()
-    expect(screen.getByText('Add another')).toBeDefined()
-
-    // Add rows until cap
-    fireEvent.click(screen.getByText('Add another'))
-    fireEvent.click(screen.getByText('Add another'))
-    // Now at 5 rows, link disappears
+    // Free plan = 3 seats → owner + 2 invitees, and onboarding starts with 2 rows
+    expect(screen.getAllByPlaceholderText('colleague@company.com')).toHaveLength(2)
     expect(screen.queryByText('Add another')).toBeNull()
   })
 

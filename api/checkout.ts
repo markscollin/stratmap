@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
 import { requireAuth } from './_lib/auth'
+import { requireRole } from './_lib/access'
+import { parseBody } from './_lib/validate'
+import { CheckoutCreate } from './_lib/schemas'
 import { reportError } from './_lib/sentry'
 import { getAppUrl } from './_lib/url'
 
@@ -27,10 +30,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const auth = await requireAuth(req, res)
     if (!auth) return
 
-    const { tier, billingCycle } = req.body as { tier?: string; billingCycle?: string }
-    if (!tier || !billingCycle) {
-      return res.status(400).json({ error: 'tier and billingCycle are required' })
-    }
+    // Billing is an admin action.
+    if (!(await requireRole(auth, res, 'admin'))) return
+    const body = parseBody(CheckoutCreate, req, res)
+    if (!body) return
+    const { tier, billingCycle } = body
 
     // Dev mode: no Stripe key configured — simulate successful checkout
     if (!process.env.STRIPE_SECRET_KEY) {

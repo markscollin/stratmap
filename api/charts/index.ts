@@ -1,8 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, count } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { requireRole, getEffectivePlan, sendPlanLimit } from '../_lib/access'
+import { parseBody } from '../_lib/validate'
+import { ChartCreate } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
+import { fitsLimit } from '../../src/lib/plans'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -20,16 +24,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { name, status = 'draft', templateNodes = [], templateEdges = [], templateDepts = [] } =
-        req.body as {
-          name: string
-          status?: string
-          templateNodes?: typeof nodes.$inferInsert[]
-          templateEdges?: typeof edges.$inferInsert[]
-          templateDepts?: typeof departments.$inferInsert[]
-        }
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(ChartCreate, req, res)
+      if (!body) return
+      const { name, status = 'draft', templateNodes, templateEdges, templateDepts } = body
 
-      if (!name) return res.status(400).json({ error: 'name is required' })
+      // Plan limits: chart count, and node count of the seeded template.
+      const plan = await getEffectivePlan(auth.workspaceId)
+      if (!plan) return res.status(404).json({ error: 'Workspace not found' })
+      const [{ value: chartCount }] = await db
+        .select({ value: count() })
+        .from(charts)
+        .where(eq(charts.workspaceId, auth.workspaceId))
+      if (!fitsLimit(plan.limits.maxCharts, chartCount)) {
+        return sendPlanLimit(res, 'charts', plan, plan.limits.maxCharts)
+      }
+      if (!fitsLimit(plan.limits.maxNodesPerChart, 0, templateNodes.length)) {
+        return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+      }
 
       const chartId = crypto.randomUUID()
 
@@ -39,32 +51,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id: chartId,
           workspaceId: auth.workspaceId,
           name,
-          status: status as typeof charts.$inferInsert['status'],
+          status,
           version: 1,
           ownerId: auth.userId,
           creatorId: auth.userId,
         })
         .returning()
 
-      // Seed from template — generate fresh IDs to avoid PK conflicts across charts
+      // Seed from template — generate fresh IDs to avoid PK conflicts across charts.
+      // Only allow-listed fields (validated above) are written.
       const deptIdMap = new Map<string, string>()
       const nodeIdMap = new Map<string, string>()
 
       if (templateDepts.length) {
         const newDepts = templateDepts.map((d) => {
           const newId = crypto.randomUUID()
-          deptIdMap.set(d.id!, newId)
-          return { ...d, id: newId, chartId }
+          deptIdMap.set(d.id, newId)
+          return {
+            id: newId,
+            chartId,
+            name: d.name,
+            colour: d.colour,
+            workspaceDepartmentId: d.workspaceDepartmentId ?? null,
+          }
         })
         await db.insert(departments).values(newDepts)
       }
 
       if (templateNodes.length) {
         // Pre-generate all node IDs so managerId refs can be remapped in one pass
-        templateNodes.forEach((n) => nodeIdMap.set(n.id!, crypto.randomUUID()))
+        templateNodes.forEach((n) => nodeIdMap.set(n.id, crypto.randomUUID()))
         const newNodes = templateNodes.map((n) => ({
           ...n,
-          id: nodeIdMap.get(n.id!)!,
+          id: nodeIdMap.get(n.id)!,
           chartId,
           departmentId: n.departmentId ? (deptIdMap.get(n.departmentId) ?? null) : null,
           managerId: n.managerId ? (nodeIdMap.get(n.managerId) ?? null) : null,
@@ -72,16 +91,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await db.insert(nodes).values(newNodes)
       }
 
-      if (templateEdges.length) {
-        const newEdges = templateEdges.map((e) => ({
-          ...e,
+      // Edges may only connect nodes that were seeded into this chart.
+      const newEdges = templateEdges
+        .filter((e) => nodeIdMap.has(e.sourceId) && nodeIdMap.has(e.targetId))
+        .map((e) => ({
           id: crypto.randomUUID(),
           chartId,
-          sourceId: nodeIdMap.get(e.sourceId!) ?? e.sourceId!,
-          targetId: nodeIdMap.get(e.targetId!) ?? e.targetId!,
+          sourceId: nodeIdMap.get(e.sourceId)!,
+          targetId: nodeIdMap.get(e.targetId)!,
         }))
-        await db.insert(edges).values(newEdges)
-      }
+      if (newEdges.length) await db.insert(edges).values(newEdges)
 
       return res.status(201).json(chart)
     }
