@@ -1,13 +1,17 @@
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
+import { getSelectedWorkspaceId, setSelectedWorkspaceId } from './workspaceSelection'
 
-async function getAuthHeaders(): Promise<HeadersInit> {
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  // The selected workspace (roadmap 1.2). The server checks membership.
+  const workspaceId = getSelectedWorkspaceId()
+  const ws: Record<string, string> = workspaceId ? { 'X-Workspace-Id': workspaceId } : {}
   if (IS_DEV_BYPASS) {
-    return { 'X-Dev-User': 'true' }
+    return { 'X-Dev-User': 'true', ...ws }
   }
   // Get Clerk session token from the global Clerk singleton
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const token = await (window as any).Clerk?.session?.getToken?.()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  return token ? { Authorization: `Bearer ${token}`, ...ws } : ws
 }
 
 /** Error thrown for non-2xx API responses. `message` is the server's `error` code
@@ -30,7 +34,8 @@ export class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retried = false,
 ): Promise<T> {
   const authHeaders = await getAuthHeaders()
   const res = await fetch(path, {
@@ -45,6 +50,11 @@ async function request<T>(
   if (res.status === 204) return undefined as T
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    // Removed from the remembered workspace: forget it and retry with the default one.
+    if (res.status === 403 && body.error === 'not-a-member' && getSelectedWorkspaceId() && !retried) {
+      setSelectedWorkspaceId(null)
+      return request<T>(path, options, true)
+    }
     throw new ApiError(res.status, body)
   }
   return res.json() as Promise<T>

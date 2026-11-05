@@ -16,6 +16,7 @@ import { setupSchema, cleanDb, seedWorkspace, testDb, TEST_USER_ID, TEST_WS_ID }
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 const DEV_USER_ID = 'u-dev'
 const DEV_WS_ID = 'ws-dev'
@@ -156,3 +157,52 @@ describe('requireAuth', () => {
     expect(res._status).toBe(401)
   })
 })
+
+describe('requireAuth — choosing the workspace (roadmap 1.2)', () => {
+  const USER = 'clerk-multi'
+  const WS_A = 'ws-a'
+  const WS_B = 'ws-b'
+
+  beforeEach(async () => {
+    process.env.CLERK_SECRET_KEY = 'sk_test_key'
+    vi.mocked(verifyToken).mockResolvedValue({ sub: USER } as never)
+    for (const [id, name] of [[WS_A, 'A'], [WS_B, 'B'], ['ws-c', 'C']]) {
+      await testDb.insert(schema.workspaces).values({ id, name, ownerId: 'x', ownerRole: 'Founder/CEO', size: '1-10' })
+    }
+    // Joined A first (as owner), then B (as viewer). Not a member of C.
+    await testDb.insert(schema.workspaceMembers).values([
+      { id: 'm-a', workspaceId: WS_A, userId: USER, email: 'm@co.com', permission: 'owner', joinedAt: new Date('2026-01-01') },
+      { id: 'm-b', workspaceId: WS_B, userId: USER, email: 'm@co.com', permission: 'viewer', joinedAt: new Date('2026-02-01') },
+    ])
+  })
+
+  async function auth(headers: Record<string, string> = {}) {
+    const res = createRes()
+    const ctx = await requireAuth(createReq({ headers: { authorization: 'Bearer t', ...headers } }) as never, res as never)
+    return { ctx, res }
+  }
+
+  it('uses the workspace named in X-Workspace-Id, with the role held there', async () => {
+    const { ctx } = await auth({ 'x-workspace-id': WS_B })
+    expect(ctx).toEqual({ userId: USER, workspaceId: WS_B, permission: 'viewer' })
+  })
+
+  it('falls back to the first workspace joined when no header is sent', async () => {
+    const { ctx } = await auth()
+    expect(ctx).toEqual({ userId: USER, workspaceId: WS_A, permission: 'owner' })
+  })
+
+  it('refuses a workspace the user does not belong to', async () => {
+    const { ctx, res } = await auth({ 'x-workspace-id': 'ws-c' })
+    expect(ctx).toBeNull()
+    expect(res._status).toBe(403)
+    expect(res._body).toMatchObject({ error: 'not-a-member' })
+  })
+
+  it('refuses after the user is removed from the workspace', async () => {
+    await testDb.delete(schema.workspaceMembers).where(eq(schema.workspaceMembers.id, 'm-b'))
+    const { res } = await auth({ 'x-workspace-id': WS_B })
+    expect(res._status).toBe(403)
+  })
+})
+

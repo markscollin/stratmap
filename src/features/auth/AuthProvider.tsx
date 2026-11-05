@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
 import { useToastStore } from '../../store/toastStore'
+import { setSelectedWorkspaceId } from '../../lib/workspaceSelection'
 import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
 import type { PlanTier, Permission, WorkspaceRole, CompanySize, SubscriptionInfo } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
@@ -73,6 +74,8 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
     )
 
     function applyWorkspace(ws: WorkspaceResponse) {
+      // Remember it, so later requests and visits stay in this workspace (roadmap 1.2).
+      setSelectedWorkspaceId(ws.id)
       setWorkspace({
         id: ws.id,
         name: ws.name,
@@ -109,8 +112,9 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
       // Uses the token from an /invite link if we have one, else matches by verified email.
       const token = getRememberedInviteToken()
       try {
-        await api.post('/api/invites/accept', token ? { token } : {})
+        const joined = await api.post<{ workspaceId: string }>('/api/invites/accept', token ? { token } : {})
         forgetInviteToken()
+        setSelectedWorkspaceId(joined.workspaceId)
         applyWorkspace(await api.get<WorkspaceResponse>('/api/workspace'))
         setResolved()
         if (pathname === '/onboarding') navigate('/dashboard')
