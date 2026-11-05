@@ -1,4 +1,4 @@
-import { SignIn } from '@clerk/clerk-react'
+import { SignIn, SignUp } from '@clerk/clerk-react'
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
 import { Navigate } from 'react-router-dom'
 
@@ -16,7 +16,7 @@ export function SignInPage() {
       gap: 32,
     }}>
       <Logo />
-      <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
+      <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" fallbackRedirectUrl="/dashboard" />
     </div>
   )
 }
@@ -35,7 +35,7 @@ export function SignUpPage() {
       gap: 32,
     }}>
       <Logo />
-      <SignIn routing="path" path="/sign-up" signInUrl="/sign-in" />
+      <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" fallbackRedirectUrl="/dashboard" />
     </div>
   )
 }

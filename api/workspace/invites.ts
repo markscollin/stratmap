@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and, count } from 'drizzle-orm'
+import { and, eq, count, desc, gt, isNull, or } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { requireRole, ROLE_RANK, getEffectivePlan, sendPlanLimit } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
@@ -7,13 +7,16 @@ import { InviteCreate } from '../_lib/schemas'
 import { enforceRateLimit } from '../_lib/rateLimit'
 import { db } from '../_lib/db'
 import { reportError } from '../_lib/sentry'
-import { sendWorkspaceInvite } from '../_lib/email'
-import { getAppUrl } from '../_lib/url'
-import { workspaces, workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
+import { sendInviteEmail, toInviteView } from '../_lib/invites'
+import { newInviteToken } from '../_lib/inviteTokens'
+import { workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
 import { fitsLimit } from '../../src/lib/plans'
 
+// GET  /api/workspace/invites  — pending invites (admin+)
+// POST /api/workspace/invites  — create invites and email single-use links (admin+)
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const auth = await requireAuth(req, res)
   if (!auth) return
@@ -21,6 +24,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const callerPermission = await requireRole(auth, res, 'admin')
     if (!callerPermission) return
+
+    if (req.method === 'GET') {
+      const rows = await db.select().from(pendingInvites)
+        .where(eq(pendingInvites.workspaceId, auth.workspaceId))
+        .orderBy(desc(pendingInvites.sentAt))
+      return res.json({ invites: rows.map(r => toInviteView(r)) })
+    }
 
     const body = parseBody(InviteCreate, req, res)
     if (!body) return
@@ -48,43 +58,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return true
     })
 
-    // Seat limit: members + pending invites + new invites.
+    // Seat limit: members + live (unexpired) pending invites + new invites.
     const plan = await getEffectivePlan(auth.workspaceId)
     if (!plan) return res.status(404).json({ error: 'Workspace not found' })
     const [[{ value: memberCount }], [{ value: inviteCount }]] = await Promise.all([
       db.select({ value: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, auth.workspaceId)),
-      db.select({ value: count() }).from(pendingInvites).where(eq(pendingInvites.workspaceId, auth.workspaceId)),
+      db.select({ value: count() }).from(pendingInvites).where(and(
+        eq(pendingInvites.workspaceId, auth.workspaceId),
+        or(isNull(pendingInvites.expiresAt), gt(pendingInvites.expiresAt, new Date())),
+      )),
     ])
     if (!fitsLimit(plan.limits.seats, memberCount + inviteCount, fresh.length)) {
       return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
     }
 
-    const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1)
-    const [inviter] = await db
-      .select()
-      .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, auth.workspaceId), eq(workspaceMembers.userId, auth.userId)))
-      .limit(1)
-
-    const workspaceName = ws?.name ?? 'a workspace'
-    const inviterName = inviter?.name ?? 'A teammate'
-    const inviteUrl = `${getAppUrl()}/sign-up`
-
     const created = []
     for (const { email, permission } of fresh) {
+      const { token, tokenHash, expiresAt } = newInviteToken()
       const [row] = await db
         .insert(pendingInvites)
-        .values({ id: crypto.randomUUID(), workspaceId: auth.workspaceId, email, permission })
+        .values({ id: crypto.randomUUID(), workspaceId: auth.workspaceId, email, permission, tokenHash, expiresAt, invitedBy: auth.userId })
         .returning()
-      created.push(row)
-
-      // Email failures must not fail the request — the invite is already persisted.
-      try {
-        await sendWorkspaceInvite({ to: email, workspaceName, inviterName, inviteUrl })
-      } catch (emailErr) {
-        console.error('[invites] email send failed for', email, emailErr)
-        reportError(emailErr, { route: '/api/workspace/invites', email })
-      }
+      created.push(toInviteView(row))
+      await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email, token })
     }
 
     return res.status(201).json({ invites: created })
@@ -94,3 +90,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
+

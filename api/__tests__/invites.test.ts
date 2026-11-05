@@ -33,9 +33,9 @@ beforeEach(async () => {
 })
 
 describe('POST /api/workspace/invites', () => {
-  it('returns 405 for non-POST methods', async () => {
+  it('returns 405 for unsupported methods', async () => {
     const res = createRes()
-    await handler(createReq({ method: 'GET' }) as never, res as never)
+    await handler(createReq({ method: 'PUT' }) as never, res as never)
     expect(res._status).toBe(405)
   })
 
