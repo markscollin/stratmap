@@ -1,4 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { vi, describe, it, expect, afterEach } from 'vitest'
+
+// billing.ts imports the db module; these are pure-function tests, so use the test db.
+vi.mock('../../src/lib/db/index', async () => {
+  const { testDb } = await import('./helpers/db')
+  return { db: testDb }
+})
+
 import { resolvePlanTier, tierForSubscription, periodEnd, LAPSED_CANCEL_GRACE_MS, type PlanFields } from '../_lib/billing'
 import type Stripe from 'stripe'
 
