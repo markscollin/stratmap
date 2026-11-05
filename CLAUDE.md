@@ -83,7 +83,10 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
 (`vercel.json` buildCommand → `npm run vercel-build` → build, then `scripts/migrate.mjs --deploy`).
 Workflow: edit `src/lib/db/schema.ts` → `npm run db:generate` → review and commit the SQL.
-**Never `drizzle-kit push` against production.** Migrations must be additive (expand/contract),
+**Never `drizzle-kit push` against production.**
+
+**CI (roadmap 3.1):** `.github/workflows/ci.yml` runs `typecheck` (app + `api/` via `tsconfig.api.json`),
+lint, `test:run`, `test:api` and build on every PR and push to `main`. Run them locally before pushing. Migrations must be additive (expand/contract),
 because they run while the old code is still live. Full details are in `docs/MIGRATIONS.md`.
 
 ---
@@ -377,8 +380,8 @@ npm install
 # Start dev server (Vite + Vercel API functions together)
 npm run dev:local   # → http://localhost:3000
 
-# Type check (frontend only)
-npx tsc -p tsconfig.app.json --noEmit
+# Type check (app + API) — same as CI
+npm run typecheck
 
 # Run frontend tests (watch mode)
 npm test

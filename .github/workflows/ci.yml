@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Keep this job name stable: branch protection on `main` requires the "check" status.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check (app + API)
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Frontend tests
+        run: npm run test:run
+
+      # PGlite, no network. Includes api/__tests__/migrations.test.ts, which fails
+      # when src/lib/db/schema.ts changes without a generated migration.
+      - name: API tests
+        run: npm run test:api
+
+      - name: Build
+        run: npm run build

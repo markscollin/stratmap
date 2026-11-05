@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "vercel-build": "npm run build && node scripts/migrate.mjs --deploy",
     "lint": "eslint .",
+    "typecheck": "tsc -b && tsc -p tsconfig.api.json",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
