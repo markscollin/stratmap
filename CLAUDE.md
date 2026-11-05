@@ -100,7 +100,9 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - **Client:** `src/lib/workspaceSelection.ts` remembers the choice in `localStorage`. `apiClient` sends the header, and on
   `not-a-member` forgets it and retries once. `switchWorkspace(id)` reloads the app so every store starts clean.
   The switcher is `WorkspaceSwitcher` at the top of the sidebar.
-- **Not built yet:** creating a second workspace of your own (`POST /api/workspace` returns the existing one).
+- **Decided (owner): one owned workspace per user.** Other workspaces are joined by invite only; `POST /api/workspace`
+  returns the one the user already has. This stops users stacking Free workspaces. Don't change it without asking.
+  If it's ever needed: the first workspace can be Free, and every additional one must be paid (create → checkout).
 
 ## Paid features (2026-11-05)
 
