@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Network, LayoutDashboard, GitBranch, Users, BarChart2, Settings } from 'lucide-react'
 import { useChartStore } from '../../store'
 import { useUIStore } from '../../store/uiStore'
-import { mockDepartments } from '../../data/mockOrg'
 
 interface Result {
   id: string
@@ -66,7 +65,7 @@ export function Spotlight() {
     charts.forEach(chart => {
       chart.nodes.forEach(node => {
         if (!q || node.name.toLowerCase().includes(q) || node.title.toLowerCase().includes(q)) {
-          const dept = mockDepartments.find(d => d.id === node.departmentId)
+          const dept = chart.departments.find(d => d.id === node.departmentId)
           nodeResults.push({
             id: `node-${chart.id}-${node.id}`,
             type: 'node',

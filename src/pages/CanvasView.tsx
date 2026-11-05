@@ -6,7 +6,6 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
 import { OrgChart } from '../features/canvas/OrgChart'
 import { usePermission } from '../hooks/usePermission'
-import { mockDepartments } from '../data/mockOrg'
 import { api } from '../lib/apiClient'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
@@ -70,7 +69,7 @@ export function CanvasView() {
   const name    = fullChart.name
   const status  = (chartMeta?.status ?? fullChart.status) as import('../types').ChartStatus
   const version = chartMeta?.version ?? fullChart.version
-  const depts   = fullChart.departments.length ? fullChart.departments : mockDepartments
+  const depts   = fullChart.departments
 
   return (
     <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

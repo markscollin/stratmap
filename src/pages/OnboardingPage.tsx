@@ -7,7 +7,7 @@ import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
 import { api } from '../lib/apiClient'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
-import { mockDepartments } from '../data/mockOrg'
+import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
 
 // New workspaces start on Free; the API rejects invites beyond the plan's seats
@@ -28,9 +28,9 @@ const PERMISSIONS: Permission[] = ['admin', 'editor', 'viewer']
 export function OnboardingPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { setWorkspace } = useUserStore()
+  const { setWorkspace, setPermission } = useUserStore()
   const { addToast } = useToastStore()
-  const { addChart } = useChartStore()
+  const { createChart } = useChartStore()
 
   useEffect(() => { document.title = 'Get started — StratMap' }, [])
 
@@ -61,22 +61,7 @@ export function OnboardingPage() {
     setInvites((rows) => rows.filter((_, i) => i !== idx))
   }
 
-  function buildWorkspace(sendInvites: boolean) {
-    const now = new Date().toISOString()
-    const filledInvites = sendInvites ? invites.filter((r) => r.email.trim()) : []
-    setWorkspace({
-      id: `ws-${Date.now()}`,
-      name: workspaceName.trim(),
-      ownerRole, size,
-      members: user
-        ? [{ user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl }, permission: 'owner', joinedAt: now }]
-        : [],
-      pendingInvites: filledInvites.map((r) => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
-      createdAt: now,
-    })
-  }
-
-  async function complete(sendInvites: boolean) {
+  async function complete(sendInvites: boolean, quickStart = false) {
     const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
     try {
       const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string }>(
@@ -95,6 +80,8 @@ export function OnboardingPage() {
         pendingInvites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
         createdAt: ws.createdAt ?? now,
       })
+      // You created it, so you own it (AuthProvider starts everyone as viewer until the server says otherwise).
+      setPermission('owner')
       // Persist + email invites (best-effort — failure shouldn't block onboarding)
       if (filledInvites.length > 0) {
         try {
@@ -107,41 +94,21 @@ export function OnboardingPage() {
       }
 
       const firstName = user?.name.split(' ')[0] ?? 'there'
+      if (quickStart) {
+        const { nodes, edges, departments } = buildChartTemplate('quickstart')
+        const chart = await createChart('Current Structure', nodes, edges, departments)
+        if (chart) {
+          addToast(`Welcome to StratMap, ${firstName}! Your starter chart is ready.`, 'success')
+          navigate(`/charts/${chart.id}`)
+          return
+        }
+      }
       addToast(`Welcome to StratMap, ${firstName}!`, 'success')
       navigate('/charts')
     } catch (err) {
       console.error('[onboarding] workspace creation failed:', err)
       addToast('Failed to create workspace. Please try again.', 'error')
     }
-  }
-
-  function completeWithQuickStart(sendInvites: boolean) {
-    buildWorkspace(sendInvites)
-    const now = new Date().toISOString()
-    const dept = mockDepartments[0]
-    const nodes = [
-      { id: 'qs-1', name: 'CEO',             title: 'Chief Executive Officer',  departmentId: dept?.id ?? 'eng', managerId: null,   status: 'active' as const, employmentType: 'full-time' as const, x: 400, y: 0   },
-      { id: 'qs-2', name: 'CTO',             title: 'Chief Technology Officer', departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'active' as const, employmentType: 'full-time' as const, x: 0,   y: 200 },
-      { id: 'qs-3', name: 'CPO',             title: 'Chief Product Officer',    departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'active' as const, employmentType: 'full-time' as const, x: 260, y: 200 },
-      { id: 'qs-4', name: 'Head of Sales',   title: 'Head of Sales',            departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'open'   as const, employmentType: 'full-time' as const, x: 520, y: 200 },
-      { id: 'qs-5', name: 'Head of Ops',     title: 'Head of Operations',       departmentId: dept?.id ?? 'eng', managerId: 'qs-1', status: 'planned' as const, employmentType: 'full-time' as const, x: 780, y: 200 },
-    ]
-    const edges = [
-      { id: 'qe-1', sourceId: 'qs-1', targetId: 'qs-2' },
-      { id: 'qe-2', sourceId: 'qs-1', targetId: 'qs-3' },
-      { id: 'qe-3', sourceId: 'qs-1', targetId: 'qs-4' },
-      { id: 'qe-4', sourceId: 'qs-1', targetId: 'qs-5' },
-    ]
-    const chartId = `chart-qs-${Date.now()}`
-    addChart({
-      id: chartId, name: 'Current Structure', status: 'editing', version: 1, isPublic: false,
-      departments: mockDepartments, nodes, edges,
-      owner: user?.id ?? 'dev', creator: user?.id ?? 'dev',
-      collaborators: [], createdAt: now, updatedAt: now,
-    })
-    const firstName = user?.name.split(' ')[0] ?? 'there'
-    addToast(`Welcome to StratMap, ${firstName}! Your starter chart is ready.`, 'success')
-    navigate(`/charts/${chartId}`)
   }
 
   return (
@@ -203,7 +170,7 @@ export function OnboardingPage() {
             removeInviteRow={removeInviteRow}
             onSkip={() => complete(false)}
             onSend={() => complete(true)}
-            onQuickStart={() => completeWithQuickStart(false)}
+            onQuickStart={() => complete(false, true)}
             canAddMore={invites.length < MAX_ONBOARDING_INVITES}
           />
         )}
@@ -419,6 +386,7 @@ function Step2({
             </div>
           </div>
           <button
+            data-testid="quick-start-btn"
             onClick={onQuickStart}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,

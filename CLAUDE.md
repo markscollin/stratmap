@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**155 frontend + 306 backend = 461 passing** (after Phase 0, migrations and invites); `tsc` clean; `lint` 0 errors; build OK.
+**175 frontend + 313 backend = 488 passing** (after Phase 0, migrations, invites, and removing mock data); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -92,6 +92,11 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - **One workspace per user:** a user who is already in another workspace gets 409 until roadmap 1.2.
 - **Tests:** `api/__tests__/invite-accept.test.ts`, `api/__live__/invites.live.test.ts`, `src/pages/__tests__/InvitePage.test.tsx`,
   `SettingsMembers.test.tsx`.
+
+## No mock data in production (roadmap 1.7 + 1.8, 2026-11-05)
+
+`src/data/mock*` is for tests and dev only. Nothing in `src/pages` or `src/features` may import it.
+New-chart content comes from `src/lib/chartTemplates.ts`.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 
@@ -188,7 +193,7 @@ src/
 - Billing store (Zustand): Free/Starter/Growth/Enterprise tiers
 - `usePlanLimits` hook: chart/node/seat limits, feature gates, `upgradeRequired(feature)`
 - UpgradeModal: tier comparison, pricing, navigates to /pricing
-- Pricing page (/pricing): plan cards, monthly/annual toggle, "Trusted by teams at" logo bar, FAQ, enterprise CTA
+- Pricing page (/pricing): plan cards, monthly/annual toggle, FAQ, enterprise CTA. Only advertise features that exist (roadmap 1.7).
 - Checkout flow (demo-ready): Stripe Payment Link compatible
 - Dev tools: `__devTools.setPlan('free'|'starter'|'growth')` in browser console
 
@@ -259,7 +264,9 @@ src/
 - `src/pages/SharePage.tsx` — public share view; detects short codes vs legacy URL tokens
 - `api/charts/[id]/share.ts` — POST (create link), DELETE (revoke)
 - `api/share/[code].ts` — GET (public, no auth) returns chart snapshot
-- `src/pages/PricingPage.tsx` — pricing with logo bar + FAQ
+- `src/pages/PricingPage.tsx` — pricing cards + FAQ
+- `src/lib/chartTemplates.ts` — new-chart templates (Startup, Scale-up, Hiring plan, onboarding quick start)
+- `api/roles/search.ts` — role search across the workspace's charts (Roles → Find roles)
 - `src/pages/OnboardingPage.tsx` — 2-step onboarding + quick-start chart
 
 ---
@@ -402,13 +409,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 155 tests
+npm run test:run       # 175 tests
 
 # Run backend API tests
-npm run test:api       # 306 tests (PGlite, no network)
+npm run test:api       # 313 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 461 tests total
+npm run test:all       # 488 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

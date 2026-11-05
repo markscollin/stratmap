@@ -21,7 +21,7 @@ export function PricingPage() {
         { name: '1 org chart', included: true },
         { name: 'Up to 30 nodes', included: true },
         { name: '3 team members', included: true },
-        { name: 'PNG export (watermarked)', included: true },
+        { name: 'PNG export', included: true },
         { name: 'JD editor', included: false },
         { name: 'PDF export', included: false },
         { name: 'Approval workflows', included: false },
@@ -40,10 +40,9 @@ export function PricingPage() {
         { name: 'Up to 5 org charts', included: true },
         { name: 'Up to 100 nodes', included: true },
         { name: '5 team members', included: true },
-        { name: 'PNG export (no watermark)', included: true },
-        { name: 'JD editor & AI drafting', included: true },
+        { name: 'Auto-layout', included: true },
+        { name: 'AI JD drafting (3 per month)', included: true },
         { name: 'PDF export', included: true },
-        { name: 'Password-protected shares', included: true },
       ],
       cta: 'Upgrade to Starter',
     },
@@ -60,7 +59,6 @@ export function PricingPage() {
         { name: 'All export options', included: true },
         { name: 'Unlimited AI drafting', included: true },
         { name: 'Headcount planning', included: true },
-        { name: 'Real-time collaboration', included: true },
       ],
       cta: 'Upgrade to Growth',
     },
@@ -122,25 +120,10 @@ export function PricingPage() {
         {billingCycle === 'annual' && (
           <div style={{ marginTop: 12 }}>
             <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'var(--success-bg)', padding: '4px 12px', borderRadius: 6 }}>
-              Save 22%
+              2 months free
             </span>
           </div>
         )}
-      </div>
-
-      {/* Trusted by teams */}
-      <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.8px', marginBottom: 16 }}>
-          Trusted by teams at
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, flexWrap: 'wrap' }}>
-          {['Acme Corp', 'Lumen Labs', 'Orbit HQ', 'Starfall', 'NovaTech'].map(name => (
-            <span key={name} style={{
-              fontSize: 14, fontWeight: 700, color: 'var(--dim)',
-              letterSpacing: '-.2px', opacity: 0.6,
-            }}>{name}</span>
-          ))}
-        </div>
       </div>
 
       {/* Pricing cards */}

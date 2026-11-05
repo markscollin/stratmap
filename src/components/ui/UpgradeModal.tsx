@@ -15,7 +15,7 @@ const TIER_INFO = {
     name: 'Starter',
     monthlyPrice: '£18',
     annualPrice: '£180',
-    features: ['JD editor & AI drafting', 'PDF export', 'Password protection', 'Up to 5 charts'],
+    features: ['AI JD drafting (3 per month)', 'Auto-layout', 'Up to 5 charts', 'Up to 100 roles per chart'],
     icon: Lock,
     colour: '#0EA5E9',
   },
@@ -23,7 +23,7 @@ const TIER_INFO = {
     name: 'Growth',
     monthlyPrice: '£49',
     annualPrice: '£490',
-    features: ['Unlimited charts & nodes', 'Headcount planning', 'Real-time collab', 'Auto-layout'],
+    features: ['Unlimited charts', 'Up to 500 roles per chart', 'Unlimited AI drafting', '10 team members'],
     icon: Zap,
     colour: '#8B5CF6',
   },
@@ -110,7 +110,7 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, requiredTier
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>/month</span>
             </div>
             <p style={{ fontSize: 12, color: 'var(--success)', marginTop: 6, fontWeight: 600 }}>
-              Save 22% with annual billing
+              2 months free with annual billing
             </p>
           </div>
 

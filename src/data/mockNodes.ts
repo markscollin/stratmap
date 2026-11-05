@@ -14,8 +14,7 @@ import type { OrgNode, OrgEdge } from '../types'
 // Subtree centers: 340, 930, 1420, 1820
 // CEO center: (340+1820)/2 = 1080  → x=980
 
-export const NODE_W = 220
-export const NODE_H = 80
+export { NODE_W, NODE_H } from '../features/nodes/nodeSize'
 
 export const currentStructureNodes: OrgNode[] = [
   // ── Level 0: CEO

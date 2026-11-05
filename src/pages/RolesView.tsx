@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { BookOpen, Search, Plus, FileText, X, MoreHorizontal, Copy, Trash2 } from 'lucide-react'
-import { mockRoleSearchResults } from '../data/mockJDs'
 import { useTemplateStore, type Template } from '../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 import { JDEditor } from '../features/jd/JDEditor'
+import { api, ApiError } from '../lib/apiClient'
 
 const FALLBACK_COLOUR = '#94A3B8'
 
@@ -11,7 +12,19 @@ const ROLE_STATUS_META = {
   active:  { label: 'Active',  color: 'var(--success)', bg: 'var(--success-bg)' },
   open:    { label: 'Open',    color: 'var(--warn)',    bg: 'var(--warn-bg)'    },
   planned: { label: 'Planned', color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
+  backfill:{ label: 'Backfill', color: 'var(--brand)',  bg: 'var(--brand-bg)'   },
 } as const
+
+interface RoleSearchResult {
+  nodeId: string
+  chartId: string
+  chart: string
+  version: number
+  title: string
+  person: string | null
+  status: keyof typeof ROLE_STATUS_META
+  dept: string | null
+}
 
 type RoleTab = 'templates' | 'search'
 
@@ -509,31 +522,55 @@ function QuickSearch({ label, onSelect }: { label: string; onSelect: () => void 
 }
 
 function SearchResults({ query }: { query: string }) {
-  const results = mockRoleSearchResults
-  const uniqueCharts = new Set(results.map(r => r.chart)).size
-  const counts = { active: 0, open: 0, planned: 0 }
+  const [results, setResults] = useState<RoleSearchResult[] | null>(null)
+  const [truncated, setTruncated] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.get<{ results: RoleSearchResult[]; truncated: boolean }>(`/api/roles/search?q=${encodeURIComponent(query)}`)
+      .then(r => { if (!cancelled) { setResults(r.results); setTruncated(r.truncated); setError(null) } })
+      .catch(err => { if (!cancelled) { setResults([]); setError(err instanceof ApiError ? err.userMessage : 'Search failed') } })
+    return () => { cancelled = true }
+  }, [query])
+
+  if (results === null) return <p style={{ fontSize: 13, color: 'var(--muted)' }}>Searching…</p>
+
+  const uniqueCharts = new Set(results.map(r => r.chartId)).size
+  const counts: Record<keyof typeof ROLE_STATUS_META, number> = { active: 0, open: 0, planned: 0, backfill: 0 }
   results.forEach(r => { counts[r.status]++ })
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
             Results for <span style={{ color: 'var(--brand)' }}>"{query}"</span>
           </h3>
-          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{results.length} results across {uniqueCharts} charts</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>
+            {results.length}{truncated ? '+' : ''} result{results.length === 1 ? '' : 's'} across {uniqueCharts} chart{uniqueCharts === 1 ? '' : 's'}
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {([['active','var(--success)','var(--success-bg)'],['open','var(--warn)','var(--warn-bg)'],['planned','var(--purple)','var(--purple-bg)']] as const).map(([s,c,bg]) =>
-            counts[s] > 0 && (
-              <span key={s} style={{ padding: '4px 12px', background: bg, border: `1px solid ${c}40`, borderRadius: 20, fontSize: 12, fontWeight: 600, color: c }}>
-                {counts[s]} {ROLE_STATUS_META[s].label.toLowerCase()}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(Object.keys(ROLE_STATUS_META) as (keyof typeof ROLE_STATUS_META)[]).map(st =>
+            counts[st] > 0 && (
+              <span key={st} style={{ padding: '4px 12px', background: ROLE_STATUS_META[st].bg, borderRadius: 20, fontSize: 12, fontWeight: 600, color: ROLE_STATUS_META[st].color }}>
+                {counts[st]} {ROLE_STATUS_META[st].label.toLowerCase()}
               </span>
             )
           )}
         </div>
       </div>
 
+      {error && (
+        <div role="alert" style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 10, fontSize: 13 }}>{error}</div>
+      )}
+
+      {results.length === 0 && !error ? (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
+          No roles match "{query}" in your charts.
+        </div>
+      ) : results.length > 0 && (
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '10px 20px', background: 'var(--raised)', borderBottom: '1px solid var(--border)' }}>
           {['Role title','Chart','Department','Status'].map(h => (
@@ -543,15 +580,16 @@ function SearchResults({ query }: { query: string }) {
         {results.map((r, i) => {
           const sm = ROLE_STATUS_META[r.status]
           return (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '14px 20px', borderBottom: i < results.length-1 ? '1px solid var(--border)' : 'none', alignItems: 'center' }}>
+            <div key={r.nodeId} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '14px 20px', borderBottom: i < results.length-1 ? '1px solid var(--border)' : 'none', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{r.title}</div>
                 {r.person && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{r.person}</div>}
               </div>
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                {r.chart} <span style={{ fontSize: 10, color: 'var(--dim)' }}>v{r.version}</span>
+                <Link to={`/charts/${r.chartId}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{r.chart}</Link>{' '}
+                <span style={{ fontSize: 10, color: 'var(--dim)' }}>v{r.version}</span>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>{r.dept}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>{r.dept ?? '—'}</div>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: sm.bg, color: sm.color, fontSize: 11, fontWeight: 600, width: 'fit-content' }}>
                 {sm.label}
               </span>
@@ -559,6 +597,7 @@ function SearchResults({ query }: { query: string }) {
           )
         })}
       </div>
+      )}
     </div>
   )
 }

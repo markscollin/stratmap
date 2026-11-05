@@ -17,7 +17,6 @@ interface ChartStore {
   duplicateChart: (id: string) => Promise<void>
 
   // kept for backwards compat (canvas uses this to merge fetched data)
-  addChart: (chart: OrgChart) => void
 }
 
 export const useChartStore = create<ChartStore>((set, get) => ({
@@ -44,6 +43,8 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         collaborators: [],
         createdAt: String(c.createdAt),
         updatedAt: String(c.updatedAt),
+        nodeCount: Number(c.nodeCount ?? 0),
+        deptCount: Number(c.deptCount ?? 0),
       }))
       set({ charts, loaded: true })
     } catch (err) {
@@ -131,9 +132,5 @@ export const useChartStore = create<ChartStore>((set, get) => ({
       source.departments,
     )
     if (!chart) return
-  },
-
-  addChart(chart) {
-    set(s => ({ charts: [chart, ...s.charts] }))
   },
 }))

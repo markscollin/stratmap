@@ -4,7 +4,7 @@ import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
 import { useChartStore } from '../../store/chartStore'
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
-import { NODE_W, NODE_H } from '../../data/mockNodes'
+import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import { useCanvasState } from './useCanvasState'
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeModal } from '../nodes/NodeModal'
