@@ -14,6 +14,17 @@ export interface Plan {
   renewsAt: string | null
 }
 
+/** The workspace's Stripe subscription as /api/workspace reports it (roadmap 1.3). */
+export interface SubscriptionInfo {
+  /** Stripe's status (active, past_due, unpaid, canceled, …), or null if the workspace never subscribed. */
+  status: string | null
+  /** End of the paid-through period, or when a scheduled cancellation takes effect. ISO date. */
+  planExpiresAt: string | null
+  cancelAtPeriodEnd: boolean
+  /** True once the workspace has a Stripe customer, so the Customer Portal can open. */
+  hasBillingAccount: boolean
+}
+
 export interface UsageLimits {
   chartsUsed: number
   seatsUsed: number

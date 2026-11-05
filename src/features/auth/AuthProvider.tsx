@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
+import { useToastStore } from '../../store/toastStore'
 import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
-import type { PlanTier, Permission, WorkspaceRole, CompanySize } from '../../types'
+import type { PlanTier, Permission, WorkspaceRole, CompanySize, SubscriptionInfo } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
 import { api, ApiError } from '../../lib/apiClient'
 import { getRememberedInviteToken, forgetInviteToken } from './pendingInvite'
@@ -27,6 +28,7 @@ function DevBypassProvider({ children }: { children: ReactNode }) {
 interface WorkspaceResponse {
   id: string; name: string; ownerRole: string; size: string; createdAt: string
   planTier: PlanTier
+  billing?: SubscriptionInfo
   myPermission: Permission | null
   members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
 }
@@ -34,7 +36,7 @@ interface WorkspaceResponse {
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
   const { setUser, setPermission, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
-  const { setPlan } = useBillingStore()
+  const { setPlan, setSubscription } = useBillingStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
@@ -87,6 +89,7 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
       setPermission(ws.myPermission ?? 'viewer')
       // Sync billing plan from DB — source of truth for planTier
       setPlan(PLAN_BY_TIER[ws.planTier] ?? FREE_PLAN)
+      setSubscription(ws.billing)
     }
 
     async function load() {
@@ -118,6 +121,14 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
           navigate(`/invite/${token}`)
           return
         }
+        if (err instanceof ApiError && err.message === 'plan-limit') {
+          // Matched an invite by email, but that workspace has no free seat. Say so
+          // before onboarding, because creating a workspace would block the invite later.
+          useToastStore.getState().addToast(
+            `${err.userMessage} Or create your own workspace below.`,
+            'warning',
+          )
+        }
         forgetInviteToken()
       }
 
@@ -126,7 +137,7 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
       setResolved()
     }
     void load()
-  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, storeSignOut, navigate, isAuthPage, isPublicPage, pathname])
+  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, pathname])
 
   // Once we know there is no workspace, send the user to onboarding
   useEffect(() => {

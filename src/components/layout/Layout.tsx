@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopNav } from './TopNav'
+import { PaymentBanner } from '../../features/billing/PaymentBanner'
 
 export function Layout() {
   return (
@@ -15,6 +16,7 @@ export function Layout() {
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopNav />
+        <PaymentBanner />
         <main style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <Outlet />
         </main>

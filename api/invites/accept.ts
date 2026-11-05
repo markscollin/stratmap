@@ -8,6 +8,8 @@ import { db } from '../_lib/db'
 import { reportError } from '../_lib/sentry'
 import { getUserIdentity } from '../_lib/identity'
 import { hashInviteToken, isExpired } from '../_lib/inviteTokens'
+import { getEffectivePlan, getSeatUsage } from '../_lib/access'
+import { fitsLimit } from '../../src/lib/plans'
 import { workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
 
 // POST /api/invites/accept  { token? }
@@ -75,6 +77,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         error: 'already-in-workspace',
         message: 'Your account already belongs to another workspace. Joining more than one workspace is not supported yet.',
       })
+    }
+
+    // Seats (roadmap 1.5): the invite reserved a seat when it was sent, but a
+    // workspace that has since downgraded may have no room left. Keep the invite
+    // so it can be accepted once the workspace upgrades or frees a seat.
+    const plan = await getEffectivePlan(invite.workspaceId)
+    if (plan) {
+      const { members } = await getSeatUsage(invite.workspaceId)
+      if (!fitsLimit(plan.limits.seats, members)) {
+        return res.status(402).json({
+          error: 'plan-limit',
+          limit: 'seats',
+          max: plan.limits.seats,
+          tier: plan.tier,
+          message: 'This workspace has no free seats on its current plan. Ask a workspace admin to upgrade or free up a seat, then try again.',
+        })
+      }
     }
 
     // Claim the invite first: of two concurrent accepts, only one gets the row.

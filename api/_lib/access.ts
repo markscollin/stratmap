@@ -1,9 +1,10 @@
 import type { VercelResponse } from '@vercel/node'
-import { and, eq } from 'drizzle-orm'
+import { and, count, eq, gt, isNull, or } from 'drizzle-orm'
 import { db } from './db'
-import { workspaces, workspaceMembers, permissionEnum } from '../../src/lib/db/schema'
+import { workspaces, workspaceMembers, pendingInvites, permissionEnum } from '../../src/lib/db/schema'
 import { PLAN_LIMITS, PAID_FEATURES, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
 import type { AuthContext } from './auth'
+import { resolvePlanTier } from './billing'
 
 // ─── Roles ───────────────────────────────────────────────────────────────────
 //
@@ -65,17 +66,45 @@ export interface EffectivePlan {
   limits: PlanLimits
 }
 
-/** Resolves the workspace's effective plan — an active admin trial overrides the Stripe tier. */
+/** Resolves the workspace's effective plan (see resolvePlanTier in ./billing). */
 export async function getEffectivePlan(workspaceId: string): Promise<EffectivePlan | null> {
   const [ws] = await db
-    .select({ planTier: workspaces.planTier, trialPlan: workspaces.trialPlan, trialEndsAt: workspaces.trialEndsAt })
+    .select({
+      planTier: workspaces.planTier,
+      trialPlan: workspaces.trialPlan,
+      trialEndsAt: workspaces.trialEndsAt,
+      cancelAtPeriodEnd: workspaces.cancelAtPeriodEnd,
+      planExpiresAt: workspaces.planExpiresAt,
+    })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1)
   if (!ws) return null
-  const trialActive = ws.trialPlan && ws.trialEndsAt && ws.trialEndsAt > new Date()
-  const tier = (trialActive ? ws.trialPlan! : ws.planTier) as PlanTier
+  const tier = resolvePlanTier(ws)
   return { tier, limits: PLAN_LIMITS[tier] }
+}
+
+// ─── Seats (roadmap 1.5: flat tiers with a hard cap) ─────────────────────────
+//
+// A seat is a member or a live (unexpired) pending invite. People who only view a
+// public share link never take a seat. Over the cap after a downgrade, nobody is
+// removed: the workspace just can't add anyone until it is back under.
+
+export interface SeatUsage {
+  members: number
+  /** Unexpired pending invites. */
+  invites: number
+}
+
+export async function getSeatUsage(workspaceId: string): Promise<SeatUsage> {
+  const [[{ value: members }], [{ value: invites }]] = await Promise.all([
+    db.select({ value: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId)),
+    db.select({ value: count() }).from(pendingInvites).where(and(
+      eq(pendingInvites.workspaceId, workspaceId),
+      or(isNull(pendingInvites.expiresAt), gt(pendingInvites.expiresAt, new Date())),
+    )),
+  ])
+  return { members, invites }
 }
 
 export type LimitName = 'charts' | 'nodes' | 'seats' | 'ai-drafts'

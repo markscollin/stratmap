@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { and, eq, count, desc, gt, isNull, or } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
-import { requireRole, ROLE_RANK, getEffectivePlan, sendPlanLimit } from '../_lib/access'
+import { requireRole, ROLE_RANK, getEffectivePlan, sendPlanLimit, getSeatUsage } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { InviteCreate } from '../_lib/schemas'
 import { enforceRateLimit } from '../_lib/rateLimit'
@@ -61,14 +61,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Seat limit: members + live (unexpired) pending invites + new invites.
     const plan = await getEffectivePlan(auth.workspaceId)
     if (!plan) return res.status(404).json({ error: 'Workspace not found' })
-    const [[{ value: memberCount }], [{ value: inviteCount }]] = await Promise.all([
-      db.select({ value: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, auth.workspaceId)),
-      db.select({ value: count() }).from(pendingInvites).where(and(
-        eq(pendingInvites.workspaceId, auth.workspaceId),
-        or(isNull(pendingInvites.expiresAt), gt(pendingInvites.expiresAt, new Date())),
-      )),
-    ])
-    if (!fitsLimit(plan.limits.seats, memberCount + inviteCount, fresh.length)) {
+    const seats = await getSeatUsage(auth.workspaceId)
+    if (!fitsLimit(plan.limits.seats, seats.members + seats.invites, fresh.length)) {
       return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
     }
 

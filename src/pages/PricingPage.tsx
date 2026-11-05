@@ -20,7 +20,7 @@ export function PricingPage() {
       features: [
         { name: '1 org chart', included: true },
         { name: 'Up to 30 nodes', included: true },
-        { name: '3 team members', included: true },
+        { name: 'Up to 3 team members', included: true },
         { name: 'PNG export', included: true },
         { name: 'Job descriptions', included: false },
         { name: 'Approval workflows', included: false },
@@ -41,7 +41,7 @@ export function PricingPage() {
       features: [
         { name: 'Up to 5 org charts', included: true },
         { name: 'Up to 100 nodes', included: true },
-        { name: '5 team members', included: true },
+        { name: 'Up to 5 team members', included: true },
         { name: 'Job descriptions', included: true },
         { name: 'Approval workflows', included: true },
         { name: 'PDF export', included: true },
@@ -60,7 +60,7 @@ export function PricingPage() {
       features: [
         { name: 'Unlimited org charts', included: true },
         { name: 'Up to 500 nodes', included: true },
-        { name: '10 team members', included: true },
+        { name: 'Up to 10 team members', included: true },
         { name: 'All export options', included: true },
         { name: 'Unlimited AI drafting', included: true },
         { name: 'Headcount planning', included: true },
@@ -264,9 +264,9 @@ export function PricingPage() {
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {[
-            { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime. Changes take effect immediately.' },
+            { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime from Settings → Billing. Upgrades take effect immediately, and you pay the prorated difference. Downgrades and cancellations take effect at the end of your billing period, so you keep what you paid for until then.' },
             { q: 'What happens to my charts if I downgrade?', a: 'Your charts are never deleted. If you exceed the node limit on a lower plan, you can view but not edit until you upgrade.' },
-            { q: 'Do guests count towards seat limits?', a: 'No. Only team members with active accounts count. Guests viewing shared charts are free.' },
+            { q: 'Who counts towards the team member limit?', a: 'Every member of your workspace, plus every pending invite. People who only view a chart through a public share link don\'t count. Once every seat is taken, you can invite someone new after you upgrade or remove a member. If you downgrade with more members than the new plan allows, nobody is removed, but you can\'t add anyone until you\'re back under the limit.' },
             { q: 'Is there a free trial?', a: 'Our Free plan is effectively a trial. No credit card required to start.' },
             { q: 'What payment methods do you accept?', a: 'We accept all major credit cards, debit cards, and digital wallets via Stripe.' },
           ].map((faq, i) => (

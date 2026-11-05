@@ -274,3 +274,82 @@ describe('revoking and resending', () => {
     expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(1)
   })
 })
+
+describe('seat cap (roadmap 1.5: flat tiers, hard cap)', () => {
+  // Free allows 3 seats. A seat is a member or a live pending invite.
+  async function setTier(planTier: 'free' | 'growth') {
+    await testDb.update(schema.workspaces).set({ planTier }).where(eq(schema.workspaces.id, TEST_WS_ID))
+  }
+  async function expire(id: string) {
+    await testDb.update(schema.pendingInvites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.pendingInvites.id, id))
+  }
+
+  it('fills the last free seat', async () => {
+    await setTier('free')
+    await seedMember('u-a', 'editor')
+    const { token } = await invite('new@co.com')  // 2 members + 1 invite = 3
+    signInAs(INVITEE, ['new@co.com'])
+    const res = await call(acceptHandler, { method: 'POST', body: { token } })
+    expect(res._status).toBe(201)
+  })
+
+  it('refuses to accept when a downgrade left no free seat, and keeps the invite', async () => {
+    const { token, id } = await invite('new@co.com')
+    await seedMember('u-a', 'editor')
+    await seedMember('u-b', 'viewer')
+    await setTier('free')  // 3 members already
+    signInAs(INVITEE, ['new@co.com'])
+
+    const res = await call(acceptHandler, { method: 'POST', body: { token } })
+    expect(res._status).toBe(402)
+    expect(res._body).toMatchObject({ error: 'plan-limit', limit: 'seats', max: 3, tier: 'free' })
+    expect((res._body as { message: string }).message).toMatch(/no free seats/)
+    expect(await memberOf(INVITEE)).toHaveLength(0)
+    expect(await testDb.select().from(schema.pendingInvites).where(eq(schema.pendingInvites.id, id))).toHaveLength(1)
+
+    // Upgrading again lets the same link through.
+    await setTier('growth')
+    expect((await call(acceptHandler, { method: 'POST', body: { token } }))._status).toBe(201)
+  })
+
+  it('applies the cap to auto-accept by email too', async () => {
+    await invite('new@co.com')
+    await seedMember('u-a', 'editor')
+    await seedMember('u-b', 'viewer')
+    await setTier('free')
+    signInAs(INVITEE, ['new@co.com'])
+    const res = await call(acceptHandler, { method: 'POST', body: {} })
+    expect(res._status).toBe(402)
+  })
+
+  it('refuses to resend an expired invite when every seat is taken', async () => {
+    await setTier('free')
+    const { id } = await invite('new@co.com')
+    await expire(id)  // the expired invite holds no seat …
+    await seedMember('u-a', 'editor')
+    await seedMember('u-b', 'viewer')  // … and 3 members fill the plan
+    const before = (await testDb.select().from(schema.pendingInvites).where(eq(schema.pendingInvites.id, id)))[0]
+
+    const res = await call(inviteItemHandler, { method: 'POST', query: { id } })
+    expect(res._status).toBe(402)
+    expect(res._body).toMatchObject({ error: 'plan-limit', limit: 'seats' })
+    const after = (await testDb.select().from(schema.pendingInvites).where(eq(schema.pendingInvites.id, id)))[0]
+    expect(after.tokenHash).toBe(before.tokenHash)
+  })
+
+  it('resends an expired invite when there is a free seat', async () => {
+    await setTier('free')
+    const { id } = await invite('new@co.com')
+    await expire(id)
+    const res = await call(inviteItemHandler, { method: 'POST', query: { id } })
+    expect(res._status).toBe(200)
+  })
+
+  it('resends a live invite at the cap, since it already holds its seat', async () => {
+    await setTier('free')
+    await seedMember('u-a', 'editor')
+    const { id } = await invite('new@co.com')  // 3 of 3
+    const res = await call(inviteItemHandler, { method: 'POST', query: { id } })
+    expect(res._status).toBe(200)
+  })
+})

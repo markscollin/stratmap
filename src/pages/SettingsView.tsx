@@ -1,17 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { Plus, Users, Sparkles, X, Lock, ChevronDown, Check } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
 import { api, ApiError } from '../lib/apiClient'
 import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
-import type { Permission } from '../types'
+import { useBillingStore } from '../store/billingStore'
+import { ManageBillingButton } from '../features/billing/ManageBillingButton'
+import type { Permission, PlanTier, SubscriptionInfo } from '../types'
 
 type Tab = 'general' | 'members' | 'billing' | 'notifications'
+const TABS: Tab[] = ['general', 'members', 'billing', 'notifications']
 
 export function SettingsView() {
-  const [tab, setTab] = useState<Tab>('general')
+  // ?tab=billing deep-links here (the Customer Portal and payment emails return to it).
+  const [params] = useSearchParams()
+  const initial = params.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(initial && TABS.includes(initial) ? initial : 'general')
   return (
     <div style={{ padding: 32, animation: 'fadeUp .3s ease-out' }}>
       <div style={{ marginBottom: 24 }}>
@@ -438,39 +444,89 @@ function BillingTab() {
   return <BillingTabContent />
 }
 
+const TIER_ORDER: PlanTier[] = ['free', 'starter', 'growth', 'enterprise']
+const TIER_PRICE: Partial<Record<PlanTier, string>> = { free: '£0', starter: '£18', growth: '£49' }
+const TIER_HIGHLIGHT: Partial<Record<PlanTier, string>> = { starter: 'Job descriptions', growth: 'Headcount planning' }
+
+function tierName(tier: PlanTier): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1)
+}
+
+function describeTier(tier: PlanTier): string {
+  const l = PLAN_LIMITS[tier]
+  const n = (v: number, unit: string) => (v === UNLIMITED ? `Unlimited ${unit}` : `${v} ${unit}`)
+  return [
+    n(l.maxCharts, l.maxCharts === 1 ? 'chart' : 'charts'),
+    n(l.maxNodesPerChart, 'nodes'),
+    TIER_HIGHLIGHT[tier],
+    n(l.seats, 'seats'),
+  ].filter(Boolean).join(' · ')
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+/** One line on where the subscription stands, or null when there is nothing to say. */
+function subscriptionLine(sub: SubscriptionInfo): { text: string; tone: 'muted' | 'warn' } | null {
+  if (sub.status === 'past_due') return { text: "Your last payment failed. We're retrying the card. Update your payment method to keep this plan.", tone: 'warn' }
+  if (sub.status === 'unpaid') return { text: 'Your last payment failed, so this workspace is on Free. Pay the open invoice to restore your plan.', tone: 'warn' }
+  if (sub.cancelAtPeriodEnd && sub.planExpiresAt) return { text: `Cancelled. Your plan stays active until ${formatDate(sub.planExpiresAt)}, then moves to Free.`, tone: 'warn' }
+  if ((sub.status === 'active' || sub.status === 'trialing') && sub.planExpiresAt) return { text: `Renews on ${formatDate(sub.planExpiresAt)}.`, tone: 'muted' }
+  return null
+}
+
 function BillingTabContent() {
   const navigate = useNavigate()
-  const plans = [
-    { label: 'Starter', price: '£18', desc: '5 charts · 100 nodes · JD management · 5 seats', grad: 'var(--grad-brand)',  glow: 'var(--brand-glow)' },
-    { label: 'Growth',  price: '£49', desc: 'Unlimited charts · Headcount · AI drafting · 10 seats', grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
-  ]
+  const { currentTier } = usePlanLimits()
+  const subscription = useBillingStore(s => s.subscription)
+  const line = subscriptionLine(subscription)
+  const upgrades = TIER_ORDER.filter(t => t !== 'enterprise' && TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf(currentTier))
+  const style: Partial<Record<PlanTier, { grad: string; glow: string }>> = {
+    starter: { grad: 'var(--grad-brand)', glow: 'var(--brand-glow)' },
+    growth:  { grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
+  }
+  const price = TIER_PRICE[currentTier]
   return (
     <div style={{ maxWidth: 500 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Current plan</h3>
-        <div style={{ background: 'var(--raised)', borderRadius: 12, padding: '18px 20px', border: '1px solid var(--border)', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: 'var(--raised)', borderRadius: 12, padding: '18px 20px', border: '1px solid var(--border)', marginBottom: line || subscription.hasBillingAccount ? 14 : 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Free</p>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>1 chart · 30 nodes · 3 collaborators</p>
+            <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{tierName(currentTier)}</p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{describeTier(currentTier)}</p>
           </div>
-          <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>
-            £0<span style={{ fontSize: 13, fontWeight: 400, color: 'var(--muted)' }}>/mo</span>
-          </p>
+          {price && (
+            <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>
+              {price}<span style={{ fontSize: 13, fontWeight: 400, color: 'var(--muted)' }}>/mo</span>
+            </p>
+          )}
         </div>
-        {plans.map(({ label, price, desc, grad, glow }) => (
-          <button key={label} onClick={() => navigate('/pricing')} style={{
-            width: '100%', padding: '12px 18px', background: grad, border: 'none',
+        {line && (
+          <p role="status" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 14, color: line.tone === 'warn' ? 'var(--warn)' : 'var(--muted)' }}>
+            {line.text}
+          </p>
+        )}
+        {subscription.hasBillingAccount && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <ManageBillingButton />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Change plan, update your card, cancel, or download invoices.</span>
+          </div>
+        )}
+        {upgrades.map(t => (
+          <button key={t} onClick={() => navigate('/pricing')} style={{
+            width: '100%', padding: '12px 18px', background: style[t]?.grad, border: 'none',
             borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600,
             cursor: 'pointer', marginBottom: 8, textAlign: 'left',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            boxShadow: `0 4px 14px ${glow}`,
+            boxShadow: `0 4px 14px ${style[t]?.glow}`,
           }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Sparkles size={13} /> Upgrade to {label}</div>
-              <div style={{ fontSize: 11, opacity: 0.8, marginTop: 3 }}>{desc}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Sparkles size={13} /> Upgrade to {tierName(t)}</div>
+              <div style={{ fontSize: 11, opacity: 0.8, marginTop: 3 }}>{describeTier(t)}</div>
             </div>
             <div style={{ fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
-              {price}<span style={{ fontSize: 11, fontWeight: 400, opacity: 0.8 }}>/mo</span>
+              {TIER_PRICE[t]}<span style={{ fontSize: 11, fontWeight: 400, opacity: 0.8 }}>/mo</span>
             </div>
           </button>
         ))}

@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, eq } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
-import { requireRole, ROLE_RANK } from '../../_lib/access'
+import { requireRole, ROLE_RANK, getEffectivePlan, getSeatUsage, sendPlanLimit } from '../../_lib/access'
 import { enforceRateLimit } from '../../_lib/rateLimit'
 import { db } from '../../_lib/db'
 import { reportError } from '../../_lib/sentry'
 import { sendInviteEmail, toInviteView } from '../../_lib/invites'
-import { newInviteToken } from '../../_lib/inviteTokens'
+import { newInviteToken, isExpired } from '../../_lib/inviteTokens'
+import { fitsLimit } from '../../../src/lib/plans'
 import { Id } from '../../_lib/schemas'
 import { pendingInvites } from '../../../src/lib/db/schema'
 
@@ -37,6 +38,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'DELETE') {
       await db.delete(pendingInvites).where(where)
       return res.status(204).end()
+    }
+
+    // An expired invite holds no seat, so resending it takes one (roadmap 1.5).
+    if (isExpired(invite.expiresAt)) {
+      const plan = await getEffectivePlan(auth.workspaceId)
+      if (!plan) return res.status(404).json({ error: 'Workspace not found' })
+      const seats = await getSeatUsage(auth.workspaceId)
+      if (!fitsLimit(plan.limits.seats, seats.members + seats.invites)) {
+        return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
+      }
     }
 
     // Resend shares the per-workspace email budget with invite creation.

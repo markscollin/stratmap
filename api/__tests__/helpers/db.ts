@@ -29,6 +29,7 @@ export async function setupSchema() {
 }
 
 export async function cleanDb() {
+  await testDb.delete(schema.stripeEvents)
   await testDb.delete(schema.rateLimits)
   await testDb.delete(schema.aiUsage)
   await testDb.delete(schema.sharedLinks)
