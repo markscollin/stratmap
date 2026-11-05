@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useUser, useClerk } from '@clerk/clerk-react'
 import { Users } from 'lucide-react'
+import { switchWorkspace } from '../lib/workspaceSelection'
 import { api, ApiError } from '../lib/apiClient'
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
 import { rememberInviteToken, forgetInviteToken } from '../features/auth/pendingInvite'
@@ -59,10 +60,11 @@ function InviteCard({ signedIn, userEmail }: { signedIn: boolean; userEmail: str
     setAccepting(true)
     setAcceptError(null)
     try {
-      await api.post('/api/invites/accept', { token })
+      const joined = await api.post<{ workspaceId: string }>('/api/invites/accept', { token })
       forgetInviteToken()
-      // Full reload so AuthProvider re-reads the workspace and your role.
-      window.location.assign('/dashboard')
+      // Switch to the joined workspace (you may belong to others too) and reload,
+      // so AuthProvider re-reads the workspace and your role.
+      switchWorkspace(joined.workspaceId)
     } catch (err) {
       setAcceptError(err instanceof ApiError ? err.userMessage : 'Something went wrong. Please try again.')
       setAccepting(false)

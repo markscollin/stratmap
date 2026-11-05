@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Network, Briefcase, BarChart2, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -98,6 +99,8 @@ export function Sidebar() {
           }}>StratMap</span>
         )}
       </div>
+
+      <WorkspaceSwitcher />
 
       {/* Main nav */}
       <nav style={{ flex: 1, paddingTop: 10 }}>

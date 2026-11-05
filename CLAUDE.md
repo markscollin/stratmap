@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**204 frontend + 382 backend = 586 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**212 frontend + 389 backend = 601 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -87,9 +87,20 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
   - `POST`/`DELETE /api/workspace/invites/:id` — resend / revoke.
 - **Auto-accept on sign-in:** `AuthProvider` accepts a pending invite (token remembered in sessionStorage, else matched by
   email) *before* redirecting to onboarding. It also sets the user's permission from `/api/workspace` (`myPermission`).
-- **One workspace per user:** a user who is already in another workspace gets 409 until roadmap 1.2.
+- **Several workspaces per user** (roadmap 1.2): accepting an invite adds a membership; the client then switches to that workspace.
 - **Tests:** `api/__tests__/invite-accept.test.ts`, `api/__live__/invites.live.test.ts`, `src/pages/__tests__/InvitePage.test.tsx`,
   `SettingsMembers.test.tsx`.
+
+## Multiple workspaces (roadmap 1.2, 2026-11-05)
+
+- **Server:** `requireAuth` reads `X-Workspace-Id` and resolves the caller's membership *in that workspace* (role included).
+  Not a member → `403 not-a-member`. No header → the first workspace joined. Every route keeps using `auth.workspaceId`,
+  so nothing else needs to know. `GET /api/workspaces` (`requireUser`) lists the user's workspaces with each plan and role.
+- **Plans are per workspace.** Limits, features and billing all follow the selected workspace.
+- **Client:** `src/lib/workspaceSelection.ts` remembers the choice in `localStorage`. `apiClient` sends the header, and on
+  `not-a-member` forgets it and retries once. `switchWorkspace(id)` reloads the app so every store starts clean.
+  The switcher is `WorkspaceSwitcher` at the top of the sidebar.
+- **Not built yet:** creating a second workspace of your own (`POST /api/workspace` returns the existing one).
 
 ## Paid features (2026-11-05)
 
@@ -446,13 +457,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 204 tests
+npm run test:run       # 212 tests
 
 # Run backend API tests
-npm run test:api       # 382 tests (PGlite, no network)
+npm run test:api       # 389 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 586 tests total
+npm run test:all       # 601 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

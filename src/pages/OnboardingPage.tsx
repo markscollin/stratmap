@@ -5,6 +5,7 @@ import { useUserStore } from '../store/userStore'
 import { useToastStore } from '../store/toastStore'
 import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
+import { setSelectedWorkspaceId } from '../lib/workspaceSelection'
 import { api } from '../lib/apiClient'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
 import { buildChartTemplate } from '../lib/chartTemplates'
@@ -68,6 +69,7 @@ export function OnboardingPage() {
         '/api/workspace',
         { name: workspaceName.trim(), ownerRole, size, email: user?.email ?? '', userName: user?.name ?? '' }
       )
+      setSelectedWorkspaceId(ws.id)
       const now = new Date().toISOString()
       setWorkspace({
         id: ws.id,

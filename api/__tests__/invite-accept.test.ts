@@ -212,13 +212,17 @@ describe('accepting an invite', () => {
     expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(0)
   })
 
-  it('a member of another workspace gets 409 and the invite is kept', async () => {
+  it('a member of another workspace joins this one too, keeping both (roadmap 1.2)', async () => {
     await testDb.insert(schema.workspaces).values({ id: OTHER_WS, name: 'Other', ownerId: INVITEE, ownerRole: 'Founder/CEO', size: '1-10' })
     await testDb.insert(schema.workspaceMembers).values({ id: 'wm-x', workspaceId: OTHER_WS, userId: INVITEE, email: 'new@co.com', permission: 'owner' })
-    const { token } = await invite('new@co.com')
+    const { token } = await invite('new@co.com', 'editor')
     signInAs(INVITEE, ['new@co.com'])
-    expect((await call(acceptHandler, { method: 'POST', body: { token } }))._status).toBe(409)
-    expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(1)
+    const res = await call(acceptHandler, { method: 'POST', body: { token } })
+    expect(res._status).toBe(201)
+    expect(res._body).toMatchObject({ workspaceId: TEST_WS_ID, permission: 'editor' })
+    const memberships = (await memberOf(INVITEE)).map(m => [m.workspaceId, m.permission]).sort()
+    expect(memberships).toEqual([[OTHER_WS, 'owner'], [TEST_WS_ID, 'editor']])
+    expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(0)
   })
 
   it('after accepting, GET /api/workspace reports the invited role (not owner)', async () => {

@@ -22,8 +22,8 @@ import { workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
 // (looked up server-side from Clerk), so a forwarded or leaked link can't be
 // used by someone else.
 //
-// Users belong to one workspace for now (roadmap 1.2 adds switching), so a user
-// who is already a member elsewhere gets 409.
+// A user may belong to several workspaces (roadmap 1.2). The client switches to
+// the joined workspace using the returned workspaceId.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -66,17 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!invite) return res.status(404).json({ error: 'no-invite' })
     }
 
+    // Users can belong to several workspaces (roadmap 1.2); only a repeat join is a no-op.
     const [membership] = await db.select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
-      .from(workspaceMembers).where(eq(workspaceMembers.userId, user.userId)).limit(1)
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.userId, user.userId), eq(workspaceMembers.workspaceId, invite.workspaceId)))
+      .limit(1)
     if (membership) {
-      if (membership.workspaceId === invite.workspaceId) {
-        await db.delete(pendingInvites).where(eq(pendingInvites.id, invite.id))
-        return res.json({ workspaceId: membership.workspaceId, permission: membership.permission, alreadyMember: true })
-      }
-      return res.status(409).json({
-        error: 'already-in-workspace',
-        message: 'Your account already belongs to another workspace. Joining more than one workspace is not supported yet.',
-      })
+      await db.delete(pendingInvites).where(eq(pendingInvites.id, invite.id))
+      return res.json({ workspaceId: membership.workspaceId, permission: membership.permission, alreadyMember: true })
     }
 
     // Seats (roadmap 1.5): the invite reserved a seat when it was sent, but a

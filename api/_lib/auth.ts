@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { db } from './db'
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 
@@ -92,7 +92,7 @@ export async function requireAuth(
   // Dev bypass via header (local/unset environments only — not preview or production)
   if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
     await ensureDevWorkspace()
-    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID, permission: 'owner' }
+    return resolveWorkspace(req, res, DEV_USER_ID)
   }
 
   // If no Clerk secret key on a local/unset environment, fall back to dev identity
@@ -100,7 +100,7 @@ export async function requireAuth(
   if (!process.env.CLERK_SECRET_KEY && bypassAllowed) {
     console.warn('[auth] CLERK_SECRET_KEY not set — using dev identity')
     await ensureDevWorkspace()
-    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID, permission: 'owner' }
+    return resolveWorkspace(req, res, DEV_USER_ID)
   }
 
   const authHeader = req.headers.authorization
@@ -109,28 +109,51 @@ export async function requireAuth(
     return null
   }
 
+  let userId: string
   try {
     const { verifyToken } = await import('@clerk/backend')
     const payload = await verifyToken(authHeader.slice(7), {
       secretKey: process.env.CLERK_SECRET_KEY!,
     })
-    const userId = payload.sub
-
-    const [membership] = await db
-      .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
-      .from(workspaceMembers)
-      .where(eq(workspaceMembers.userId, userId))
-      .limit(1)
-
-    if (!membership) {
-      // User authenticated but has no workspace yet — they need onboarding
-      res.status(404).json({ error: 'no-workspace' })
-      return null
-    }
-
-    return { userId, workspaceId: membership.workspaceId, permission: membership.permission }
+    userId = payload.sub
   } catch {
     res.status(401).json({ error: 'Invalid token' })
     return null
   }
+  return resolveWorkspace(req, res, userId)
+}
+
+export const WORKSPACE_HEADER = 'x-workspace-id'
+
+/**
+ * Picks the workspace a request acts on (roadmap 1.2: multiple workspaces).
+ * The client sends `X-Workspace-Id`, and the caller must be a member of it, so
+ * the header can never reach someone else's workspace. Without the header we
+ * fall back to the workspace the user joined first (older clients, first load).
+ */
+async function resolveWorkspace(req: VercelRequest, res: VercelResponse, userId: string): Promise<AuthContext | null> {
+  const raw = req.headers[WORKSPACE_HEADER]
+  const requested = typeof raw === 'string' && raw.length > 0 && raw.length <= 128 ? raw : undefined
+
+  const [membership] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
+    .from(workspaceMembers)
+    .where(requested
+      ? and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.workspaceId, requested))
+      : eq(workspaceMembers.userId, userId))
+    .orderBy(asc(workspaceMembers.joinedAt))
+    .limit(1)
+
+  if (!membership) {
+    if (requested) {
+      // Not (or no longer) a member there; the client drops the header and retries.
+      res.status(403).json({ error: 'not-a-member', message: 'You are not a member of that workspace.' })
+      return null
+    }
+    // User authenticated but has no workspace yet — they need onboarding
+    res.status(404).json({ error: 'no-workspace' })
+    return null
+  }
+
+  return { userId, workspaceId: membership.workspaceId, permission: membership.permission }
 }
