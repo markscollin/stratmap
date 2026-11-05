@@ -1,11 +1,12 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
 import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
-import type { PlanTier } from '../../types'
+import type { PlanTier, Permission, WorkspaceRole, CompanySize } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
-import { api } from '../../lib/apiClient'
+import { api, ApiError } from '../../lib/apiClient'
+import { getRememberedInviteToken, forgetInviteToken } from './pendingInvite'
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 
@@ -22,78 +23,119 @@ function DevBypassProvider({ children }: { children: ReactNode }) {
 }
 
 // ── Clerk sync: hydrates userStore from Clerk's useUser ────────────────────
+
+interface WorkspaceResponse {
+  id: string; name: string; ownerRole: string; size: string; createdAt: string
+  planTier: PlanTier
+  myPermission: Permission | null
+  members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
+}
+
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
-  const { setUser, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
+  const { setUser, setPermission, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
   const { setPlan } = useBillingStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/privacy') || pathname.startsWith('/terms')
+  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/privacy')
+    || pathname.startsWith('/terms') || pathname.startsWith('/invite/')
+  // True once we know whether this user has a workspace (after any invite acceptance).
+  // The onboarding redirect waits for it, so an invited user never lands there.
+  // Each workspace load gets a unique key; `resolvedFor` holds the key of the
+  // last load that finished, so a stale result (e.g. before sign-out) never counts.
+  const [resolvedFor, setResolvedFor] = useState<string | null>(null)
+  const loadKey = useRef<string | null>(null)
+  const loadCount = useRef(0)
 
   useEffect(() => {
     if (isAuthPage || isPublicPage) return
     if (!isLoaded) return
 
     if (!isSignedIn) {
+      loadKey.current = null
       storeSignOut()
       navigate('/sign-in')
       return
     }
+    if (!clerkUser || loadKey.current?.startsWith(`${clerkUser.id}#`)) return
+    const key = `${clerkUser.id}#${++loadCount.current}`
+    loadKey.current = key
+    const setResolved = () => setResolvedFor(key)
 
-    if (clerkUser) {
-      const name = clerkUser.fullName ?? clerkUser.username ?? clerkUser.emailAddresses[0]?.emailAddress ?? 'User'
-      setUser(
-        {
-          id: clerkUser.id,
-          name,
-          email: clerkUser.emailAddresses[0]?.emailAddress ?? '',
-          avatarUrl: clerkUser.imageUrl ?? undefined,
-        },
-        'owner'
-      )
-      // Load workspace from API (replaces localStorage-only approach)
-      api.get<{
-        id: string; name: string; ownerRole: string; size: string; createdAt: string
-        planTier: PlanTier
-        members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
-      }>('/api/workspace')
-        .then(ws => {
-          setWorkspace({
-            id: ws.id,
-            name: ws.name,
-            ownerRole: ws.ownerRole as import('../../types').WorkspaceRole,
-            size: ws.size as import('../../types').CompanySize,
-            members: (ws.members ?? []).map(m => ({
-              user: { id: m.userId, name: m.name ?? '', email: m.email, avatarUrl: m.avatarUrl ?? undefined },
-              permission: m.permission as import('../../types').Permission,
-              joinedAt: m.joinedAt,
-            })),
-            pendingInvites: [],
-            createdAt: ws.createdAt ?? new Date().toISOString(),
-          })
-          // Sync billing plan from DB — source of truth for planTier
-          setPlan(PLAN_BY_TIER[ws.planTier] ?? FREE_PLAN)
-        })
-        .catch((err: Error) => {
-          if (err.message === 'no-workspace') {
-            // User authenticated but no workspace in DB → clear stale cache and go to onboarding
-            setWorkspace(null)
-          } else {
-            console.error('[auth] workspace fetch failed:', err)
-          }
-        })
+    const name = clerkUser.fullName ?? clerkUser.username ?? clerkUser.emailAddresses[0]?.emailAddress ?? 'User'
+    // Least privilege until the server says otherwise.
+    setUser(
+      { id: clerkUser.id, name, email: clerkUser.emailAddresses[0]?.emailAddress ?? '', avatarUrl: clerkUser.imageUrl ?? undefined },
+      'viewer',
+    )
+
+    function applyWorkspace(ws: WorkspaceResponse) {
+      setWorkspace({
+        id: ws.id,
+        name: ws.name,
+        ownerRole: ws.ownerRole as WorkspaceRole,
+        size: ws.size as CompanySize,
+        members: (ws.members ?? []).map(m => ({
+          user: { id: m.userId, name: m.name ?? '', email: m.email, avatarUrl: m.avatarUrl ?? undefined },
+          permission: m.permission as Permission,
+          joinedAt: m.joinedAt,
+        })),
+        pendingInvites: [],
+        createdAt: ws.createdAt ?? new Date().toISOString(),
+      })
+      setPermission(ws.myPermission ?? 'viewer')
+      // Sync billing plan from DB — source of truth for planTier
+      setPlan(PLAN_BY_TIER[ws.planTier] ?? FREE_PLAN)
     }
-  }, [isLoaded, isSignedIn, clerkUser, setUser, storeSignOut, navigate, isAuthPage, isPublicPage])
 
-  // Once loaded + signed in, redirect to onboarding if no workspace set
+    async function load() {
+      try {
+        applyWorkspace(await api.get<WorkspaceResponse>('/api/workspace'))
+        setResolved()
+        return
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.message !== 'no-workspace') {
+          console.error('[auth] workspace fetch failed:', err)
+          setResolved()
+          return
+        }
+      }
+
+      // No workspace yet: accept a pending invite before falling back to onboarding.
+      // Uses the token from an /invite link if we have one, else matches by verified email.
+      const token = getRememberedInviteToken()
+      try {
+        await api.post('/api/invites/accept', token ? { token } : {})
+        forgetInviteToken()
+        applyWorkspace(await api.get<WorkspaceResponse>('/api/workspace'))
+        setResolved()
+        if (pathname === '/onboarding') navigate('/dashboard')
+        return
+      } catch (err) {
+        if (token && !(err instanceof ApiError && err.message === 'no-invite')) {
+          // The invite page explains what went wrong (expired, wrong account, …).
+          navigate(`/invite/${token}`)
+          return
+        }
+        forgetInviteToken()
+      }
+
+      // Genuinely new user → onboarding.
+      setWorkspace(null)
+      setResolved()
+    }
+    void load()
+  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, storeSignOut, navigate, isAuthPage, isPublicPage, pathname])
+
+  // Once we know there is no workspace, send the user to onboarding
   useEffect(() => {
     if (isAuthPage || isPublicPage) return
-    if (!isLoaded || !isSignedIn) return
+    if (!isLoaded || !isSignedIn || !resolvedFor || resolvedFor !== loadKey.current) return
     if (!workspace && pathname !== '/onboarding') {
       navigate('/onboarding')
     }
-  }, [isLoaded, isSignedIn, workspace, navigate, pathname, isAuthPage, isPublicPage])
+  }, [isLoaded, isSignedIn, resolvedFor, workspace, navigate, pathname, isAuthPage, isPublicPage])
 
   // All hooks called above — safe to conditionally return now
   if (isAuthPage || isPublicPage) {

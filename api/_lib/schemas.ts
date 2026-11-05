@@ -159,6 +159,11 @@ export const InviteCreate = z.object({
   })).min(1).max(MAX_INVITES_PER_REQUEST),
 })
 
+/** No token = accept a pending invite matched by the caller's verified email. */
+export const InviteAccept = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'invalid token').optional(),
+})
+
 // ─── Billing / AI / admin ────────────────────────────────────────────────────
 
 export const CheckoutCreate = z.object({

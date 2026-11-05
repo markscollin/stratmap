@@ -9,6 +9,7 @@ import {
   primaryKey,
   bigint,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -61,7 +62,18 @@ export const pendingInvites = pgTable('pending_invites', {
   email: text('email').notNull(),
   permission: permissionEnum('permission').notNull().default('viewer'),
   sentAt: timestamp('sent_at').notNull().defaultNow(),
-}, (t) => [index('pending_invites_workspace_id_email_idx').on(t.workspaceId, t.email)])
+  // SHA-256 of the single-use token in the invite link. The raw token is only
+  // ever in the email; a DB leak can't be turned into working invite links.
+  // Nullable: invites created before tokens existed can still be accepted by
+  // verified-email match.
+  tokenHash: text('token_hash'),
+  expiresAt: timestamp('expires_at'),
+  invitedBy: text('invited_by'),               // Clerk userId
+}, (t) => [
+  index('pending_invites_workspace_id_email_idx').on(t.workspaceId, t.email),
+  uniqueIndex('pending_invites_token_hash_idx').on(t.tokenHash),
+  index('pending_invites_email_idx').on(t.email),
+])
 
 // ─── Workspace Departments ────────────────────────────────────────────────────
 

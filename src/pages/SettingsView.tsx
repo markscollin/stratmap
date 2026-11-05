@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { Plus, Users, Sparkles, X, Lock, ChevronDown, Check } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
-import { api } from '../lib/apiClient'
+import { api, ApiError } from '../lib/apiClient'
+import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
 import type { Permission } from '../types'
 
 type Tab = 'general' | 'members' | 'billing' | 'notifications'
@@ -126,38 +127,93 @@ function GeneralTab() {
 const ROLE_LABELS: Record<Permission, string> = {
   owner: 'Owner', admin: 'Admin', editor: 'Editor', commenter: 'Commenter', viewer: 'Viewer',
 }
-const ASSIGNABLE: Permission[] = ['admin', 'editor', 'commenter', 'viewer']
+
+interface ApiMember { userId: string; email: string; name: string | null; avatarUrl: string | null; permission: Permission; joinedAt: string }
+interface ApiInvite { id: string; email: string; permission: Permission; sentAt: string; expiresAt: string | null; expired: boolean }
+
+const RANK: Record<Permission, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
 
 function MembersTab() {
-  const { workspace, user, updateMemberPermission, removeMember, addPendingInvite, removePendingInvite } = useUserStore()
-  const { canAdmin } = usePermission()
+  const { workspace, user, setWorkspace } = useUserStore()
+  const { permission: myPermission, canAdmin } = usePermission()
   const { currentTier } = usePlanLimits()
-  const plan = (() => {
-    const plans: Record<string, { seats: number; name: string }> = {
-      free: { seats: 3, name: 'Free' },
-      starter: { seats: 5, name: 'Starter' },
-      growth: { seats: 10, name: 'Growth' },
-      enterprise: { seats: 25, name: 'Enterprise' },
-    }
-    return plans[currentTier]
-  })()
+  const seatLimit = PLAN_LIMITS[currentTier].seats
+  const planName = currentTier.charAt(0).toUpperCase() + currentTier.slice(1)
+
+  const [members, setMembers] = useState<ApiMember[]>([])
+  const [invites, setInvites] = useState<ApiInvite[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Permission>('editor')
   const [inviteFocus, setInviteFocus] = useState(false)
 
-  const members = workspace?.members ?? []
-  const pending = workspace?.pendingInvites ?? []
-  const seatsUsed = members.length
-  const atLimit = seatsUsed >= plan.seats
+  // You can only grant, change or remove roles below your own (enforced by the API too).
+  const grantable = (['admin', 'editor', 'commenter', 'viewer'] as Permission[]).filter(r => RANK[r] < RANK[myPermission])
+  const canManage = (p: Permission) => canAdmin && RANK[p] < RANK[myPermission]
+
+  const liveInvites = invites.filter(i => !i.expired)
+  const seatsUsed = members.length + liveInvites.length
+  const unlimited = seatLimit === UNLIMITED
+  const atLimit = !unlimited && seatsUsed >= seatLimit
+
+  const fetchTeam = useCallback(() => Promise.all([
+    api.get<{ members: ApiMember[] }>('/api/workspace'),
+    canAdmin ? api.get<{ invites: ApiInvite[] }>('/api/workspace/invites') : Promise.resolve({ invites: [] as ApiInvite[] }),
+  ]), [canAdmin])
+
+  const applyTeam = useCallback(([ws, inv]: Awaited<ReturnType<typeof fetchTeam>>) => {
+    setMembers(ws.members)
+    setInvites(inv.invites)
+    // Keep the shared store in step so other screens see the same members.
+    const current = useUserStore.getState().workspace
+    if (current) {
+      setWorkspace({
+        ...current,
+        members: ws.members.map(m => ({
+          user: { id: m.userId, name: m.name ?? '', email: m.email, avatarUrl: m.avatarUrl ?? undefined },
+          permission: m.permission,
+          joinedAt: m.joinedAt,
+        })),
+      })
+    }
+  }, [setWorkspace])
+
+  useEffect(() => {
+    fetchTeam()
+      .then(applyTeam)
+      .catch(err => setError(err instanceof ApiError ? err.userMessage : 'Could not load team members'))
+      .finally(() => setLoading(false))
+  }, [fetchTeam, applyTeam])
+
+  async function run(key: string, action: () => Promise<unknown>) {
+    setBusy(key)
+    setError(null)
+    try {
+      await action()
+      applyTeam(await fetchTeam())
+    } catch (err) {
+      setError(err instanceof ApiError
+        ? err.userMessage
+        : 'Something went wrong')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   function handleSendInvite() {
-    if (!inviteEmail.trim()) return
-    addPendingInvite({ email: inviteEmail.trim(), permission: inviteRole, sentAt: new Date().toISOString() })
-    setInviteEmail('')
-    setInviteRole('editor')
-    setShowInviteForm(false)
+    const email = inviteEmail.trim()
+    if (!email) return
+    void run('invite', async () => {
+      await api.post('/api/workspace/invites', { invites: [{ email, permission: inviteRole }] })
+      setInviteEmail('')
+      setShowInviteForm(false)
+    })
   }
+
+  if (!workspace) return null
 
   return (
     <div style={{ maxWidth: 580 }}>
@@ -168,13 +224,16 @@ function MembersTab() {
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Team members</h3>
             <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-              {seatsUsed} of {plan.seats} seats used · {plan.name} plan
+              {unlimited ? `${seatsUsed} seats used` : `${seatsUsed} of ${seatLimit} seats used`} · {planName} plan
+              {liveInvites.length > 0 && ` (incl. ${liveInvites.length} pending)`}
             </p>
           </div>
           {canAdmin && (
             <button
               onClick={() => setShowInviteForm(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              disabled={atLimit}
+              title={atLimit ? 'All seats are in use' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: atLimit ? 'var(--raised)' : 'var(--grad-brand)', border: 'none', borderRadius: 8, color: atLimit ? 'var(--dim)' : '#fff', fontSize: 13, fontWeight: 600, cursor: atLimit ? 'not-allowed' : 'pointer' }}
             >
               <Plus size={13} /> Invite
             </button>
@@ -182,24 +241,33 @@ function MembersTab() {
         </div>
 
         {/* Seat usage bar */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ height: 4, borderRadius: 4, background: 'var(--raised)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 4, width: `${Math.min((seatsUsed / plan.seats) * 100, 100)}%`, background: atLimit ? 'var(--warn)' : 'var(--brand)', transition: 'width .3s' }} />
+        {!unlimited && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ height: 4, borderRadius: 4, background: 'var(--raised)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 4, width: `${Math.min((seatsUsed / seatLimit) * 100, 100)}%`, background: atLimit ? 'var(--warn)' : 'var(--brand)', transition: 'width .3s' }} />
+            </div>
+            {atLimit && (
+              <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 5 }}>
+                All seats used. <Link to="/pricing" style={{ color: 'var(--brand)' }}>Upgrade to add more</Link>
+              </p>
+            )}
           </div>
-          {atLimit && (
-            <p style={{ fontSize: 11, color: 'var(--warn)', marginTop: 5 }}>
-              All seats used. Additional seats are £4/month. <span style={{ color: 'var(--brand)', cursor: 'pointer' }}>Upgrade to add more</span>
-            </p>
-          )}
-        </div>
+        )}
+
+        {error && (
+          <div role="alert" style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 10, fontSize: 12 }}>
+            {error}
+          </div>
+        )}
 
         {/* Invite form */}
-        {showInviteForm && (
+        {showInviteForm && canAdmin && (
           <div style={{ background: 'var(--raised)', borderRadius: 10, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Invite a team member</p>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 type="email"
+                aria-label="Email address"
                 placeholder="colleague@company.com"
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
@@ -207,65 +275,69 @@ function MembersTab() {
                 onBlur={() => setInviteFocus(false)}
                 onKeyDown={e => e.key === 'Enter' && handleSendInvite()}
                 style={{
-                  flex: 1, padding: '8px 12px', background: 'var(--input-bg)',
+                  flex: 1, minWidth: 180, padding: '8px 12px', background: 'var(--input-bg)',
                   border: `1px solid ${inviteFocus ? 'var(--brand)' : 'var(--border)'}`,
                   boxShadow: inviteFocus ? '0 0 0 3px var(--brand-bg)' : 'none',
                   borderRadius: 8, color: 'var(--text)', fontSize: 13, transition: 'all .15s',
                 }}
               />
               <select
+                aria-label="Role"
                 value={inviteRole}
                 onChange={e => setInviteRole(e.target.value as Permission)}
                 style={{ padding: '8px 10px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 13 }}
               >
-                {ASSIGNABLE.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {grantable.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
               <button
                 onClick={handleSendInvite}
-                disabled={!inviteEmail.trim()}
+                disabled={!inviteEmail.trim() || busy === 'invite'}
                 style={{ padding: '8px 16px', background: inviteEmail.trim() ? 'var(--grad-brand)' : 'var(--raised)', border: 'none', borderRadius: 8, color: inviteEmail.trim() ? '#fff' : 'var(--dim)', fontSize: 13, fontWeight: 600, cursor: inviteEmail.trim() ? 'pointer' : 'not-allowed' }}
               >
-                Send
+                {busy === 'invite' ? 'Sending…' : 'Send'}
               </button>
-              <button onClick={() => setShowInviteForm(false)} style={{ padding: '8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', cursor: 'pointer' }}>
+              <button aria-label="Cancel" onClick={() => setShowInviteForm(false)} style={{ padding: '8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', cursor: 'pointer' }}>
                 <X size={13} />
               </button>
             </div>
+            <p style={{ fontSize: 11, color: 'var(--dim)', marginTop: 8 }}>They'll get an email with a link that works once and expires in 7 days.</p>
           </div>
         )}
 
         {/* Member list */}
-        {members.length === 0 ? (
-          <div style={{ background: 'var(--raised)', borderRadius: 10, padding: '28px 20px', textAlign: 'center', border: '1px dashed var(--border)' }}>
-            <Users size={22} color="var(--dim)" style={{ marginBottom: 10 }} />
-            <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 4 }}>No team members yet</p>
-            <p style={{ fontSize: 12, color: 'var(--dim)' }}>Invite colleagues — they'll get a link to join your workspace</p>
-          </div>
+        {loading ? (
+          <p style={{ fontSize: 13, color: 'var(--muted)' }}>Loading members…</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {members.map(m => {
-              const initials = m.user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-              const isCurrentUser = m.user.id === user?.id
-              const canChange = canAdmin && !isCurrentUser && m.permission !== 'owner'
+              const label = m.name || m.email
+              const initials = label.split(/[\s@.]/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+              const isCurrentUser = m.userId === user?.id
+              const canChange = !isCurrentUser && canManage(m.permission)
               return (
-                <div key={m.user.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px solid var(--border)' }}>
+                <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px solid var(--border)' }}>
                   <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--grad-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                     {initials}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                      {m.user.name} {isCurrentUser && <span style={{ fontSize: 11, color: 'var(--muted)' }}>(you)</span>}
+                      {label} {isCurrentUser && <span style={{ fontSize: 11, color: 'var(--muted)' }}>(you)</span>}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{m.user.email}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{m.email}</div>
                   </div>
                   {canChange ? (
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                       <select
+                        aria-label={`Role for ${label}`}
                         value={m.permission}
-                        onChange={e => updateMemberPermission(m.user.id, e.target.value as Permission)}
+                        disabled={busy === `role:${m.userId}`}
+                        onChange={e => {
+                          const permission = e.target.value as Permission
+                          void run(`role:${m.userId}`, () => api.put(`/api/workspace/members/${encodeURIComponent(m.userId)}`, { permission }))
+                        }}
                         style={{ appearance: 'none', padding: '4px 24px 4px 10px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 12, cursor: 'pointer' }}
                       >
-                        {ASSIGNABLE.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                        {grantable.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
                       <ChevronDown size={11} style={{ position: 'absolute', right: 7, pointerEvents: 'none', color: 'var(--muted)' }} />
                     </div>
@@ -275,7 +347,15 @@ function MembersTab() {
                     </span>
                   )}
                   {canChange && (
-                    <button onClick={() => removeMember(m.user.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4, display: 'flex', alignItems: 'center' }}>
+                    <button
+                      aria-label={`Remove ${label}`}
+                      disabled={busy === `remove:${m.userId}`}
+                      onClick={() => {
+                        if (!window.confirm(`Remove ${label} from ${workspace.name}? They lose access immediately.`)) return
+                        void run(`remove:${m.userId}`, () => api.delete(`/api/workspace/members/${encodeURIComponent(m.userId)}`))
+                      }}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4, display: 'flex', alignItems: 'center' }}
+                    >
                       <X size={14} />
                     </button>
                   )}
@@ -285,28 +365,49 @@ function MembersTab() {
           </div>
         )}
 
-        {/* Pending invites */}
-        {pending.length > 0 && (
+        {/* Pending invites (admins only) */}
+        {invites.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Pending invites</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {pending.map(inv => (
-                <div key={inv.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px dashed var(--border)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--nav-hover)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Users size={14} color="var(--dim)" />
+              {invites.map(inv => {
+                const manageable = canManage(inv.permission)
+                return (
+                  <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 10, background: 'var(--raised)', border: '1px dashed var(--border)' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--nav-hover)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Users size={14} color="var(--dim)" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.email}</div>
+                      <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>
+                        Invited as {ROLE_LABELS[inv.permission]} · sent {new Date(inv.sentAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    {inv.expired
+                      ? <span style={{ fontSize: 11, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '3px 8px', borderRadius: 20 }}>Expired</span>
+                      : <span style={{ fontSize: 11, color: 'var(--warn)', background: 'var(--warn-bg)', padding: '3px 8px', borderRadius: 20 }}>Pending</span>}
+                    {manageable && (
+                      <button
+                        disabled={busy === `resend:${inv.id}`}
+                        onClick={() => void run(`resend:${inv.id}`, () => api.post(`/api/workspace/invites/${inv.id}`, {}))}
+                        style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text)', padding: '3px 8px', fontSize: 11, fontWeight: 600 }}
+                      >
+                        {busy === `resend:${inv.id}` ? 'Sending…' : 'Resend'}
+                      </button>
+                    )}
+                    {manageable && (
+                      <button
+                        aria-label={`Revoke invite for ${inv.email}`}
+                        disabled={busy === `revoke:${inv.id}`}
+                        onClick={() => void run(`revoke:${inv.id}`, () => api.delete(`/api/workspace/invites/${inv.id}`))}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4 }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>{inv.email}</div>
-                    <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>Invited as {ROLE_LABELS[inv.permission]}</div>
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--warn)', background: 'var(--warn-bg)', padding: '3px 8px', borderRadius: 20 }}>Pending</span>
-                  {canAdmin && (
-                    <button onClick={() => removePendingInvite(inv.email)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', padding: 4 }}>
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

@@ -17,6 +17,7 @@ import { SignInPage, SignUpPage } from './pages/SignInPage'
 import { PricingPage }     from './pages/PricingPage'
 import { BillingSuccessPage } from './pages/BillingSuccessPage'
 import { SharePage } from './pages/SharePage'
+import { InvitePage } from './pages/InvitePage'
 
 export default function App() {
   return (
@@ -30,6 +31,9 @@ export default function App() {
           <Route path="/"        element={<LandingPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms"   element={<TermsPage />} />
+
+          {/* Invite links from email — public; the page handles sign-in itself */}
+          <Route path="/invite/:token" element={<InvitePage />} />
 
           {/* Auth routes — no sidebar layout */}
           {/* Clerk uses sub-routes like /sign-in/factor-one, so match with wildcard */}

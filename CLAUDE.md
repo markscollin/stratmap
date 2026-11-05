@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**143 frontend + 283 backend = 426 passing** (after Phase 0 + migrations); `tsc` clean; `lint` 0 errors; build OK.
+**155 frontend + 306 backend = 461 passing** (after Phase 0, migrations and invites); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -77,6 +77,21 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - Security headers in `vercel.json` (CSP is Report-Only for now).
 - Tests: `api/__tests__/security.test.ts`. Use `seedMember(userId, role)` to test roles.
 - Verified against a Neon dev branch with `npm run test:live` (`api/__live__/`).
+
+## Invites (roadmap 1.1, 2026-11-05)
+
+- **Invite link:** each invite email links to `/invite/<token>` (`src/pages/InvitePage.tsx`, public). The token is random. Only its
+  SHA-256 is stored (`pending_invites.token_hash`). Links are single-use and expire after 7 days (`api/_lib/inviteTokens.ts`).
+- **API:**
+  - `GET /api/invites/:token` — public preview.
+  - `POST /api/invites/accept` — `{token?}`. Requires a **verified** Clerk email matching the invite (`api/_lib/identity.ts`).
+  - `GET`/`POST /api/workspace/invites` — list / create.
+  - `POST`/`DELETE /api/workspace/invites/:id` — resend / revoke.
+- **Auto-accept on sign-in:** `AuthProvider` accepts a pending invite (token remembered in sessionStorage, else matched by
+  email) *before* redirecting to onboarding. It also sets the user's permission from `/api/workspace` (`myPermission`).
+- **One workspace per user:** a user who is already in another workspace gets 409 until roadmap 1.2.
+- **Tests:** `api/__tests__/invite-accept.test.ts`, `api/__live__/invites.live.test.ts`, `src/pages/__tests__/InvitePage.test.tsx`,
+  `SettingsMembers.test.tsx`.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 
@@ -387,13 +402,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 143 tests
+npm run test:run       # 155 tests
 
 # Run backend API tests
-npm run test:api       # 283 tests (PGlite, no network)
+npm run test:api       # 306 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 426 tests total
+npm run test:all       # 461 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

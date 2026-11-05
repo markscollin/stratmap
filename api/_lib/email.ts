@@ -25,6 +25,16 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
   return { sent: true }
 }
 
+/** Escapes user-controlled text (workspace and user names) before it goes into email HTML. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function shell(title: string, body: string): string {
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;color:#0d1b2a">
     <h1 style="font-size:20px;margin:0 0 16px">${title}</h1>
@@ -39,15 +49,21 @@ export async function sendWorkspaceInvite(opts: {
   inviterName: string
   inviteUrl: string
 }): Promise<SendResult> {
-  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on StratMap`
+  const ws = escapeHtml(opts.workspaceName)
+  const inviter = escapeHtml(opts.inviterName)
+  const url = escapeHtml(opts.inviteUrl)
+  // Subject is plain text, but strip line breaks so names can't inject headers.
+  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on StratMap`.replace(/[\r\n]+/g, ' ')
   const html = shell(
-    `You've been invited to ${opts.workspaceName}`,
-    `<p style="font-size:14px;line-height:1.6">${opts.inviterName} has invited you to collaborate on
-      <strong>${opts.workspaceName}</strong> in StratMap.</p>
+    `You've been invited to ${ws}`,
+    `<p style="font-size:14px;line-height:1.6">${inviter} has invited you to collaborate on
+      <strong>${ws}</strong> in StratMap.</p>
      <p style="margin:24px 0">
-       <a href="${opts.inviteUrl}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Accept invitation</a>
+       <a href="${url}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Accept invitation</a>
      </p>
-     <p style="font-size:12px;color:#94a3b8">Or paste this link into your browser: ${opts.inviteUrl}</p>`,
+     <p style="font-size:12px;color:#94a3b8">This link expires in 7 days and can be used once.
+       Sign in with this email address (${escapeHtml(opts.to)}) to accept.</p>
+     <p style="font-size:12px;color:#94a3b8">Or paste this link into your browser: ${url}</p>`,
   )
   return sendEmail({ to: opts.to, subject, html })
 }

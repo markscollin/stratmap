@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { requireAuth, requireUser } from './_lib/auth'
-import { requireRole } from './_lib/access'
+import { requireRole, getPermission } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { WorkspaceCreate, WorkspaceUpdate } from './_lib/schemas'
 import { db } from './_lib/db'
@@ -30,7 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isTrialActive = ws.trialEndsAt && ws.trialEndsAt > new Date() && ws.trialPlan
       const effectivePlanTier = isTrialActive ? ws.trialPlan! : ws.planTier
 
-      return res.json({ ...ws, planTier: effectivePlanTier, members })
+      // The caller's own role, so the client gates UI on the real permission.
+      const myPermission = await getPermission(auth)
+
+      return res.json({ ...ws, planTier: effectivePlanTier, members, myPermission })
     }
 
     if (req.method === 'POST') {

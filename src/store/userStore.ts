@@ -1,6 +1,5 @@
 import { create } from 'zustand'
-import type { User, Permission, Workspace, PendingInvite } from '../types'
-import { api } from '../lib/apiClient'
+import type { User, Permission, Workspace } from '../types'
 
 interface UserStore {
   user: User | null
@@ -12,10 +11,6 @@ interface UserStore {
   setPermission: (permission: Permission) => void
   setWorkspace: (workspace: Workspace | null) => void
   signOut: () => void
-  addPendingInvite: (invite: PendingInvite) => void
-  removePendingInvite: (email: string) => void
-  updateMemberPermission: (userId: string, permission: Permission) => void
-  removeMember: (userId: string) => void
 }
 
 // Load workspace from localStorage if available
@@ -55,62 +50,6 @@ export const useUserStore = create<UserStore>((set) => ({
   signOut: () => {
     try { localStorage.removeItem('stratmap_workspace') } catch { /* ignore */ }
     set({ user: null, isAuthenticated: false, permission: 'viewer', workspace: null })
-  },
-
-  addPendingInvite: (invite) =>
-    set((state) => {
-      if (!state.workspace) return state
-      const already = state.workspace.pendingInvites.some(i => i.email === invite.email)
-      if (already) return state
-      return {
-        workspace: {
-          ...state.workspace,
-          pendingInvites: [...state.workspace.pendingInvites, invite],
-        },
-      }
-    }),
-
-  removePendingInvite: (email) =>
-    set((state) => {
-      if (!state.workspace) return state
-      return {
-        workspace: {
-          ...state.workspace,
-          pendingInvites: state.workspace.pendingInvites.filter(i => i.email !== email),
-        },
-      }
-    }),
-
-  updateMemberPermission: (userId, permission) => {
-    set((state) => {
-      if (!state.workspace) return state
-      return {
-        workspace: {
-          ...state.workspace,
-          members: state.workspace.members.map((m) =>
-            m.user.id === userId ? { ...m, permission } : m
-          ),
-        },
-      }
-    })
-    api.put(`/api/workspace/members/${userId}`, { permission }).catch(err =>
-      console.error('[userStore] updateMemberPermission failed:', err)
-    )
-  },
-
-  removeMember: (userId) => {
-    set((state) => {
-      if (!state.workspace) return state
-      return {
-        workspace: {
-          ...state.workspace,
-          members: state.workspace.members.filter((m) => m.user.id !== userId),
-        },
-      }
-    })
-    api.delete(`/api/workspace/members/${userId}`).catch(err =>
-      console.error('[userStore] removeMember failed:', err)
-    )
   },
 }))
 
