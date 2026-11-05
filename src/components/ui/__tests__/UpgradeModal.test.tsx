@@ -123,6 +123,7 @@ describe('UpgradeModal', () => {
         currentTier="free"
       />
     )
+    expect(screen.getAllByText('Headcount planning').length).toBeGreaterThan(0)
     expect(screen.getByText('Unlimited charts')).toBeInTheDocument()
     expect(screen.getByText('Up to 500 roles per chart')).toBeInTheDocument()
     expect(screen.getByText('Unlimited AI drafting')).toBeInTheDocument()

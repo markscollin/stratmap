@@ -158,5 +158,13 @@ describe('usePlanLimits', () => {
     expect(result.current.hasFeature('jd-editor')).toBe(true)
     expect(result.current.hasFeature('approval-workflow')).toBe(true)
     expect(result.current.hasFeature('pdf-export')).toBe(true)
+    // …but headcount planning needs Growth
+    expect(result.current.hasFeature('headcount-planning')).toBe(false)
+  })
+
+  it('Growth unlocks headcount planning', () => {
+    useBillingStore.setState({ plan: GROWTH_PLAN })
+    const { result } = renderHook(() => usePlanLimits())
+    expect(result.current.hasFeature('headcount-planning')).toBe(true)
   })
 })

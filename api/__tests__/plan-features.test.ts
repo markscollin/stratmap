@@ -14,6 +14,8 @@ import { requireAuth } from '../_lib/auth'
 import jdHandler from '../charts/[id]/jd/[nodeId]'
 import chartHandler from '../charts/[id]'
 import chartsHandler from '../charts/index'
+import headcountHandler from '../headcount'
+import headcountItemHandler from '../headcount/[id]'
 import { setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, seedMember, testDb, TEST_USER_ID, TEST_WS_ID, TEST_CHART_ID, TEST_NODE_ID } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes, type MockRes } from './helpers/res'
@@ -26,7 +28,7 @@ async function call(handler: Handler, opts: Parameters<typeof createReq>[0]): Pr
   return res
 }
 const jdQuery = { id: TEST_CHART_ID, nodeId: TEST_NODE_ID }
-const setTier = (planTier: 'free' | 'starter') => testDb.update(schema.workspaces).set({ planTier })
+const setTier = (planTier: 'free' | 'starter' | 'growth') => testDb.update(schema.workspaces).set({ planTier })
 
 beforeAll(async () => { await setupSchema() })
 
@@ -106,3 +108,32 @@ describe('Starter unlocks both', () => {
     expect((await call(chartHandler, { method: 'PUT', query: { id: TEST_CHART_ID }, body: { status: 'review' } }))._status).toBe(200)
   })
 })
+
+describe('Headcount planning needs Growth', () => {
+  const hire = { title: 'Engineer', targetQuarter: '2026-Q3' }
+
+  for (const tier of ['free', 'starter'] as const) {
+    it(`${tier}: adding a hire → 402 naming Growth`, async () => {
+      await setTier(tier)
+      const res = await call(headcountHandler, { method: 'POST', body: hire })
+      expect(res._status).toBe(402)
+      expect(res._body).toMatchObject({ error: 'plan-feature', feature: 'headcount-planning', requiredTier: 'growth' })
+    })
+  }
+
+  it('starter: editing or deleting an existing plan → 402, but listing still works', async () => {
+    await setTier('starter')
+    await testDb.insert(schema.headcountPlans).values({ id: 'hp-1', workspaceId: TEST_WS_ID, title: 'Kept', targetQuarter: '2026-Q3', createdBy: TEST_USER_ID })
+    expect((await call(headcountItemHandler, { method: 'PUT', query: { id: 'hp-1' }, body: { title: 'x' } }))._status).toBe(402)
+    expect((await call(headcountItemHandler, { method: 'DELETE', query: { id: 'hp-1' } }))._status).toBe(402)
+    const list = await call(headcountHandler, { method: 'GET' })
+    expect(list._status).toBe(200)
+    expect(JSON.stringify(list._body)).toContain('Kept')
+  })
+
+  it('growth: allowed', async () => {
+    await setTier('growth')
+    expect((await call(headcountHandler, { method: 'POST', body: hire }))._status).toBe(201)
+  })
+})
+

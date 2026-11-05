@@ -3,19 +3,24 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Network, Briefcase, BarChart2, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
+import { usePlanLimits } from '../../hooks/usePlanLimits'
+import { PlanBadge } from '../ui/FeatureLock'
+import type { PaidFeature } from '../../lib/plans'
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { path: string; label: string; Icon: LucideIcon; feature?: PaidFeature }[] = [
   { path: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { path: '/charts',    label: 'Org Charts', Icon: Network },
   { path: '/roles',     label: 'Roles',      Icon: Briefcase },
-  { path: '/headcount', label: 'Headcount',  Icon: BarChart2 },
+  { path: '/headcount', label: 'Headcount',  Icon: BarChart2, feature: 'headcount-planning' },
 ]
 
 function NavBtn({
-  label, Icon, active, collapsed, onClick,
+  label, Icon, active, collapsed, onClick, lockedFeature,
 }: {
   label: string | null
   Icon: LucideIcon
+  /** Shows the plan badge when the page's feature isn't on the current plan. */
+  lockedFeature?: PaidFeature
   active: boolean
   collapsed: boolean
   onClick: () => void
@@ -45,6 +50,7 @@ function NavBtn({
     >
       <Icon size={17} style={{ flexShrink: 0 }} />
       {!collapsed && label && <span style={{ whiteSpace: 'nowrap' }}>{label}</span>}
+      {!collapsed && lockedFeature && <span style={{ marginLeft: 'auto' }}><PlanBadge feature={lockedFeature} /></span>}
     </button>
   )
 }
@@ -53,6 +59,7 @@ export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { hasFeature } = usePlanLimits()
 
   const isActive = (path: string) =>
     path === '/' ? pathname === '/' : pathname.startsWith(path)
@@ -94,9 +101,10 @@ export function Sidebar() {
 
       {/* Main nav */}
       <nav style={{ flex: 1, paddingTop: 10 }}>
-        {NAV_ITEMS.map(({ path, label, Icon }) => (
+        {NAV_ITEMS.map(({ path, label, Icon, feature }) => (
           <NavBtn
             key={path}
+            lockedFeature={feature && !hasFeature(feature) ? feature : undefined}
             label={sidebarCollapsed ? null : label}
             Icon={Icon}
             active={isActive(path)}
