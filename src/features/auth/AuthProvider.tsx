@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
+import { useToastStore } from '../../store/toastStore'
 import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
 import type { PlanTier, Permission, WorkspaceRole, CompanySize, SubscriptionInfo } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
@@ -119,6 +120,14 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
           // The invite page explains what went wrong (expired, wrong account, …).
           navigate(`/invite/${token}`)
           return
+        }
+        if (err instanceof ApiError && err.message === 'plan-limit') {
+          // Matched an invite by email, but that workspace has no free seat. Say so
+          // before onboarding, because creating a workspace would block the invite later.
+          useToastStore.getState().addToast(
+            `${err.userMessage} Or create your own workspace below.`,
+            'warning',
+          )
         }
         forgetInviteToken()
       }

@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**196 frontend + 365 backend = 561 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks and the billing life-cycle); `tsc` clean; `lint` 0 errors; build OK.
+**196 frontend + 371 backend = 567 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks, the billing life-cycle and seat caps); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -117,6 +117,8 @@ See `docs/BILLING.md`. Summary:
   The client keeps it in `useBillingStore().subscription`.
 - `POST /api/billing/portal` (admin) opens the Customer Portal (`ManageBillingButton`). Checkout sends existing subscribers there.
 - **Idempotency:** `stripe_events` dedups webhook deliveries. A failed-payment email goes to owners and admins on the first attempt only.
+- **Seats (1.5):** flat tiers with a hard cap (`PLAN_LIMITS[tier].seats`). A seat is a member or a live pending invite (`getSeatUsage()`).
+  The cap is checked on invite, on accept and on resending an expired invite. Going over returns `402 plan-limit` with `limit: 'seats'`. Nobody is ever removed.
 
 ## No mock data in production (roadmap 1.7 + 1.8, 2026-11-05)
 
@@ -437,10 +439,10 @@ npm test
 npm run test:run       # 196 tests
 
 # Run backend API tests
-npm run test:api       # 365 tests (PGlite, no network)
+npm run test:api       # 371 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 561 tests total
+npm run test:all       # 567 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

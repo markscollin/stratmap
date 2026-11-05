@@ -10,7 +10,8 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 - **Cancel and downgrade:** these take effect **at the end of the billing period**. Upgrades apply immediately, with proration.
 - **Failed-payment email:** StratMap emails owners and admins (through Resend) on the **first** failed renewal attempt
   only. The banner covers later retries.
-- **Seats (1.5):** flat tiers with a hard seat cap (Free 3, Starter 5, Growth 10).
+- **Seats (1.5):** flat tiers with a hard seat cap (Free 3, Starter 5, Growth 10). A seat is a member or a live pending
+  invite. The cap is checked on invite, on accept and on resending an expired invite. A downgrade never removes anyone.
 
 ## How it works
 
