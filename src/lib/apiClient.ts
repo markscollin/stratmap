@@ -10,6 +10,24 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+/** Error thrown for non-2xx API responses. `message` is the server's `error` code
+ *  (e.g. 'no-workspace', 'plan-limit', 'forbidden'); `body.message`, when present,
+ *  is a human-readable explanation suitable for a toast. */
+export class ApiError extends Error {
+  status: number
+  body: Record<string, unknown>
+  constructor(status: number, body: Record<string, unknown>) {
+    super(typeof body.error === 'string' ? body.error : `API error ${status}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.body = body
+  }
+  /** Human-readable message if the server supplied one, else the error code. */
+  get userMessage(): string {
+    return typeof this.body.message === 'string' ? this.body.message : this.message
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -27,7 +45,7 @@ async function request<T>(
   if (res.status === 204) return undefined as T
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? `API error ${res.status}`)
+    throw new ApiError(res.status, body)
   }
   return res.json() as Promise<T>
 }

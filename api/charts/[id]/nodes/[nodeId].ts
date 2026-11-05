@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
+import { requireRole } from '../../../_lib/access'
+import { parseBody } from '../../../_lib/validate'
+import { NodeUpdate } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
 import { charts, nodes } from '../../../../src/lib/db/schema'
 
@@ -20,8 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!chart) return res.status(404).json({ error: 'Chart not found' })
 
+    if ((req.method === 'PUT' || req.method === 'DELETE') && !(await requireRole(auth, res, 'editor'))) return
+
     if (req.method === 'PUT') {
-      const updates = req.body as Partial<typeof nodes.$inferInsert>
+      const updates = parseBody(NodeUpdate, req, res)
+      if (!updates) return
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No updatable fields' })
       const [updated] = await db
         .update(nodes)
         .set(updates)

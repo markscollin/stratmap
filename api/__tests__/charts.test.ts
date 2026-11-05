@@ -108,6 +108,8 @@ describe('POST /api/charts', () => {
   })
 
   it('template seeding is idempotent — second chart from same template succeeds', async () => {
+    // Free allows 1 chart; this test needs two.
+    await testDb.update(schema.workspaces).set({ planTier: 'growth' })
     const templateNodes = [{ id: 'tmpl-node-1', name: 'Alice', title: 'CEO', x: 0, y: 0 }]
     const templateDepts = [{ id: 'tmpl-dept-1', name: 'Eng', colour: '#0EA5E9' }]
 

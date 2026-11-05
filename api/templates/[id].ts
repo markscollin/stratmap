@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { requireRole } from '../_lib/access'
+import { parseBody } from '../_lib/validate'
+import { TemplateUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { roleTemplates } from '../../src/lib/db/schema'
 
@@ -19,9 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!template) return res.status(404).json({ error: 'Template not found' })
 
+    if ((req.method === 'PUT' || req.method === 'DELETE') && !(await requireRole(auth, res, 'editor'))) return
+
     if (req.method === 'PUT') {
-      const { title, department, responsibilities, requirements, tags, uses } =
-        req.body as Partial<typeof roleTemplates.$inferInsert>
+      const body = parseBody(TemplateUpdate, req, res)
+      if (!body) return
+      const { title, department, responsibilities, requirements, tags, uses } = body
 
       const [updated] = await db
         .update(roleTemplates)

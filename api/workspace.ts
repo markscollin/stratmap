@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { requireAuth, requireUser } from './_lib/auth'
+import { requireRole } from './_lib/access'
+import { parseBody } from './_lib/validate'
+import { WorkspaceCreate, WorkspaceUpdate } from './_lib/schemas'
 import { db } from './_lib/db'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
 
@@ -35,15 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const user = await requireUser(req, res)
       if (!user) return
 
-      const { name, ownerRole, size } = req.body as {
-        name: string
-        ownerRole: string
-        size: string
-      }
-
-      if (!name || !ownerRole || !size) {
-        return res.status(400).json({ error: 'name, ownerRole, and size are required' })
-      }
+      const body = parseBody(WorkspaceCreate, req, res)
+      if (!body) return
+      const { name, ownerRole, size } = body
 
       // Guard: if user already has a workspace, return it instead of creating a duplicate
       const [existing] = await db
@@ -72,8 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: crypto.randomUUID(),
         workspaceId,
         userId: user.userId,
-        email: req.body.email ?? '',
-        name: req.body.userName ?? '',
+        email: body.email ?? '',
+        name: body.userName ?? '',
         permission: 'owner',
       })
 
@@ -84,12 +81,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const auth = await requireAuth(req, res)
       if (!auth) return
 
-      const { name } = req.body as { name?: string }
-      if (!name?.trim()) return res.status(400).json({ error: 'name is required' })
+      if (!(await requireRole(auth, res, 'admin'))) return
+      const body = parseBody(WorkspaceUpdate, req, res)
+      if (!body) return
+      const { name } = body
 
       const [updated] = await db
         .update(workspaces)
-        .set({ name: name.trim(), updatedAt: new Date() })
+        .set({ name, updatedAt: new Date() })
         .where(eq(workspaces.id, auth.workspaceId))
         .returning()
 

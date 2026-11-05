@@ -244,9 +244,8 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
   const fetchOrCreateCode = async () => {
     if (code) return code
     try {
-      const res = await fetch(`/api/charts/${chartId}/share`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      if (!res.ok) throw new Error('Failed')
-      const data = await res.json() as { code: string }
+      // Must go through apiClient so the Clerk bearer token is attached.
+      const data = await api.post<{ code: string }>(`/api/charts/${chartId}/share`, {})
       setCode(data.code)
       return data.code
     } catch {
@@ -265,7 +264,7 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
         const c = await fetchOrCreateCode()
         if (c) await updateChartPublic(chartId, true)
       } else {
-        await fetch(`/api/charts/${chartId}/share`, { method: 'DELETE' })
+        await api.delete(`/api/charts/${chartId}/share`)
         setCode(null)
         await updateChartPublic(chartId, false)
       }
@@ -583,7 +582,8 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, o
         />
       </>}
       <ExportBtn onExport={onExport} />
-      <ShareSettingsBtn chartId={chartId} isPublic={isPublic} />
+      {/* Share settings are an editor action (enforced by the API too) */}
+      {!readOnly && <ShareSettingsBtn chartId={chartId} isPublic={isPublic} />}
       {!readOnly ? <>
         <Divider />
         <button onClick={onAddNode} style={{
@@ -960,12 +960,14 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     const newId = addNode({ ...data, x: pos.x, y: pos.y })
     if (reportsToId && newId) addEdge(reportsToId, newId)
     if (chartId && newId) {
+      // The edge is created after the node: the API rejects edges whose endpoints
+      // are not (yet) nodes in this chart.
       api.post(`/api/charts/${chartId}/nodes`, { ...data, id: newId, x: pos.x, y: pos.y })
+        .then(() => reportsToId
+          ? api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: newId })
+              .catch(err => console.error('[canvas] addEdge (reports-to) failed:', err))
+          : undefined)
         .catch(err => console.error('[canvas] addNode failed:', err))
-      if (reportsToId) {
-        api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: newId })
-          .catch(err => console.error('[canvas] addEdge (reports-to) failed:', err))
-      }
     }
     setIsAddModalOpen(false)
   }, [addNode, addEdge, chartId])

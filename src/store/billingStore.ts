@@ -1,8 +1,17 @@
 import { create } from 'zustand'
 import type { Plan, UsageLimits, PlanTier } from '../types'
+import { PLAN_LIMITS } from '../lib/plans'
 
 const AI_DRAFT_LIMITS: Record<PlanTier, number> = {
-  free: 0, starter: 3, growth: -1, enterprise: -1,
+  free:       PLAN_LIMITS.free.aiDraftsPerMonth,
+  starter:    PLAN_LIMITS.starter.aiDraftsPerMonth,
+  growth:     PLAN_LIMITS.growth.aiDraftsPerMonth,
+  enterprise: PLAN_LIMITS.enterprise.aiDraftsPerMonth,
+}
+
+function planFor(tier: PlanTier): Plan {
+  const { seats, maxCharts, maxNodesPerChart } = PLAN_LIMITS[tier]
+  return { tier, seats, maxCharts, maxNodesPerChart, billingCycle: null, renewsAt: null }
 }
 
 interface BillingStore {
@@ -15,42 +24,12 @@ interface BillingStore {
   resetMonthlyUsage: () => void
 }
 
-const FREE_PLAN: Plan = {
-  tier: 'free',
-  seats: 3,
-  maxCharts: 1,
-  maxNodesPerChart: 30,
-  billingCycle: null,
-  renewsAt: null,
-}
-
-const STARTER_PLAN: Plan = {
-  tier: 'starter',
-  seats: 5,
-  maxCharts: 5,
-  maxNodesPerChart: 100,
-  billingCycle: null,
-  renewsAt: null,
-}
-
-const GROWTH_PLAN: Plan = {
-  tier: 'growth',
-  seats: 10,
-  maxCharts: -1,
-  maxNodesPerChart: 500,
-  billingCycle: null,
-  renewsAt: null,
-}
-
-// -1 means unlimited (see usePlanLimits)
-const ENTERPRISE_PLAN: Plan = {
-  tier: 'enterprise',
-  seats: -1,
-  maxCharts: -1,
-  maxNodesPerChart: -1,
-  billingCycle: null,
-  renewsAt: null,
-}
+// Limits come from src/lib/plans.ts, which the API also uses for enforcement.
+// -1 means unlimited (see usePlanLimits).
+const FREE_PLAN: Plan = planFor('free')
+const STARTER_PLAN: Plan = planFor('starter')
+const GROWTH_PLAN: Plan = planFor('growth')
+const ENTERPRISE_PLAN: Plan = planFor('enterprise')
 
 // Single source of truth for tier → Plan. Use this everywhere a planTier string
 // from the API needs to become a Plan object.

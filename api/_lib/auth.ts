@@ -6,6 +6,9 @@ import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 export interface AuthContext {
   userId: string
   workspaceId: string
+  /** Caller's role in the workspace. Optional so test mocks may omit it —
+   *  api/_lib/access.ts falls back to a DB lookup when it is absent. */
+  permission?: (typeof workspaceMembers.$inferSelect)['permission']
 }
 
 const DEV_USER_ID = 'u-dev'
@@ -89,7 +92,7 @@ export async function requireAuth(
   // Dev bypass via header (local/unset environments only — not preview or production)
   if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
     await ensureDevWorkspace()
-    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID }
+    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID, permission: 'owner' }
   }
 
   // If no Clerk secret key on a local/unset environment, fall back to dev identity
@@ -97,7 +100,7 @@ export async function requireAuth(
   if (!process.env.CLERK_SECRET_KEY && bypassAllowed) {
     console.warn('[auth] CLERK_SECRET_KEY not set — using dev identity')
     await ensureDevWorkspace()
-    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID }
+    return { userId: DEV_USER_ID, workspaceId: DEV_WORKSPACE_ID, permission: 'owner' }
   }
 
   const authHeader = req.headers.authorization
@@ -114,7 +117,7 @@ export async function requireAuth(
     const userId = payload.sub
 
     const [membership] = await db
-      .select({ workspaceId: workspaceMembers.workspaceId })
+      .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
       .from(workspaceMembers)
       .where(eq(workspaceMembers.userId, userId))
       .limit(1)
@@ -125,7 +128,7 @@ export async function requireAuth(
       return null
     }
 
-    return { userId, workspaceId: membership.workspaceId }
+    return { userId, workspaceId: membership.workspaceId, permission: membership.permission }
   } catch {
     res.status(401).json({ error: 'Invalid token' })
     return null

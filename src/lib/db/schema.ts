@@ -6,6 +6,9 @@ import {
   real,
   boolean,
   timestamp,
+  primaryKey,
+  bigint,
+  index,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -47,7 +50,10 @@ export const workspaceMembers = pgTable('workspace_members', {
   avatarUrl: text('avatar_url'),
   permission: permissionEnum('permission').notNull().default('viewer'),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
-})
+}, (t) => [
+  index('workspace_members_user_id_idx').on(t.userId),
+  index('workspace_members_workspace_id_idx').on(t.workspaceId),
+])
 
 export const pendingInvites = pgTable('pending_invites', {
   id: text('id').primaryKey(),
@@ -55,7 +61,7 @@ export const pendingInvites = pgTable('pending_invites', {
   email: text('email').notNull(),
   permission: permissionEnum('permission').notNull().default('viewer'),
   sentAt: timestamp('sent_at').notNull().defaultNow(),
-})
+}, (t) => [index('pending_invites_workspace_id_email_idx').on(t.workspaceId, t.email)])
 
 // ─── Workspace Departments ────────────────────────────────────────────────────
 
@@ -64,7 +70,7 @@ export const workspaceDepartments = pgTable('workspace_departments', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   colour: text('colour').notNull(),
-})
+}, (t) => [index('workspace_departments_workspace_id_idx').on(t.workspaceId)])
 
 // ─── Charts ──────────────────────────────────────────────────────────────────
 
@@ -79,7 +85,7 @@ export const charts = pgTable('charts', {
   creatorId: text('creator_id').notNull(),     // Clerk userId
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+}, (t) => [index('charts_workspace_id_idx').on(t.workspaceId)])
 
 export const departments = pgTable('departments', {
   id: text('id').primaryKey(),
@@ -87,7 +93,7 @@ export const departments = pgTable('departments', {
   name: text('name').notNull(),
   colour: text('colour').notNull(),
   workspaceDepartmentId: text('workspace_department_id').references(() => workspaceDepartments.id, { onDelete: 'set null' }),
-})
+}, (t) => [index('departments_chart_id_idx').on(t.chartId)])
 
 // ─── Nodes & Edges ───────────────────────────────────────────────────────────
 
@@ -108,14 +114,14 @@ export const nodes = pgTable('nodes', {
   x: real('x').notNull().default(0),
   y: real('y').notNull().default(0),
   isNew: boolean('is_new').default(false),
-})
+}, (t) => [index('nodes_chart_id_idx').on(t.chartId)])
 
 export const edges = pgTable('edges', {
   id: text('id').primaryKey(),
   chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
   sourceId: text('source_id').notNull(),
   targetId: text('target_id').notNull(),
-})
+}, (t) => [index('edges_chart_id_idx').on(t.chartId)])
 
 // ─── Job Descriptions ────────────────────────────────────────────────────────
 
@@ -133,7 +139,7 @@ export const jobDescriptions = pgTable('job_descriptions', {
   version: integer('version').notNull().default(1),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   updatedBy: text('updated_by').notNull(),
-})
+}, (t) => [index('job_descriptions_chart_id_node_id_idx').on(t.chartId, t.nodeId)])
 
 // ─── Headcount Plans ─────────────────────────────────────────────────────────
 
@@ -150,7 +156,7 @@ export const headcountPlans = pgTable('headcount_plans', {
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+}, (t) => [index('headcount_plans_workspace_id_idx').on(t.workspaceId)])
 
 // ─── Role Templates ──────────────────────────────────────────────────────────
 
@@ -166,7 +172,7 @@ export const roleTemplates = pgTable('role_templates', {
   updatedBy: text('updated_by').notNull(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   uses: integer('uses').notNull().default(0),
-})
+}, (t) => [index('role_templates_workspace_id_idx').on(t.workspaceId)])
 
 // ─── Shared Links ────────────────────────────────────────────────────────────
 
@@ -176,7 +182,25 @@ export const sharedLinks = pgTable('shared_links', {
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   expiresAt: timestamp('expires_at'),
+}, (t) => [index('shared_links_chart_id_idx').on(t.chartId)])
+
+// ─── Usage & abuse protection ────────────────────────────────────────────────
+
+// Fixed-window rate-limit counters. `key` encodes the bucket, e.g. "ai:ws-123"
+// or "share:203.0.113.7". One row per key; the window resets in place.
+// `windowId` = floor(epochSeconds / windowSeconds), so no timezone handling is needed.
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  windowId: bigint('window_id', { mode: 'number' }).notNull(),
+  count: integer('count').notNull().default(0),
 })
+
+// Server-side AI drafting quota — one row per workspace per calendar month (UTC).
+export const aiUsage = pgTable('ai_usage', {
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  period: text('period').notNull(),            // "YYYY-MM"
+  count: integer('count').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.workspaceId, t.period] })])
 
 // ─── Inferred types (for use in Phase 2 API routes) ─────────────────────────
 

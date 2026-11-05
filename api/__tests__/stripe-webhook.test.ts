@@ -22,7 +22,7 @@ import { eq } from 'drizzle-orm'
 // Mock requests must be async-iterable; we yield nothing so getRawBody returns empty
 // and the handler falls through to the dev pre-parsed-body path.
 function webhookReq(body: unknown) {
-  const req = createReq({ method: 'POST', body, headers: {} }) as Record<string, unknown>
+  const req = createReq({ method: 'POST', body, headers: {} }) as unknown as Record<PropertyKey, unknown>
   req[Symbol.asyncIterator] = async function* () { /* empty raw body */ }
   return req
 }

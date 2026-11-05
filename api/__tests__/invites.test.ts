@@ -62,21 +62,27 @@ describe('POST /api/workspace/invites', () => {
     expect(sendWorkspaceInvite).toHaveBeenCalledTimes(2)
   })
 
-  it('skips empty emails and defaults invalid permissions to editor', async () => {
-    const res = createRes()
-    await handler(
-      createReq({ method: 'POST', body: { invites: [
-        { email: '  ', permission: 'editor' },
-        { email: 'carol@co.com', permission: 'not-a-role' },
-      ] } }) as never,
-      res as never,
-    )
+  it('rejects invalid emails and unknown permissions with 400 (nothing persisted)', async () => {
+    for (const invite of [
+      { email: 'not-an-email', permission: 'editor' },
+      { email: 'carol@co.com', permission: 'not-a-role' },
+    ]) {
+      const res = createRes()
+      await handler(createReq({ method: 'POST', body: { invites: [invite] } }) as never, res as never)
+      expect(res._status).toBe(400)
+    }
+    const rows = await testDb.select().from(schema.pendingInvites).where(eq(schema.pendingInvites.workspaceId, TEST_WS_ID))
+    expect(rows).toHaveLength(0)
+    expect(sendWorkspaceInvite).not.toHaveBeenCalled()
+  })
 
+  it('defaults a missing permission to editor and normalises email case', async () => {
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { invites: [{ email: ' Carol@Co.com ' }] } }) as never, res as never)
     expect(res._status).toBe(201)
     const rows = await testDb.select().from(schema.pendingInvites).where(eq(schema.pendingInvites.workspaceId, TEST_WS_ID))
     expect(rows).toHaveLength(1)
     expect(rows[0].email).toBe('carol@co.com')
     expect(rows[0].permission).toBe('editor')
-    expect(sendWorkspaceInvite).toHaveBeenCalledTimes(1)
   })
 })

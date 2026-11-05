@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
+import { requireRole } from '../../_lib/access'
+import { parseBody } from '../../_lib/validate'
+import { EdgeCreate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
-import { charts, edges } from '../../../src/lib/db/schema'
+import { charts, edges, nodes } from '../../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -20,10 +23,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!chart) return res.status(404).json({ error: 'Chart not found' })
 
     if (req.method === 'POST') {
-      const { sourceId, targetId } = req.body as { sourceId: string; targetId: string }
-      if (!sourceId || !targetId) {
-        return res.status(400).json({ error: 'sourceId and targetId are required' })
-      }
+      if (!(await requireRole(auth, res, 'editor'))) return
+      const body = parseBody(EdgeCreate, req, res)
+      if (!body) return
+      const { sourceId, targetId } = body
+      if (sourceId === targetId) return res.status(400).json({ error: 'A role cannot report to itself' })
+
+      // Both ends must be nodes in this chart (prevents cross-chart/workspace links).
+      const endpoints = await db
+        .select({ id: nodes.id })
+        .from(nodes)
+        .where(and(eq(nodes.chartId, chartId), inArray(nodes.id, [sourceId, targetId])))
+      if (endpoints.length !== 2) return res.status(400).json({ error: 'sourceId and targetId must be nodes in this chart' })
 
       const [edge] = await db
         .insert(edges)

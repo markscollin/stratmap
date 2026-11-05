@@ -1,13 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { db } from '../_lib/db'
+import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
 import { sharedLinks, charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
+    // Public, unauthenticated endpoint — throttle per IP to stop code enumeration.
+    if (!(await enforceRateLimit(res, `share:${clientIp(req)}`, 60, 60))) return
+
     const code = req.query.code as string
+    if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
+      return res.status(404).json({ error: 'Link not found or revoked' })
+    }
 
     const [link] = await db
       .select()
@@ -27,7 +34,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(eq(charts.id, link.chartId))
       .limit(1)
 
-    if (!chart) return res.status(404).json({ error: 'Chart not found' })
+    // A link only works while the chart is set to Public. Same 404 as a missing
+    // link so private charts are indistinguishable from non-existent ones.
+    if (!chart || !chart.isPublic) return res.status(404).json({ error: 'Link not found or revoked' })
 
     const [nodeList, edgeList, deptList] = await Promise.all([
       db.select().from(nodes).where(eq(nodes.chartId, chart.id)),
@@ -35,11 +44,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       db.select().from(departments).where(eq(departments.chartId, chart.id)),
     ])
 
+    // Public snapshot: only the fields the read-only canvas needs.
+    res.setHeader('Cache-Control', 'no-store')
     return res.json({
       name: chart.name,
-      nodes: nodeList,
-      edges: edgeList,
-      departments: deptList,
+      nodes: nodeList.map(({ chartId: _c, ...n }) => n),
+      edges: edgeList.map(({ id, sourceId, targetId }) => ({ id, sourceId, targetId })),
+      departments: deptList.map(({ id, name, colour }) => ({ id, name, colour })),
       exportedAt: chart.updatedAt,
     })
   } catch (err) {

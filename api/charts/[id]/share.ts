@@ -1,11 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
+import { randomBytes } from 'node:crypto'
 import { requireAuth } from '../../_lib/auth'
+import { requireRole } from '../../_lib/access'
 import { db } from '../../_lib/db'
 import { charts, sharedLinks } from '../../../src/lib/db/schema'
 
+// 12 random bytes → 16 URL-safe chars (96 bits). Must stay ≤ 20 chars: SharePage
+// treats longer tokens as legacy URL-encoded snapshots.
 function generateCode(): string {
-  return crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+  return randomBytes(12).toString('base64url')
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,6 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1)
 
     if (!chart) return res.status(404).json({ error: 'Chart not found' })
+
+    // Creating or revoking a public link is an editor action.
+    if (!(await requireRole(auth, res, 'editor'))) return
 
     if (req.method === 'POST') {
       // Return existing link if one exists

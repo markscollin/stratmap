@@ -26,6 +26,7 @@ export function SharePage() {
         .then(async r => {
           if (r.status === 404) throw new Error('Link not found or revoked')
           if (r.status === 410) throw new Error('This link has expired')
+          if (r.status === 429) throw new Error('Too many requests — please try again in a minute')
           if (!r.ok) throw new Error('Failed to load')
           return r.json() as Promise<SharedChartData>
         })
