@@ -9,19 +9,16 @@ export function usePlanLimits() {
   const usage = useBillingStore((state) => state.usage)
   const charts = useChartStore((state) => state.charts)
 
+  // Counted from the real chart list; the server enforces the same limit.
   const isAtChartLimit = useCallback(() => {
     if (plan.maxCharts === -1) return false
-    return usage.chartsUsed >= plan.maxCharts
-  }, [plan.maxCharts, usage.chartsUsed])
+    return charts.length >= plan.maxCharts
+  }, [plan.maxCharts, charts.length])
 
+  /** True when a chart with `nodeCount` roles has no room for another. */
   const isAtNodeLimit = useCallback(
-    (chartId: string) => {
-      if (plan.maxNodesPerChart === -1) return false
-      const chart = charts.find((c) => c.id === chartId)
-      if (!chart) return false
-      return chart.nodes.length >= plan.maxNodesPerChart
-    },
-    [charts, plan.maxNodesPerChart]
+    (nodeCount: number) => plan.maxNodesPerChart !== -1 && nodeCount >= plan.maxNodesPerChart,
+    [plan.maxNodesPerChart]
   )
 
   const isAtSeatLimit = useCallback(() => {

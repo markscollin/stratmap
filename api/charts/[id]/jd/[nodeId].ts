@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
-import { getPermission, atLeast, type Permission, requireFeature } from '../../../_lib/access'
+import { getPermission, atLeast, type Permission, requireFeature, requireChartsEditable } from '../../../_lib/access'
 import { parseBody } from '../../../_lib/validate'
 import { JDUpdate, SALARY_FIELDS } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
@@ -70,6 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Writing job descriptions is a paid feature. Reading stays open, so a
       // workspace that downgrades can still see the JDs it wrote.
       if (!(await requireFeature(auth.workspaceId, res, 'jd-editor'))) return
+      if (!(await requireChartsEditable(auth.workspaceId, res))) return
       const body = parseBody(JDUpdate, req, res)
       if (!body) return
       if (body.status && body.status !== 'draft' && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return

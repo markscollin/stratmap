@@ -4,6 +4,7 @@ import type { OrgNode } from '../../types'
 import type { RoleStatus } from '../../types/chart'
 import type { JobDescription } from '../../types/jd'
 import { usePermission } from '../../hooks/usePermission'
+import { useChartLimit } from '../../hooks/useChartLimit'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
@@ -42,7 +43,11 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
 
   const { departments: wsDepts } = useWorkspaceDepartmentStore()
   const dept = node ? wsDepts.find(d => d.id === node.departmentId) : null
-  const { canEdit, canAdmin } = usePermission()
+  const perm = usePermission()
+  // Over the chart limit after a downgrade, chart content (JDs included) is view-only (roadmap 1.6).
+  const { frozen } = useChartLimit()
+  const canEdit = perm.canEdit && !frozen
+  const canAdmin = perm.canAdmin && !frozen
   const { hasFeature } = usePlanLimits()
   // Free plan: job descriptions are read-only and approvals are locked (server enforces both).
   const jdLocked       = !hasFeature('jd-editor')

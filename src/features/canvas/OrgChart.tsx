@@ -946,7 +946,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   }, [setSelectedId, readOnly])
 
   const handleOpenAddModal = useCallback(() => {
-    if (isAtNodeLimit(chartId)) {
+    if (isAtNodeLimit(nodes.length)) {
       setShowUpgradeModal(true)
       return
     }
@@ -962,7 +962,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       addNodePosRef.current = { x: centreX, y: maxY + NODE_H + 60 }
     }
     setIsAddModalOpen(true)
-  }, [nodes, transform, vpSize, chartId, isAtNodeLimit])
+  }, [nodes, transform, vpSize, isAtNodeLimit])
 
   const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
     const pos = addNodePosRef.current
@@ -1185,6 +1185,23 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         filterOpen={filterOpen} onFilterOpenChange={setFilterOpen}
         departments={departments} filters={activeFilters} onFiltersChange={setActiveFilters}
       />
+
+      {/* Over the node limit after a downgrade (roadmap 1.6): edit and remove, but don't add */}
+      {!readOnly && plan.maxNodesPerChart !== -1 && nodes.length > plan.maxNodesPerChart && (
+        <div role="status" data-export-ignore style={{
+          position: 'absolute', top: 64, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--warn-bg)', border: '1px solid var(--warn)',
+          borderRadius: 8, padding: '7px 16px', zIndex: 19, maxWidth: 'calc(100% - 32px)',
+          display: 'flex', alignItems: 'center', gap: 10, fontSize: 12,
+          color: 'var(--text)', boxShadow: 'var(--shadow-sm)',
+        }}>
+          <span>This chart has <strong>{nodes.length}</strong> roles and your plan allows <strong>{plan.maxNodesPerChart}</strong>. You can edit and remove roles, but not add new ones.</span>
+          <button onClick={() => navigate('/pricing')} style={{
+            background: 'var(--warn)', border: 'none', borderRadius: 6,
+            color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 10px', cursor: 'pointer', flexShrink: 0,
+          }}>Upgrade</button>
+        </div>
+      )}
 
       {/* 80% node limit warning banner */}
       {!readOnly && currentTier === 'free' && nodes.length >= Math.floor(plan.maxNodesPerChart * 0.8) && nodes.length < plan.maxNodesPerChart && (

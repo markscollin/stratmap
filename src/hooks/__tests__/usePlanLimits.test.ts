@@ -48,29 +48,25 @@ describe('usePlanLimits', () => {
     expect(result.current.isAtChartLimit()).toBe(false)
   })
 
-  it('reports at chart limit when free plan with 1 chart', () => {
-    useBillingStore.setState({ usage: { chartsUsed: 1, seatsUsed: 1, aiDraftsUsed: 0, aiDraftsLimit: 0 } })
+  it('reports at chart limit when free plan with 1 chart (counted from the chart list)', () => {
+    useChartStore.setState({ charts: [mockChart] })
     const { result } = renderHook(() => usePlanLimits())
     expect(result.current.isAtChartLimit()).toBe(true)
   })
 
   it('never reports at chart limit for growth plan', () => {
-    useBillingStore.setState({ plan: GROWTH_PLAN, usage: { chartsUsed: 100, seatsUsed: 1, aiDraftsUsed: 0, aiDraftsLimit: -1 } })
+    useBillingStore.setState({ plan: GROWTH_PLAN, usage: { chartsUsed: 0, seatsUsed: 1, aiDraftsUsed: 0, aiDraftsLimit: -1 } })
+    useChartStore.setState({ charts: Array(100).fill(mockChart) })
     const { result } = renderHook(() => usePlanLimits())
     expect(result.current.isAtChartLimit()).toBe(false)
   })
 
-  it('checks node limit for specific chart', () => {
-    useChartStore.setState({ charts: [mockChart] })
-    let { result } = renderHook(() => usePlanLimits())
-    // Chart has 25 nodes, free plan limit is 30
-    expect(result.current.isAtNodeLimit('chart-1')).toBe(false)
-    // Add more nodes
-    useChartStore.setState({
-      charts: [{ ...mockChart, nodes: Array(31).fill(mockChart.nodes[0]).map((n, i) => ({ ...n, id: `node-${i}` })) }],
-    })
-    ;({ result } = renderHook(() => usePlanLimits()))
-    expect(result.current.isAtNodeLimit('chart-1')).toBe(true)
+  it('checks a chart\'s node count against the plan', () => {
+    const { result } = renderHook(() => usePlanLimits())
+    // Free plan limit is 30 roles per chart
+    expect(result.current.isAtNodeLimit(25)).toBe(false)
+    expect(result.current.isAtNodeLimit(30)).toBe(true)
+    expect(result.current.isAtNodeLimit(31)).toBe(true)
   })
 
   it('never reports at node or seat limit for enterprise plan (-1 = unlimited)', () => {
@@ -78,11 +74,9 @@ describe('usePlanLimits', () => {
       plan: ENTERPRISE_PLAN,
       usage: { chartsUsed: 0, seatsUsed: 999, aiDraftsUsed: 0, aiDraftsLimit: -1 },
     })
-    useChartStore.setState({
-      charts: [{ ...mockChart, nodes: Array(1000).fill(mockChart.nodes[0]).map((n, i) => ({ ...n, id: `n-${i}` })) }],
-    })
+    useChartStore.setState({ charts: Array(50).fill(mockChart) })
     const { result } = renderHook(() => usePlanLimits())
-    expect(result.current.isAtNodeLimit('chart-1')).toBe(false)
+    expect(result.current.isAtNodeLimit(1000)).toBe(false)
     expect(result.current.isAtSeatLimit()).toBe(false)
     expect(result.current.isAtChartLimit()).toBe(false)
   })

@@ -6,6 +6,7 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
 import { OrgChart } from '../features/canvas/OrgChart'
 import { usePermission } from '../hooks/usePermission'
+import { useChartLimit } from '../hooks/useChartLimit'
 import { api } from '../lib/apiClient'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
@@ -24,6 +25,8 @@ export function CanvasView() {
   const navigate = useNavigate()
   const { charts } = useChartStore()
   const { canEdit } = usePermission()
+  // Over the chart limit after a downgrade, every chart is view-only (roadmap 1.6).
+  const { frozen } = useChartLimit()
 
   // Metadata from the store (name, status, version for the header)
   const chartMeta = charts.find(c => c.id === id)
@@ -94,7 +97,7 @@ export function CanvasView() {
         initialNodes={fullChart.nodes}
         initialEdges={fullChart.edges}
         departments={depts}
-        readOnly={!canEdit}
+        readOnly={!canEdit || frozen}
         isPublic={chartMeta?.isPublic ?? false}
       />
     </div>
