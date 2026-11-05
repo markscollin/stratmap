@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { User, Briefcase, Clock, RefreshCw } from 'lucide-react'
 import type { OrgNode, RoleType } from '../../types'
-import { NODE_W, NODE_H } from '../../data/mockNodes'
+import { NODE_W, NODE_H } from './nodeSize'
 
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()

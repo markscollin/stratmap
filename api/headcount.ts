@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
-import { requireRole } from './_lib/access'
+import { requireRole, requireFeature } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { HeadcountCreate } from './_lib/schemas'
 import { db } from './_lib/db'
@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       if (!(await requireRole(auth, res, 'editor'))) return
+      if (!(await requireFeature(auth.workspaceId, res, 'headcount-planning'))) return
       const body = parseBody(HeadcountCreate, req, res)
       if (!body) return
       const { title, departmentId, roleType, targetQuarter, chartId, notes } = body

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { OrgChart } from '../features/canvas/OrgChart'
 import { decodeSharePayload } from '../utils/shareLink'
-import { mockDepartments } from '../data/mockOrg'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
 interface SharedChartData {
@@ -71,7 +70,7 @@ export function SharePage() {
     )
   }
 
-  const depts = data.departments.length ? data.departments : mockDepartments
+  const depts = data.departments
 
   return (
     <div style={{ height: '100vh', position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>

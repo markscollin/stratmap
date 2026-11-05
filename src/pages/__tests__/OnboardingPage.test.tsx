@@ -174,3 +174,38 @@ describe('OnboardingPage — workspace owner', () => {
     expect(workspace?.members[0].user.id).toBe('u-1')
   })
 })
+
+describe('OnboardingPage — quick start', () => {
+  it('creates the workspace and a starter chart through the API, then opens the chart', async () => {
+    const { api } = await import('../../lib/apiClient')
+    vi.mocked(api.post).mockClear()
+    renderPage()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'My Startup' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    fireEvent.click(screen.getByTestId('quick-start-btn'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(/^\/charts\/.+/)))
+
+    const paths = vi.mocked(api.post).mock.calls.map(c => c[0])
+    expect(paths).toEqual(['/api/workspace', '/api/charts'])
+    const chartBody = vi.mocked(api.post).mock.calls[1][1] as {
+      templateNodes: { name: string; departmentId: string }[]
+      templateDepts: { id: string; name: string }[]
+    }
+    expect(chartBody.templateNodes).toHaveLength(5)
+    // Only the departments the starter roles use, and every role's department is included.
+    const deptIds = new Set(chartBody.templateDepts.map(d => d.id))
+    expect(chartBody.templateNodes.every(n => deptIds.has(n.departmentId))).toBe(true)
+    expect(chartBody.templateDepts.map(d => d.name)).not.toContain('Finance')
+  })
+
+  it('the creator is the owner in the UI straight away', async () => {
+    useUserStore.setState({ permission: 'viewer' })
+    renderPage()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'My Startup' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    fireEvent.click(screen.getByTestId('skip-btn'))
+    await waitFor(() => expect(useUserStore.getState().permission).toBe('owner'))
+  })
+})
+

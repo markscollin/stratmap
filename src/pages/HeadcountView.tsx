@@ -3,6 +3,8 @@ import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash
 import { useHeadcountStore, type HeadcountPlan, type HeadcountStatus } from '../store/headcountStore'
 import { useWorkspaceDepartmentStore, type WorkspaceDepartment } from '../store/workspaceDepartmentStore'
 import { useChartStore } from '../store'
+import { usePlanLimits } from '../hooks/usePlanLimits'
+import { LockedFeatureCard } from '../components/ui/FeatureLock'
 import { usePermission } from '../hooks/usePermission'
 import type { RoleType } from '../types'
 
@@ -250,12 +252,13 @@ function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
 
 // ─── Plan card ────────────────────────────────────────────────────────────────
 
-function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove }: {
+function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly }: {
   plan: HeadcountPlan
   onEdit: () => void
   onDelete: () => void
   onStatusChange: (status: HeadcountStatus) => void
   canApprove: boolean
+  readOnly: boolean
 }) {
   const { charts } = useChartStore()
   const linkedChart = plan.chartId ? charts.find(c => c.id === plan.chartId) : null
@@ -279,7 +282,7 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove }: {
         {/* Title row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', flex: 1, lineHeight: 1.35 }}>{plan.title}</span>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: hov ? 1 : 0, transition: 'opacity .12s' }}>
+          {!readOnly && <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: hov ? 1 : 0, transition: 'opacity .12s' }}>
             <button onClick={onEdit} title="Edit" style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', borderRadius: 4, display: 'flex' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--nav-hover)'; e.currentTarget.style.color = 'var(--text)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)' }}
@@ -288,7 +291,7 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove }: {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger-bg)'; e.currentTarget.style.color = 'var(--danger)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)' }}
             ><Trash2 size={11} /></button>
-          </div>
+          </div>}
         </div>
 
         {/* Meta row */}
@@ -312,14 +315,14 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove }: {
         {/* Status + actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <StatusPill status={plan.status} />
-          {plan.status === 'planned' && canApprove && (
+          {!readOnly && plan.status === 'planned' && canApprove && (
             <button onClick={() => onStatusChange('approved')} style={{
               fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
               background: 'transparent', border: '1px solid var(--success)',
               color: 'var(--success)', cursor: 'pointer',
             }}>Approve</button>
           )}
-          {plan.status === 'approved' && (
+          {!readOnly && plan.status === 'approved' && (
             <button onClick={() => onStatusChange('filled')} style={{
               fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
               background: 'transparent', border: '1px solid var(--brand)',
@@ -441,13 +444,14 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
 
 // ─── Quarter column ────────────────────────────────────────────────────────────
 
-function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatusChange, canApprove }: {
+function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatusChange, canApprove, readOnly }: {
   quarter: string; plans: HeadcountPlan[]; year: number
   onAdd: (quarter: string) => void
   onEdit: (plan: HeadcountPlan) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: HeadcountStatus) => void
   canApprove: boolean
+  readOnly: boolean
 }) {
   const label = QUARTER_LABELS[quarter]
   const planCount = plans.length
@@ -485,12 +489,15 @@ function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatus
             onDelete={() => onDelete(p.id)}
             onStatusChange={status => onStatusChange(p.id, status)}
             canApprove={canApprove}
+            readOnly={readOnly}
           />
         ))}
       </div>
 
       {/* Add button */}
-      <button
+      {readOnly ? (
+        <div style={{ height: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px' }} />
+      ) : <button
         onClick={() => onAdd(`${year}-${quarter}`)}
         style={{
           width: '100%', padding: '9px', fontSize: 12, fontWeight: 500,
@@ -503,7 +510,7 @@ function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatus
         onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.color = 'var(--muted)' }}
       >
         <Plus size={12} /> Add hire
-      </button>
+      </button>}
     </div>
   )
 }
@@ -580,7 +587,10 @@ function ChartFilter({ value, onChange }: { value: Set<string>; onChange: (v: Se
 export function HeadcountView() {
   const { plans, loading, fetch, create, update, remove } = useHeadcountStore()
   const { fetch: fetchDepts } = useWorkspaceDepartmentStore()
-  const { canAdmin } = usePermission()
+  const { canAdmin, canEdit } = usePermission()
+  // Headcount planning is a Growth feature. Lower plans (and non-editors) see the board read-only.
+  const locked   = !usePlanLimits().hasFeature('headcount-planning')
+  const readOnly = locked || !canEdit
 
   const currentYear = new Date().getFullYear()
   const [year, setYear]           = useState(currentYear)
@@ -698,18 +708,28 @@ export function HeadcountView() {
           <Settings size={12} /> Departments
         </button>
 
-        <button onClick={() => setAddingToQuarter(`${year}-Q1`)} style={{
+        {!readOnly && <button onClick={() => setAddingToQuarter(`${year}-Q1`)} style={{
           display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px',
           background: 'var(--grad-brand)', border: 'none',
           borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#fff',
           boxShadow: '0 4px 14px var(--brand-glow)',
         }}>
           <Plus size={12} /> Add hire
-        </button>
+        </button>}
       </div>
 
+      {locked && (
+        <LockedFeatureCard feature="headcount-planning">
+          {plans.length > 0 && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: '6px 0 0' }}>
+              Your existing plans are shown below, read-only.
+            </p>
+          )}
+        </LockedFeatureCard>
+      )}
+
       {/* Add / Edit form (shown above kanban when triggered from header button) */}
-      {addingToQuarter && !editingPlan && (
+      {!readOnly && addingToQuarter && !editingPlan && (
         <div style={{ marginBottom: 16 }}>
           <HireForm
             initialQuarter={addingToQuarter}
@@ -718,7 +738,7 @@ export function HeadcountView() {
           />
         </div>
       )}
-      {editingPlan && (
+      {!readOnly && editingPlan && (
         <div style={{ marginBottom: 16 }}>
           <HireForm
             initialQuarter={editingPlan.targetQuarter}
@@ -745,6 +765,7 @@ export function HeadcountView() {
               onDelete={remove}
               onStatusChange={handleStatusChange}
               canApprove={canAdmin}
+              readOnly={readOnly}
             />
           ))}
         </div>

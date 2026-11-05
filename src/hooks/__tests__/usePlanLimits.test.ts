@@ -137,15 +137,34 @@ describe('usePlanLimits', () => {
 
   it('reports upgrade requirements correctly', () => {
     const { result } = renderHook(() => usePlanLimits())
-    expect(result.current.upgradeRequired('headcount-planning')).toBe(true)
-    expect(result.current.upgradeRequired('pdf-export')).toBe(true)
-    expect(result.current.upgradeRequired('auto-layout')).toBe(true)
+    for (const f of ['jd-editor', 'approval-workflow', 'pdf-export', 'ai-drafting', 'auto-layout'] as const) {
+      expect(result.current.upgradeRequired(f)).toBe(true)
+      expect(result.current.hasFeature(f)).toBe(false)
+    }
+    // Unknown feature names are never locked
+    expect(result.current.upgradeRequired('not-a-feature')).toBe(false)
   })
 
   it('no upgrade required for features available on current tier', () => {
     useBillingStore.setState({ plan: GROWTH_PLAN })
     const { result } = renderHook(() => usePlanLimits())
-    expect(result.current.upgradeRequired('headcount-planning')).toBe(false)
     expect(result.current.upgradeRequired('pdf-export')).toBe(false)
+    expect(result.current.hasFeature('jd-editor')).toBe(true)
+  })
+
+  it('Starter unlocks job descriptions, approvals and PDF export', () => {
+    useBillingStore.setState({ plan: STARTER_PLAN })
+    const { result } = renderHook(() => usePlanLimits())
+    expect(result.current.hasFeature('jd-editor')).toBe(true)
+    expect(result.current.hasFeature('approval-workflow')).toBe(true)
+    expect(result.current.hasFeature('pdf-export')).toBe(true)
+    // …but headcount planning needs Growth
+    expect(result.current.hasFeature('headcount-planning')).toBe(false)
+  })
+
+  it('Growth unlocks headcount planning', () => {
+    useBillingStore.setState({ plan: GROWTH_PLAN })
+    const { result } = renderHook(() => usePlanLimits())
+    expect(result.current.hasFeature('headcount-planning')).toBe(true)
   })
 })

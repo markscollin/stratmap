@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
-import { requireRole, atLeast } from '../_lib/access'
+import { requireRole, atLeast, requireFeature } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { HeadcountUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
@@ -21,6 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // editor+ to change plans; approval additionally needs admin (below)
     const permission = await requireRole(auth, res, 'editor')
     if (!permission) return
+    // Reading plans stays open (GET /api/headcount) so a downgraded workspace keeps its data.
+    if (!(await requireFeature(auth.workspaceId, res, 'headcount-planning'))) return
 
     if (req.method === 'PUT') {
       const body = parseBody(HeadcountUpdate, req, res)

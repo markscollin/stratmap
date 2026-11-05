@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, desc, count } from 'drizzle-orm'
+import { eq, desc, count, sql, getTableColumns } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
-import { requireRole, getEffectivePlan, sendPlanLimit } from '../_lib/access'
+import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { ChartCreate } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
-import { fitsLimit } from '../../src/lib/plans'
+import { fitsLimit, APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -15,7 +15,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       const chartList = await db
-        .select()
+        .select({
+          ...getTableColumns(charts),
+          // Counts for the library cards, which don't load each chart's nodes.
+          // Fully qualified on purpose: drizzle renders column refs unqualified in a
+          // select list, which would bind "id" to the inner table.
+          nodeCount: sql<number>`(select count(*)::int from "nodes" n where n."chart_id" = "charts"."id")`,
+          deptCount: sql<number>`(select count(*)::int from "departments" d where d."chart_id" = "charts"."id")`,
+        })
         .from(charts)
         .where(eq(charts.workspaceId, auth.workspaceId))
         .orderBy(desc(charts.updatedAt))
@@ -28,6 +35,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(ChartCreate, req, res)
       if (!body) return
       const { name, status = 'draft', templateNodes, templateEdges, templateDepts } = body
+      if ((APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
+        && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return
 
       // Plan limits: chart count, and node count of the seeded template.
       const plan = await getEffectivePlan(auth.workspaceId)

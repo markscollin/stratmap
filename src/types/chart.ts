@@ -8,6 +8,8 @@ export interface Department {
   id: string
   name: string
   colour: string
+  /** Set when the chart department mirrors a workspace department. */
+  workspaceDepartmentId?: string | null
 }
 
 export interface OrgNode {
@@ -47,4 +49,7 @@ export interface OrgChart {
   collaborators: string[]
   createdAt: string
   updatedAt: string
+  /** From the chart list endpoint, which doesn't load nodes or departments. */
+  nodeCount?: number
+  deptCount?: number
 }

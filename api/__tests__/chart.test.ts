@@ -26,6 +26,8 @@ beforeEach(async () => {
   await cleanDb()
   await seedWorkspace()
   await seedChart()
+  // The approval workflow (status changes into review/approved/live) is a Starter feature.
+  await testDb.update(schema.workspaces).set({ planTier: 'starter' })
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
 })
 

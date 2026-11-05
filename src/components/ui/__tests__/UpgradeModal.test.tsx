@@ -43,7 +43,7 @@ describe('UpgradeModal', () => {
     )
     expect(screen.getByText('Starter')).toBeInTheDocument()
     expect(screen.getByText(/£18/)).toBeInTheDocument()
-    expect(screen.getByText(/Save 22% with annual billing/)).toBeInTheDocument()
+    expect(screen.getByText(/2 months free with annual billing/)).toBeInTheDocument()
   })
 
   it('displays growth plan info', () => {
@@ -104,10 +104,13 @@ describe('UpgradeModal', () => {
         currentTier="free"
       />
     )
-    expect(screen.getByText('JD editor & AI drafting')).toBeInTheDocument()
+    expect(screen.getByText('Job descriptions & approval workflows')).toBeInTheDocument()
     expect(screen.getByText('PDF export')).toBeInTheDocument()
-    expect(screen.getByText('Password protection')).toBeInTheDocument()
-    expect(screen.getByText('Up to 5 charts')).toBeInTheDocument()
+    expect(screen.getByText('AI JD drafting (3 per month)')).toBeInTheDocument()
+    expect(screen.getByText('Auto-layout')).toBeInTheDocument()
+    expect(screen.getByText('Up to 5 charts, 100 roles each')).toBeInTheDocument()
+    // Not built, so never advertised
+    expect(screen.queryByText(/Password protection/)).toBeNull()
   })
 
   it('displays growth plan features', () => {
@@ -120,10 +123,13 @@ describe('UpgradeModal', () => {
         currentTier="free"
       />
     )
-    expect(screen.getByText('Unlimited charts & nodes')).toBeInTheDocument()
-    expect(screen.getByText('Headcount planning')).toBeInTheDocument()
-    expect(screen.getByText('Real-time collab')).toBeInTheDocument()
-    expect(screen.getByText('Auto-layout')).toBeInTheDocument()
+    expect(screen.getAllByText('Headcount planning').length).toBeGreaterThan(0)
+    expect(screen.getByText('Unlimited charts')).toBeInTheDocument()
+    expect(screen.getByText('Up to 500 roles per chart')).toBeInTheDocument()
+    expect(screen.getByText('Unlimited AI drafting')).toBeInTheDocument()
+    expect(screen.getByText('10 team members')).toBeInTheDocument()
+    // Not built, so never advertised
+    expect(screen.queryByText(/Real-time/)).toBeNull()
   })
 
   it('shows correct upgrade button text', () => {

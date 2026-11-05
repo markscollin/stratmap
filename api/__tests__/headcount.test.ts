@@ -24,6 +24,12 @@ import { eq } from 'drizzle-orm'
 
 beforeAll(async () => { await setupSchema() })
 
+// Headcount planning is a Growth feature (plan gating is covered in plan-features.test.ts).
+async function seedGrowthWorkspace() {
+  await seedWorkspace()
+  await testDb.update(schema.workspaces).set({ planTier: 'growth' })
+}
+
 beforeEach(async () => {
   await cleanDb()
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
@@ -31,7 +37,7 @@ beforeEach(async () => {
 
 describe('GET /api/headcount', () => {
   it('returns empty array when no plans exist', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await listHandler(createReq() as never, res as never)
     expect(res._status).toBe(200)
@@ -39,7 +45,7 @@ describe('GET /api/headcount', () => {
   })
 
   it('returns plans for the workspace', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     const res = createRes()
     await listHandler(createReq() as never, res as never)
@@ -49,7 +55,7 @@ describe('GET /api/headcount', () => {
   })
 
   it('includes denormalized department name and colour via LEFT JOIN', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedWorkspaceDept()
     await testDb.insert(schema.headcountPlans).values({
       id: TEST_PLAN_ID,
@@ -68,7 +74,7 @@ describe('GET /api/headcount', () => {
   })
 
   it('returns null department fields when plan has no department', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     const res = createRes()
     await listHandler(createReq() as never, res as never)
@@ -78,7 +84,7 @@ describe('GET /api/headcount', () => {
   })
 
   it('only returns plans from the authed workspace', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     await testDb.execute(
       `INSERT INTO workspaces (id, name, owner_id, owner_role, size) VALUES ('ws-other', 'Other', 'u-other', 'CTO', '1-10')`
@@ -94,7 +100,7 @@ describe('GET /api/headcount', () => {
   })
 
   it('returns 405 for unsupported methods', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await listHandler(createReq({ method: 'DELETE' }) as never, res as never)
     expect(res._status).toBe(405)
@@ -103,7 +109,7 @@ describe('GET /api/headcount', () => {
 
 describe('POST /api/headcount', () => {
   it('creates a plan and returns 201', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await listHandler(
       createReq({ method: 'POST', body: { title: 'Product Manager', targetQuarter: '2026-Q2' } }) as never,
@@ -118,7 +124,7 @@ describe('POST /api/headcount', () => {
   })
 
   it('accepts optional fields', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedChart()
     await seedWorkspaceDept()
     const res = createRes()
@@ -143,7 +149,7 @@ describe('POST /api/headcount', () => {
   })
 
   it('persists plan to the database', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await listHandler(
       createReq({ method: 'POST', body: { title: 'Data Analyst', targetQuarter: '2026-Q1' } }) as never,
       createRes() as never,
@@ -156,7 +162,7 @@ describe('POST /api/headcount', () => {
   })
 
   it('returns 400 when title is missing', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await listHandler(
       createReq({ method: 'POST', body: { targetQuarter: '2026-Q2' } }) as never,
@@ -166,7 +172,7 @@ describe('POST /api/headcount', () => {
   })
 
   it('returns 400 when targetQuarter is missing', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await listHandler(
       createReq({ method: 'POST', body: { title: 'Engineer' } }) as never,
@@ -178,7 +184,7 @@ describe('POST /api/headcount', () => {
 
 describe('PUT /api/headcount/[id]', () => {
   it('updates plan title', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     const res = createRes()
     await itemHandler(
@@ -191,7 +197,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('updates plan status to filled', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     const res = createRes()
     await itemHandler(
@@ -204,7 +210,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('allows admin to approve a plan', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     // Seed an admin member
     await testDb.insert(schema.workspaceMembers).values({
@@ -222,7 +228,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('allows owner to approve a plan', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     await testDb.insert(schema.workspaceMembers).values({
       id: 'wm-owner', workspaceId: TEST_WS_ID, userId: TEST_USER_ID,
@@ -237,7 +243,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('blocks editor from approving a plan (403)', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     // Auth as a different user who is only an editor
     vi.mocked(requireAuth).mockResolvedValue({ userId: 'u-editor', workspaceId: TEST_WS_ID })
@@ -254,7 +260,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('blocks non-member from approving (403)', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     // Auth as a user with no workspace_members row
     vi.mocked(requireAuth).mockResolvedValue({ userId: 'u-stranger', workspaceId: TEST_WS_ID })
@@ -267,7 +273,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('returns 404 when plan does not exist', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await itemHandler(
       createReq({ method: 'PUT', query: { id: 'nonexistent' }, body: { title: 'X' } }) as never,
@@ -277,7 +283,7 @@ describe('PUT /api/headcount/[id]', () => {
   })
 
   it('cannot update a plan from another workspace', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await testDb.execute(
       `INSERT INTO workspaces (id, name, owner_id, owner_role, size) VALUES ('ws-other', 'Other', 'u-other', 'CTO', '1-10')`
     )
@@ -296,7 +302,7 @@ describe('PUT /api/headcount/[id]', () => {
 
 describe('DELETE /api/headcount/[id]', () => {
   it('deletes plan and returns 204', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     await seedHeadcountPlan()
     const res = createRes()
     await itemHandler(
@@ -311,7 +317,7 @@ describe('DELETE /api/headcount/[id]', () => {
   })
 
   it('is idempotent — deleting a nonexistent plan returns 204', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await itemHandler(
       createReq({ method: 'DELETE', query: { id: 'nonexistent' } }) as never,
@@ -321,7 +327,7 @@ describe('DELETE /api/headcount/[id]', () => {
   })
 
   it('returns 405 for unsupported methods', async () => {
-    await seedWorkspace()
+    await seedGrowthWorkspace()
     const res = createRes()
     await itemHandler(
       createReq({ method: 'POST', query: { id: TEST_PLAN_ID } }) as never,

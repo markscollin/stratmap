@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
   Clock, ExternalLink, Copy, GitBranch, Trash2, Globe,
 } from 'lucide-react'
 import { useChartStore } from '../store'
-import { CHART_DISPLAY } from '../data/mockOrg'
 import { STATUS_META, STATUS_ACTIONS } from '../constants/statusMeta'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
@@ -14,8 +13,12 @@ import { MiniChartThumb } from '../components/ui/MiniChartThumb'
 import { UpgradeModal } from '../components/ui/UpgradeModal'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
-import type { OrgChart, OrgNode, OrgEdge, ChartStatus } from '../types'
-import { mockDepartments } from '../data/mockOrg'
+import type { OrgChart, ChartStatus } from '../types'
+import { buildChartTemplate, type ChartTemplateId } from '../lib/chartTemplates'
+import { formatUpdated } from '../utils/formatUpdated'
+import { APPROVAL_CHART_STATUSES } from '../lib/plans'
+import { PlanBadge, FeatureUpgradeModal } from '../components/ui/FeatureLock'
+import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 
 const PERMISSION_RANK: Record<string, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
 
@@ -94,10 +97,16 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   const navigate                    = useNavigate()
   const { duplicateChart, deleteChart } = useChartStore()
   const { permission } = usePermission()
+  const approvalLocked = !usePlanLimits().hasFeature('approval-workflow')
+  const [showApprovalUpgrade, setShowApprovalUpgrade] = useState(false)
   const actions = (STATUS_ACTIONS[chart.status] || []).filter(
     a => PERMISSION_RANK[permission] >= PERMISSION_RANK[a.minPermission]
   )
-  const display = CHART_DISPLAY[chart.id] ?? { nodeCount: chart.nodes.length, deptCount: chart.departments.length, updatedDisplay: chart.updatedAt }
+  const display = {
+    nodeCount: chart.nodeCount ?? chart.nodes.length,
+    deptCount: chart.deptCount ?? chart.departments.length,
+    updatedDisplay: formatUpdated(chart.updatedAt),
+  }
 
   const metaItems = [
     { Icon: UserCircle, label: chart.owner },
@@ -152,15 +161,21 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
             </button>
             {menu && !confirmDelete && (
               <OverflowMenu
-                actions={actions}
+                actions={actions.map(a => ({ ...a, locked: approvalLocked && isApprovalStatus(a.next) }))}
                 canAdmin={canAdmin}
-                onAction={next => { onAction(chart.id, next); setMenu(false) }}
+                onAction={next => {
+                  setMenu(false)
+                  // Free plan: review/approve/publish is the paid approval workflow.
+                  if (approvalLocked && isApprovalStatus(next)) setShowApprovalUpgrade(true)
+                  else onAction(chart.id, next)
+                }}
                 onOpen={() => { navigate(`/charts/${chart.id}`); setMenu(false) }}
                 onDuplicate={() => { duplicateChart(chart.id); setMenu(false) }}
                 onDelete={() => { setConfirm(true); setMenu(false) }}
                 onClose={() => setMenu(false)}
               />
             )}
+            <FeatureUpgradeModal feature="approval-workflow" isOpen={showApprovalUpgrade} onClose={() => setShowApprovalUpgrade(false)} />
             {confirmDelete && (
               <div data-testid="chart-delete-confirm" style={{ position: 'absolute', top: 30, right: 0, zIndex: 100, background: 'var(--surface)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: '14px 16px', minWidth: 220, boxShadow: 'var(--shadow)', animation: 'slideDown .15s ease-out' }}>
                 <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.4 }}>Delete <strong>{chart.name}</strong>? This cannot be undone.</p>
@@ -211,7 +226,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
 }
 
 function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDelete, onClose }: {
-  actions: { next: ChartStatus; label: string; color: string }[]
+  actions: { next: ChartStatus; label: string; color: string; locked?: boolean }[]
   canAdmin: boolean
   onAction: (next: ChartStatus) => void
   onOpen: () => void
@@ -230,7 +245,8 @@ function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDele
       {actions.length > 0 && (
         <>
           {actions.map(a => (
-            <MenuBtn key={a.next} color={a.color} label={a.label} onClick={() => onAction(a.next)} bold />
+            <MenuBtn key={a.next} color={a.color} label={a.label} onClick={() => onAction(a.next)} bold
+              badge={a.locked ? <PlanBadge feature="approval-workflow" /> : undefined} />
           ))}
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
         </>
@@ -248,14 +264,18 @@ function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDele
   )
 }
 
-function MenuBtn({ label, color, onClick, bold }: { label: string; color: string; onClick: () => void; bold?: boolean }) {
+function MenuBtn({ label, color, onClick, bold, badge }: { label: string; color: string; onClick: () => void; bold?: boolean; badge?: ReactNode }) {
   return (
     <button onClick={onClick}
       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', background: 'transparent', border: 'none', borderRadius: 6, color, fontSize: 13, fontWeight: bold ? 600 : 400, cursor: 'pointer', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-    >{label}</button>
+    >{label}{badge && <span style={{ marginLeft: 'auto' }}>{badge}</span>}</button>
   )
+}
+
+function isApprovalStatus(status: ChartStatus): boolean {
+  return (APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
 }
 
 // ── New chart modal ───────────────────────────────────────────────────────────
@@ -332,94 +352,6 @@ function NewChartModal({ onClose, onCreate }: {
   )
 }
 
-// ── Template starters ─────────────────────────────────────────────────────────
-
-function makeTemplateData(template: string): { nodes: OrgNode[]; edges: OrgEdge[] } {
-  if (template === 'blank') return { nodes: [], edges: [] }
-
-  const t = Date.now()
-  const id = (n: number) => `n${t}${n}`
-  const eid = (n: number) => `e${t}${n}`
-
-  if (template === 'startup') {
-    // Flat 5-node startup: CEO + 4 leads
-    const nodes: OrgNode[] = [
-      { id: id(0), name: 'Founder',        title: 'CEO',              departmentId: 'eng',     managerId: null,  status: 'active', employmentType: 'full-time', x: 390, y: 50  },
-      { id: id(1), name: 'Engineering Lead', title: 'CTO',            departmentId: 'eng',     managerId: id(0), status: 'active', employmentType: 'full-time', x: 60,  y: 220 },
-      { id: id(2), name: 'Product Lead',   title: 'Head of Product',  departmentId: 'product', managerId: id(0), status: 'active', employmentType: 'full-time', x: 280, y: 220 },
-      { id: id(3), name: 'Design Lead',    title: 'Head of Design',   departmentId: 'design',  managerId: id(0), status: 'active', employmentType: 'full-time', x: 500, y: 220 },
-      { id: id(4), name: 'Sales Lead',     title: 'VP Sales',         departmentId: 'go',      managerId: id(0), status: 'active', employmentType: 'full-time', x: 720, y: 220 },
-    ]
-    const edges: OrgEdge[] = [
-      { id: eid(1), sourceId: id(0), targetId: id(1) },
-      { id: eid(2), sourceId: id(0), targetId: id(2) },
-      { id: eid(3), sourceId: id(0), targetId: id(3) },
-      { id: eid(4), sourceId: id(0), targetId: id(4) },
-    ]
-    return { nodes, edges }
-  }
-
-  if (template === 'scaleup') {
-    // Functional departments: CEO → CTO/CPO/VP GTM/CFO, each with 2–3 ICs
-    const nodes: OrgNode[] = [
-      { id: id(0),  name: 'Sarah Chen',   title: 'Chief Executive Officer',  departmentId: 'eng',     managerId: null,  status: 'active', employmentType: 'full-time', x: 980,  y: 50  },
-      { id: id(1),  name: 'Jamie Davies', title: 'Chief Technology Officer',  departmentId: 'eng',     managerId: id(0), status: 'active', employmentType: 'full-time', x: 240,  y: 220 },
-      { id: id(2),  name: 'Mark Kim',     title: 'Chief Product Officer',     departmentId: 'product', managerId: id(0), status: 'active', employmentType: 'full-time', x: 800,  y: 220 },
-      { id: id(3),  name: 'Ryan Obi',     title: 'VP Go-to-Market',           departmentId: 'go',      managerId: id(0), status: 'active', employmentType: 'full-time', x: 1290, y: 220 },
-      { id: id(4),  name: 'Chris Park',   title: 'Finance Manager',           departmentId: 'finance', managerId: id(0), status: 'active', employmentType: 'full-time', x: 1690, y: 220 },
-      { id: id(5),  name: 'Alex Chen',    title: 'Senior Software Engineer',  departmentId: 'eng',     managerId: id(1), status: 'active', employmentType: 'full-time', x: 20,   y: 400 },
-      { id: id(6),  name: 'Priya Nair',   title: 'Senior Software Engineer',  departmentId: 'eng',     managerId: id(1), status: 'active', employmentType: 'full-time', x: 240,  y: 400 },
-      { id: id(7),  name: 'Software Engineer', title: 'Software Engineer',    departmentId: 'eng',     managerId: id(1), status: 'open',   employmentType: 'full-time', x: 460,  y: 400 },
-      { id: id(8),  name: 'Lisa Park',    title: 'Product Manager',           departmentId: 'product', managerId: id(2), status: 'active', employmentType: 'full-time', x: 720,  y: 400 },
-      { id: id(9),  name: 'Product Manager', title: 'Product Manager',        departmentId: 'product', managerId: id(2), status: 'open',   employmentType: 'full-time', x: 940,  y: 400 },
-      { id: id(10), name: 'Amy Walsh',    title: 'Sales Development Rep',     departmentId: 'go',      managerId: id(3), status: 'active', employmentType: 'full-time', x: 1210, y: 400 },
-      { id: id(11), name: 'Jack Bell',    title: 'Sales Development Rep',     departmentId: 'go',      managerId: id(3), status: 'active', employmentType: 'full-time', x: 1430, y: 400 },
-      { id: id(12), name: 'Finance Analyst', title: 'Finance Analyst',        departmentId: 'finance', managerId: id(4), status: 'planned',employmentType: 'full-time', x: 1710, y: 400 },
-    ]
-    const edges: OrgEdge[] = [
-      { id: eid(1),  sourceId: id(0), targetId: id(1)  },
-      { id: eid(2),  sourceId: id(0), targetId: id(2)  },
-      { id: eid(3),  sourceId: id(0), targetId: id(3)  },
-      { id: eid(4),  sourceId: id(0), targetId: id(4)  },
-      { id: eid(5),  sourceId: id(1), targetId: id(5)  },
-      { id: eid(6),  sourceId: id(1), targetId: id(6)  },
-      { id: eid(7),  sourceId: id(1), targetId: id(7)  },
-      { id: eid(8),  sourceId: id(2), targetId: id(8)  },
-      { id: eid(9),  sourceId: id(2), targetId: id(9)  },
-      { id: eid(10), sourceId: id(3), targetId: id(10) },
-      { id: eid(11), sourceId: id(3), targetId: id(11) },
-      { id: eid(12), sourceId: id(4), targetId: id(12) },
-    ]
-    return { nodes, edges }
-  }
-
-  if (template === 'hiring') {
-    // Hiring plan: active backbone + open/planned roles
-    const nodes: OrgNode[] = [
-      { id: id(0), name: 'CEO',                title: 'Chief Executive Officer', departmentId: 'eng',     managerId: null,  status: 'active',  employmentType: 'full-time', x: 490, y: 50  },
-      { id: id(1), name: 'Engineering Lead',   title: 'Head of Engineering',     departmentId: 'eng',     managerId: id(0), status: 'active',  employmentType: 'full-time', x: 60,  y: 220 },
-      { id: id(2), name: 'Head of Product',    title: 'Head of Product',         departmentId: 'product', managerId: id(0), status: 'open',    employmentType: 'full-time', x: 280, y: 220 },
-      { id: id(3), name: 'Head of Marketing',  title: 'VP Marketing',            departmentId: 'go',      managerId: id(0), status: 'planned', employmentType: 'full-time', x: 500, y: 220 },
-      { id: id(4), name: 'Head of Operations', title: 'VP Operations',           departmentId: 'ops',     managerId: id(0), status: 'planned', employmentType: 'full-time', x: 720, y: 220 },
-      { id: id(5), name: 'Senior Engineer',    title: 'Senior Software Engineer',departmentId: 'eng',     managerId: id(1), status: 'active',  employmentType: 'full-time', x: 20,  y: 400 },
-      { id: id(6), name: 'Engineer',           title: 'Software Engineer',       departmentId: 'eng',     managerId: id(1), status: 'open',    employmentType: 'full-time', x: 240, y: 400 },
-      { id: id(7), name: 'Engineer',           title: 'Software Engineer',       departmentId: 'eng',     managerId: id(1), status: 'open',    employmentType: 'full-time', x: 460, y: 400 }, // correction: not backfill, open
-    ]
-    const edges: OrgEdge[] = [
-      { id: eid(1), sourceId: id(0), targetId: id(1) },
-      { id: eid(2), sourceId: id(0), targetId: id(2) },
-      { id: eid(3), sourceId: id(0), targetId: id(3) },
-      { id: eid(4), sourceId: id(0), targetId: id(4) },
-      { id: eid(5), sourceId: id(1), targetId: id(5) },
-      { id: eid(6), sourceId: id(1), targetId: id(6) },
-      { id: eid(7), sourceId: id(1), targetId: id(7) },
-    ]
-    return { nodes, edges }
-  }
-
-  return { nodes: [], edges: [] }
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChartView() {
@@ -446,8 +378,14 @@ export function ChartView() {
   }, {})
 
   const handleCreate = async (name: string, template: string) => {
-    const { nodes, edges } = makeTemplateData(template)
-    const chart = await createChart(name, nodes, edges, mockDepartments)
+    // A blank chart starts with the workspace's own departments; templates bring the ones they use.
+    const deptStore = useWorkspaceDepartmentStore.getState()
+    if (template === 'blank' && deptStore.departments.length === 0) await deptStore.fetch()
+    const { nodes, edges, departments } = buildChartTemplate(
+      template as ChartTemplateId,
+      useWorkspaceDepartmentStore.getState().departments,
+    )
+    const chart = await createChart(name, nodes, edges, departments)
     if (chart) {
       setShowModal(false)
       navigate(`/charts/${chart.id}`)

@@ -2,7 +2,7 @@ import type { VercelResponse } from '@vercel/node'
 import { and, eq } from 'drizzle-orm'
 import { db } from './db'
 import { workspaces, workspaceMembers, permissionEnum } from '../../src/lib/db/schema'
-import { PLAN_LIMITS, type PlanLimits } from '../../src/lib/plans'
+import { PLAN_LIMITS, PAID_FEATURES, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
 import type { AuthContext } from './auth'
 
 // ─── Roles ───────────────────────────────────────────────────────────────────
@@ -96,4 +96,22 @@ export function sendPlanLimit(res: VercelResponse, limit: LimitName, plan: Effec
     tier: plan.tier,
     message: `Your ${plan.tier} plan allows up to ${max} ${LIMIT_LABEL[limit]}. Upgrade to add more.`,
   })
+}
+
+/**
+ * Sends 402 { error: 'plan-feature' } unless the workspace's effective plan
+ * includes `feature`. Returns true when allowed.
+ */
+export async function requireFeature(workspaceId: string, res: VercelResponse, feature: PaidFeature): Promise<boolean> {
+  const plan = await getEffectivePlan(workspaceId)
+  if (plan && tierHasFeature(plan.tier, feature)) return true
+  const info = PAID_FEATURES[feature]
+  res.status(402).json({
+    error: 'plan-feature',
+    feature,
+    requiredTier: info.minTier,
+    tier: plan?.tier ?? 'free',
+    message: `${info.label} ${info.label.endsWith('s') ? 'are' : 'is'} available on the ${info.minTier === 'starter' ? 'Starter' : 'Growth'} plan and above. ${info.unlocks}`,
+  })
+  return false
 }
