@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
-import { requireRole } from '../_lib/access'
+import { requireRole, requireFeature } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
+import { APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -44,6 +45,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(ChartUpdate, req, res)
       if (!body) return
       const { name, status, isPublic } = body
+      // Free plans can draft, edit and archive charts; review/approve/publish is the paid approval workflow.
+      if (status && status !== chart.status && (APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
+        && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return
 
       const [updated] = await db
         .update(charts)

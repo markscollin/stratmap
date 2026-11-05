@@ -6,6 +6,8 @@ interface UpgradeModalProps {
   onClose: () => void
   onUpgrade?: () => void
   feature: string
+  /** What the feature does for them — shown instead of the generic line. */
+  description?: string
   requiredTier: 'starter' | 'growth'
   currentTier: PlanTier
 }
@@ -15,7 +17,7 @@ const TIER_INFO = {
     name: 'Starter',
     monthlyPrice: '£18',
     annualPrice: '£180',
-    features: ['AI JD drafting (3 per month)', 'Auto-layout', 'Up to 5 charts', 'Up to 100 roles per chart'],
+    features: ['Job descriptions & approval workflows', 'PDF export', 'AI JD drafting (3 per month)', 'Auto-layout', 'Up to 5 charts, 100 roles each'],
     icon: Lock,
     colour: '#0EA5E9',
   },
@@ -29,7 +31,7 @@ const TIER_INFO = {
   },
 }
 
-export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, requiredTier, currentTier: _currentTier }: UpgradeModalProps) {
+export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, description, requiredTier, currentTier: _currentTier }: UpgradeModalProps) {
   if (!isOpen) return null
 
   const tierInfo = TIER_INFO[requiredTier]
@@ -85,7 +87,9 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, requiredTier
 
         {/* Body text */}
         <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.5 }}>
-          {feature} is available on the {tierInfo.name} plan — unlock powerful collaboration and planning tools for your team.
+          {description
+            ? <>{description} Included in the {tierInfo.name} plan and above.</>
+            : <>{feature} is available on the {tierInfo.name} plan — unlock powerful collaboration and planning tools for your team.</>}
         </p>
 
         {/* Plan card */}

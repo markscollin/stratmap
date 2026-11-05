@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { useBillingStore, PLAN_BY_TIER } from '../../../store/billingStore'
 import { JDPanel } from '../JDPanel'
 import { useUserStore } from '../../../store/userStore'
 import { useJobDescriptionStore } from '../../../store/jobDescriptionStore'
@@ -32,11 +34,13 @@ beforeEach(() => {
   localStorage.clear()
   useUserStore.setState({ permission: 'viewer' })
   useJobDescriptionStore.setState({ jobDescriptions: {} })
+  // These tests cover the paid JD workflow; Free-plan locking is tested at the end.
+  useBillingStore.setState({ plan: PLAN_BY_TIER.starter })
 })
 
 function renderPanel(permission: Permission) {
   useUserStore.setState({ permission })
-  return render(<JDPanel node={mockNode} onClose={() => {}} />)
+  return render(<MemoryRouter><JDPanel node={mockNode} onClose={() => {}} /></MemoryRouter>)
 }
 
 describe('JDPanel footer actions', () => {
@@ -127,3 +131,34 @@ describe('JDPanel renders node info', () => {
     expect(screen.getByText(/employment type/i)).toBeTruthy()
   })
 })
+
+describe('JDPanel on the Free plan', () => {
+  beforeEach(() => { useBillingStore.setState({ plan: PLAN_BY_TIER.free }) })
+
+  it('shows what job descriptions unlock instead of the editor', async () => {
+    useJobDescriptionStore.setState({ jobDescriptions: { n1: draftJD } })
+    renderPanel('owner')
+    fireEvent.click(screen.getByRole('button', { name: /responsibilities/i }))
+    expect(screen.getByTestId('locked-jd-editor')).toBeInTheDocument()
+    expect(screen.getByText(/Write a versioned job description for every role/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unlock with Starter' })).toBeInTheDocument()
+    expect(screen.queryByText(/Apply a template/)).toBeNull()
+  })
+
+  it('keeps JDs written before a downgrade readable', async () => {
+    useJobDescriptionStore.setState({ jobDescriptions: { n1: { ...draftJD, responsibilities: '<p>Ship things</p>' } } })
+    renderPanel('owner')
+    fireEvent.click(screen.getByRole('button', { name: /responsibilities/i }))
+    expect(await screen.findByText('Ship things')).toBeInTheDocument()
+  })
+
+  it('submit for review is locked and opens the upgrade modal explaining approvals', async () => {
+    useJobDescriptionStore.setState({ jobDescriptions: { n1: draftJD } })
+    renderPanel('editor')
+    fireEvent.click(screen.getByRole('button', { name: /submit for review/i }))
+    expect(screen.getByText('Unlock Approval workflows')).toBeInTheDocument()
+    expect(screen.getByText(/have admins approve and publish them/)).toBeInTheDocument()
+    expect(useJobDescriptionStore.getState().jobDescriptions.n1.status).toBe('draft')
+  })
+})
+

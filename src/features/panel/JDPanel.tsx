@@ -9,6 +9,8 @@ import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { JDEditor } from '../jd/JDEditor'
 import { AIJDDraft } from '../jd/AIJDDraft'
+import { usePlanLimits } from '../../hooks/usePlanLimits'
+import { LockedFeatureCard, PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
 
 type PanelTab = 'overview' | 'responsibilities' | 'requirements'
 
@@ -41,6 +43,11 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
   const { departments: wsDepts } = useWorkspaceDepartmentStore()
   const dept = node ? wsDepts.find(d => d.id === node.departmentId) : null
   const { canEdit, canAdmin } = usePermission()
+  const { hasFeature } = usePlanLimits()
+  // Free plan: job descriptions are read-only and approvals are locked (server enforces both).
+  const jdLocked       = !hasFeature('jd-editor')
+  const approvalLocked = !hasFeature('approval-workflow')
+  const [showApprovalUpgrade, setShowApprovalUpgrade] = useState(false)
 
   const initJD    = useJobDescriptionStore(s => s.initJD)
   const updateJD  = useJobDescriptionStore(s => s.updateJD)
@@ -166,9 +173,30 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }} onWheel={e => e.stopPropagation()}>
-            {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} jd={jd} canAdmin={canAdmin} onUpdateJD={updateJD} />}
+            {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} jd={jd} canAdmin={canAdmin && !jdLocked} onUpdateJD={updateJD} />}
 
-            {(tab === 'responsibilities' || tab === 'requirements') && jd && (
+            {(tab === 'responsibilities' || tab === 'requirements') && jd && jdLocked && (
+              <>
+                <LockedFeatureCard feature="jd-editor">
+                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: '6px 0 0' }}>
+                    Starter also adds AI drafting and approval workflows for job descriptions.
+                  </p>
+                </LockedFeatureCard>
+                {/* Anything written before a downgrade stays readable. */}
+                {(tab === 'responsibilities' ? jd.responsibilities : jd.requirements) && (
+                  <JDContentTab
+                    key={`${node.id}-${tab}-locked`}
+                    content={tab === 'responsibilities' ? jd.responsibilities : jd.requirements}
+                    onSave={() => {}}
+                    editable={false}
+                    placeholder=""
+                    jd={jd}
+                  />
+                )}
+              </>
+            )}
+
+            {(tab === 'responsibilities' || tab === 'requirements') && jd && !jdLocked && (
               <>
                 {/* AI draft button */}
                 {canEdit && (
@@ -235,6 +263,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
             )}
           </div>
 
+          <FeatureUpgradeModal feature="approval-workflow" isOpen={showApprovalUpgrade} onClose={() => setShowApprovalUpgrade(false)} />
+
           {/* Footer */}
           {(canEdit || canAdmin) && (
             <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -246,7 +276,15 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
                   Edit role
                 </button>
               )}
-              {jd && (
+              {jd && canEdit && (jdLocked || approvalLocked) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowApprovalUpgrade(true) }}
+                  style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  Submit for review <PlanBadge feature="approval-workflow" />
+                </button>
+              )}
+              {jd && !jdLocked && !approvalLocked && (
                 <StatusAction
                   status={jd.status}
                   canEdit={canEdit}

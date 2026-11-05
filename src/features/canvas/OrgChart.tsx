@@ -10,6 +10,7 @@ import { NodeCard } from '../nodes/NodeCard'
 import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
+import { PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { useBillingStore } from '../../store/billingStore'
 import { useToastStore } from '../../store/toastStore'
@@ -179,6 +180,8 @@ type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) {
   const [open, setOpen] = useState(false)
   const [hov, setHov] = useState(false)
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const pdfLocked = !usePlanLimits().hasFeature('pdf-export')
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -204,14 +207,18 @@ function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) 
             position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 8, padding: 4, zIndex: 50,
-            boxShadow: 'var(--shadow-sm)', minWidth: 110,
+            boxShadow: 'var(--shadow-sm)', minWidth: 150,
           }}>
             {(['png', 'pdf'] as const).map(fmt => (
               <button
                 key={fmt}
-                onClick={() => { setOpen(false); onExport(fmt) }}
+                onClick={() => {
+                  setOpen(false)
+                  if (fmt === 'pdf' && pdfLocked) setShowUpgrade(true)
+                  else onExport(fmt)
+                }}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', textAlign: 'left',
                   padding: '6px 10px', borderRadius: 5, border: 'none',
                   background: 'transparent', color: 'var(--text)',
                   fontSize: 12, cursor: 'pointer',
@@ -220,11 +227,13 @@ function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) 
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
                 Export as {fmt.toUpperCase()}
+                {fmt === 'pdf' && pdfLocked && <PlanBadge feature="pdf-export" />}
               </button>
             ))}
           </div>
         </>
       )}
+      <FeatureUpgradeModal feature="pdf-export" isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
   )
 }

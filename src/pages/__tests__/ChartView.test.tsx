@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { ChartView } from '../ChartView'
 import { useUserStore } from '../../store/userStore'
 import { useChartStore } from '../../store'
+import { useBillingStore, PLAN_BY_TIER } from '../../store/billingStore'
 import type { Permission } from '../../types'
 
 vi.mock('react-router-dom', async () => {
@@ -95,3 +96,37 @@ describe('ChartView — Overflow menu status actions', () => {
     expect(screen.queryByText('Delete')).toBeNull()
   })
 })
+
+describe('ChartView — approval workflow on the Free plan', () => {
+  function openMenu() {
+    const menuBtns = document.querySelectorAll('button[style*="width: 26px"]')
+    expect(menuBtns.length).toBeGreaterThan(0)
+    fireEvent.click(menuBtns[0])
+  }
+
+  it('Approve is marked Starter and opens the upgrade modal instead of changing status', () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.free })
+    const updateChartStatus = vi.fn()
+    useChartStore.setState({ updateChartStatus })
+    renderView('admin')
+    openMenu()
+    const approve = screen.getByText('Approve').closest('button')!
+    expect(approve).toHaveTextContent('Starter')
+    fireEvent.click(approve)
+    expect(updateChartStatus).not.toHaveBeenCalled()
+    expect(screen.getByText('Unlock Approval workflows')).toBeInTheDocument()
+  })
+
+  it('on Starter the same action changes the status', () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.starter })
+    const updateChartStatus = vi.fn()
+    useChartStore.setState({ updateChartStatus })
+    renderView('admin')
+    openMenu()
+    const approve = screen.getByText('Approve').closest('button')!
+    expect(approve).not.toHaveTextContent('Starter')
+    fireEvent.click(approve)
+    expect(updateChartStatus).toHaveBeenCalledWith('c1', 'approved')
+  })
+})
+

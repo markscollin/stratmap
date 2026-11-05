@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
@@ -16,6 +16,8 @@ import { usePlanLimits } from '../hooks/usePlanLimits'
 import type { OrgChart, ChartStatus } from '../types'
 import { buildChartTemplate, type ChartTemplateId } from '../lib/chartTemplates'
 import { formatUpdated } from '../utils/formatUpdated'
+import { APPROVAL_CHART_STATUSES } from '../lib/plans'
+import { PlanBadge, FeatureUpgradeModal } from '../components/ui/FeatureLock'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 
 const PERMISSION_RANK: Record<string, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
@@ -95,6 +97,8 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
   const navigate                    = useNavigate()
   const { duplicateChart, deleteChart } = useChartStore()
   const { permission } = usePermission()
+  const approvalLocked = !usePlanLimits().hasFeature('approval-workflow')
+  const [showApprovalUpgrade, setShowApprovalUpgrade] = useState(false)
   const actions = (STATUS_ACTIONS[chart.status] || []).filter(
     a => PERMISSION_RANK[permission] >= PERMISSION_RANK[a.minPermission]
   )
@@ -157,15 +161,21 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
             </button>
             {menu && !confirmDelete && (
               <OverflowMenu
-                actions={actions}
+                actions={actions.map(a => ({ ...a, locked: approvalLocked && isApprovalStatus(a.next) }))}
                 canAdmin={canAdmin}
-                onAction={next => { onAction(chart.id, next); setMenu(false) }}
+                onAction={next => {
+                  setMenu(false)
+                  // Free plan: review/approve/publish is the paid approval workflow.
+                  if (approvalLocked && isApprovalStatus(next)) setShowApprovalUpgrade(true)
+                  else onAction(chart.id, next)
+                }}
                 onOpen={() => { navigate(`/charts/${chart.id}`); setMenu(false) }}
                 onDuplicate={() => { duplicateChart(chart.id); setMenu(false) }}
                 onDelete={() => { setConfirm(true); setMenu(false) }}
                 onClose={() => setMenu(false)}
               />
             )}
+            <FeatureUpgradeModal feature="approval-workflow" isOpen={showApprovalUpgrade} onClose={() => setShowApprovalUpgrade(false)} />
             {confirmDelete && (
               <div data-testid="chart-delete-confirm" style={{ position: 'absolute', top: 30, right: 0, zIndex: 100, background: 'var(--surface)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: '14px 16px', minWidth: 220, boxShadow: 'var(--shadow)', animation: 'slideDown .15s ease-out' }}>
                 <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12, lineHeight: 1.4 }}>Delete <strong>{chart.name}</strong>? This cannot be undone.</p>
@@ -216,7 +226,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
 }
 
 function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDelete, onClose }: {
-  actions: { next: ChartStatus; label: string; color: string }[]
+  actions: { next: ChartStatus; label: string; color: string; locked?: boolean }[]
   canAdmin: boolean
   onAction: (next: ChartStatus) => void
   onOpen: () => void
@@ -235,7 +245,8 @@ function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDele
       {actions.length > 0 && (
         <>
           {actions.map(a => (
-            <MenuBtn key={a.next} color={a.color} label={a.label} onClick={() => onAction(a.next)} bold />
+            <MenuBtn key={a.next} color={a.color} label={a.label} onClick={() => onAction(a.next)} bold
+              badge={a.locked ? <PlanBadge feature="approval-workflow" /> : undefined} />
           ))}
           <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
         </>
@@ -253,14 +264,18 @@ function OverflowMenu({ actions, canAdmin, onAction, onOpen, onDuplicate, onDele
   )
 }
 
-function MenuBtn({ label, color, onClick, bold }: { label: string; color: string; onClick: () => void; bold?: boolean }) {
+function MenuBtn({ label, color, onClick, bold, badge }: { label: string; color: string; onClick: () => void; bold?: boolean; badge?: ReactNode }) {
   return (
     <button onClick={onClick}
       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', background: 'transparent', border: 'none', borderRadius: 6, color, fontSize: 13, fontWeight: bold ? 600 : 400, cursor: 'pointer', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-    >{label}</button>
+    >{label}{badge && <span style={{ marginLeft: 'auto' }}>{badge}</span>}</button>
   )
+}
+
+function isApprovalStatus(status: ChartStatus): boolean {
+  return (APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
 }
 
 // ── New chart modal ───────────────────────────────────────────────────────────

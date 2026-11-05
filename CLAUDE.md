@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**175 frontend + 313 backend = 488 passing** (after Phase 0, migrations, invites, and removing mock data); `tsc` clean; `lint` 0 errors; build OK.
+**183 frontend + 326 backend = 509 passing** (after Phase 0, migrations, invites, removing mock data, and paid-feature locks); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -92,6 +92,21 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - **One workspace per user:** a user who is already in another workspace gets 409 until roadmap 1.2.
 - **Tests:** `api/__tests__/invite-accept.test.ts`, `api/__live__/invites.live.test.ts`, `src/pages/__tests__/InvitePage.test.tsx`,
   `SettingsMembers.test.tsx`.
+
+## Paid features (2026-11-05)
+
+`PAID_FEATURES` in `src/lib/plans.ts` is the single list of features locked on Free: job descriptions, approval
+workflows, PDF export, AI drafting and auto-layout. Each entry has the tier that unlocks it and the copy saying what it
+does. The list drives four places:
+- **API:** `requireFeature()` in `api/_lib/access.ts` returns `402 { error: 'plan-feature', feature, requiredTier, message }`.
+  It guards JD writes, JD approval statuses, and chart statuses `review`/`approved`/`rejected`/`live`. Reads stay
+  open, so a workspace that downgrades can still see its JDs.
+- **UI:** `usePlanLimits().hasFeature()`, plus `LockedFeatureCard`, `PlanBadge` and `FeatureUpgradeModal` from
+  `src/components/ui/FeatureLock.tsx`.
+- **Pricing page:** the plan cards.
+- **Upgrade modal:** the feature description it shows.
+
+To lock a new feature, add it to `PAID_FEATURES` and guard both the API route and the UI.
 
 ## No mock data in production (roadmap 1.7 + 1.8, 2026-11-05)
 
@@ -409,13 +424,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 175 tests
+npm run test:run       # 183 tests
 
 # Run backend API tests
-npm run test:api       # 313 tests (PGlite, no network)
+npm run test:api       # 326 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 488 tests total
+npm run test:all       # 509 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

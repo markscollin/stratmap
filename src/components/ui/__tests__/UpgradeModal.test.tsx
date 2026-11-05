@@ -104,10 +104,11 @@ describe('UpgradeModal', () => {
         currentTier="free"
       />
     )
+    expect(screen.getByText('Job descriptions & approval workflows')).toBeInTheDocument()
+    expect(screen.getByText('PDF export')).toBeInTheDocument()
     expect(screen.getByText('AI JD drafting (3 per month)')).toBeInTheDocument()
     expect(screen.getByText('Auto-layout')).toBeInTheDocument()
-    expect(screen.getByText('Up to 5 charts')).toBeInTheDocument()
-    expect(screen.getByText('Up to 100 roles per chart')).toBeInTheDocument()
+    expect(screen.getByText('Up to 5 charts, 100 roles each')).toBeInTheDocument()
     // Not built, so never advertised
     expect(screen.queryByText(/Password protection/)).toBeNull()
   })

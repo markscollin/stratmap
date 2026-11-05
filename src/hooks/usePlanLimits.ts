@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useBillingStore } from '../store/billingStore'
 import { useChartStore } from '../store/chartStore'
 import type { PlanTier } from '../types'
+import { PAID_FEATURES, tierHasFeature, type PaidFeature } from '../lib/plans'
 
 export function usePlanLimits() {
   const plan = useBillingStore((state) => state.plan)
@@ -36,26 +37,15 @@ export function usePlanLimits() {
 
   const currentTier: PlanTier = plan.tier
 
+  /** True when the plan includes a paid feature (see PAID_FEATURES in src/lib/plans.ts). */
+  const hasFeature = useCallback(
+    (feature: PaidFeature): boolean => tierHasFeature(plan.tier, feature),
+    [plan.tier]
+  )
+
+  /** True when using `feature` needs an upgrade. Unknown names are never locked. */
   const upgradeRequired = useCallback(
-    (feature: string): boolean => {
-      const featureMap: Record<string, PlanTier> = {
-        'headcount-planning': 'growth',
-        'pdf-export': 'starter',
-        'auto-layout': 'starter',
-        'ai-drafting': 'starter',
-        'password-protection': 'starter',
-        'share-unlimited': 'growth',
-      }
-      const requiredTier = featureMap[feature]
-      if (!requiredTier) return false
-      const tierRank: Record<PlanTier, number> = {
-        free: 0,
-        starter: 1,
-        growth: 2,
-        enterprise: 3,
-      }
-      return tierRank[plan.tier] < tierRank[requiredTier]
-    },
+    (feature: string): boolean => feature in PAID_FEATURES && !tierHasFeature(plan.tier, feature as PaidFeature),
     [plan.tier]
   )
 
@@ -65,6 +55,7 @@ export function usePlanLimits() {
     isAtSeatLimit,
     canUseAIDrafting,
     currentTier,
+    hasFeature,
     upgradeRequired,
   }
 }

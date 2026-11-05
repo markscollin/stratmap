@@ -27,6 +27,8 @@ beforeEach(async () => {
   await seedWorkspace()
   await seedChart()
   await seedNode()
+  // JD editing is a Starter feature (plan gating is covered in plan-features.test.ts).
+  await testDb.update(schema.workspaces).set({ planTier: 'starter' })
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
 })
 
