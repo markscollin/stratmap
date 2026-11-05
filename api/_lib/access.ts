@@ -4,6 +4,7 @@ import { db } from './db'
 import { workspaces, workspaceMembers, permissionEnum } from '../../src/lib/db/schema'
 import { PLAN_LIMITS, PAID_FEATURES, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
 import type { AuthContext } from './auth'
+import { resolvePlanTier } from './billing'
 
 // ─── Roles ───────────────────────────────────────────────────────────────────
 //
@@ -65,16 +66,21 @@ export interface EffectivePlan {
   limits: PlanLimits
 }
 
-/** Resolves the workspace's effective plan — an active admin trial overrides the Stripe tier. */
+/** Resolves the workspace's effective plan (see resolvePlanTier in ./billing). */
 export async function getEffectivePlan(workspaceId: string): Promise<EffectivePlan | null> {
   const [ws] = await db
-    .select({ planTier: workspaces.planTier, trialPlan: workspaces.trialPlan, trialEndsAt: workspaces.trialEndsAt })
+    .select({
+      planTier: workspaces.planTier,
+      trialPlan: workspaces.trialPlan,
+      trialEndsAt: workspaces.trialEndsAt,
+      cancelAtPeriodEnd: workspaces.cancelAtPeriodEnd,
+      planExpiresAt: workspaces.planExpiresAt,
+    })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1)
   if (!ws) return null
-  const trialActive = ws.trialPlan && ws.trialEndsAt && ws.trialEndsAt > new Date()
-  const tier = (trialActive ? ws.trialPlan! : ws.planTier) as PlanTier
+  const tier = resolvePlanTier(ws)
   return { tier, limits: PLAN_LIMITS[tier] }
 }
 

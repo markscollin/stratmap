@@ -1,27 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
+import { eq } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
 import { requireRole } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { CheckoutCreate } from './_lib/schemas'
 import { reportError } from './_lib/sentry'
 import { getAppUrl } from './_lib/url'
-
-// Read price ids at request time (not module load) so the lookup reflects the
-// current environment and stays testable.
-function getPriceId(tier: string, billingCycle: string): string | undefined {
-  const ids: Record<string, Record<string, string | undefined>> = {
-    starter: {
-      monthly: process.env.STRIPE_STARTER_MONTHLY_PRICE_ID,
-      annual:  process.env.STRIPE_STARTER_ANNUAL_PRICE_ID,
-    },
-    growth: {
-      monthly: process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID,
-      annual:  process.env.STRIPE_GROWTH_ANNUAL_PRICE_ID,
-    },
-  }
-  return ids[tier]?.[billingCycle] || undefined
-}
+import { db } from './_lib/db'
+import { createPortalSession, priceIdFor } from './_lib/billing'
+import { workspaces } from '../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -41,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ url: `/billing/success?plan=${tier}` })
     }
 
-    const priceId = getPriceId(tier, billingCycle)
+    const priceId = priceIdFor(tier, billingCycle)
     if (!priceId) {
       return res.status(400).json({ error: `No price configured for ${tier}/${billingCycle}` })
     }
@@ -49,10 +37,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
     const appUrl = getAppUrl()
 
+    const [ws] = await db
+      .select({ stripeCustomerId: workspaces.stripeCustomerId, stripeSubscriptionId: workspaces.stripeSubscriptionId })
+      .from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1)
+
+    // A workspace that already subscribes changes plan in the Customer Portal.
+    // A second Checkout would start a second, parallel subscription.
+    if (ws?.stripeSubscriptionId && ws.stripeCustomerId) {
+      return res.json({ url: await createPortalSession(stripe, ws.stripeCustomerId), portal: true })
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      metadata: { workspaceId: auth.workspaceId, planTier: tier },
+      // Reuse the customer after a cancellation, so invoices stay in one place.
+      ...(ws?.stripeCustomerId ? { customer: ws.stripeCustomerId } : {}),
+      client_reference_id: auth.workspaceId,
+      // The tier is derived from the price id by the webhook; metadata only links the workspace.
+      metadata: { workspaceId: auth.workspaceId },
+      subscription_data: { metadata: { workspaceId: auth.workspaceId } },
       allow_promotion_codes: true,
       success_url: `${appUrl}/billing/success?plan=${tier}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing`,

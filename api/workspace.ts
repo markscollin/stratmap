@@ -5,6 +5,7 @@ import { requireRole, getPermission } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { WorkspaceCreate, WorkspaceUpdate } from './_lib/schemas'
 import { db } from './_lib/db'
+import { resolvePlanTier } from './_lib/billing'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,14 +27,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from(workspaceMembers)
         .where(eq(workspaceMembers.workspaceId, auth.workspaceId))
 
-      // Resolve effective plan: admin trial overrides Stripe plan when active
-      const isTrialActive = ws.trialEndsAt && ws.trialEndsAt > new Date() && ws.trialPlan
-      const effectivePlanTier = isTrialActive ? ws.trialPlan! : ws.planTier
-
       // The caller's own role, so the client gates UI on the real permission.
       const myPermission = await getPermission(auth)
 
-      return res.json({ ...ws, planTier: effectivePlanTier, members, myPermission })
+      // Stripe ids stay server-side; the client gets the subscription state it shows.
+      const { stripeCustomerId, stripeSubscriptionId: _sub, subscriptionStatus, planExpiresAt, cancelAtPeriodEnd, ...rest } = ws
+      const billing = {
+        status: subscriptionStatus,
+        planExpiresAt,
+        cancelAtPeriodEnd,
+        hasBillingAccount: stripeCustomerId != null,
+      }
+
+      return res.json({ ...rest, planTier: resolvePlanTier(ws), billing, members, myPermission })
     }
 
     if (req.method === 'POST') {

@@ -35,6 +35,12 @@ export const workspaces = pgTable('workspaces', {
   // Stripe billing
   stripeCustomerId: text('stripe_customer_id'),
   stripeSubscriptionId: text('stripe_subscription_id'),
+  // Mirror of the Stripe subscription (synced by api/webhooks/stripe.ts):
+  // status is Stripe's own value (active, past_due, unpaid, canceled, …).
+  subscriptionStatus: text('subscription_status'),
+  // End of the paid-through period; when cancelAtPeriodEnd, the plan ends here.
+  planExpiresAt: timestamp('plan_expires_at'),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
   // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)
   trialPlan: planTierEnum('trial_plan'),
   trialEndsAt: timestamp('trial_ends_at'),
@@ -213,6 +219,14 @@ export const aiUsage = pgTable('ai_usage', {
   period: text('period').notNull(),            // "YYYY-MM"
   count: integer('count').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.workspaceId, t.period] })])
+
+// Stripe webhook events we have processed (roadmap 1.4). The event id is the
+// primary key, so a replayed or duplicate delivery can't claim it twice.
+export const stripeEvents = pgTable('stripe_events', {
+  id: text('id').primaryKey(),                 // Stripe event id (evt_…)
+  type: text('type').notNull(),
+  receivedAt: timestamp('received_at').notNull().defaultNow(),
+})
 
 // ─── Inferred types (for use in Phase 2 API routes) ─────────────────────────
 

@@ -1,24 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../_lib/db'
 import { reportError } from '../_lib/sentry'
-import { workspaces } from '../../src/lib/db/schema'
+import { sendPaymentFailed } from '../_lib/email'
+import { getAppUrl } from '../_lib/url'
+import { invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
+import { stripeEvents, workspaces, workspaceMembers } from '../../src/lib/db/schema'
 
 // Disable body parsing so we can verify the Stripe signature against raw bytes
 export const config = { api: { bodyParser: false } }
-
-type PlanTier = 'free' | 'starter' | 'growth' | 'enterprise'
-
-function getTierFromPriceId(priceId: string): PlanTier | null {
-  const map: Record<string, PlanTier> = {
-    [process.env.STRIPE_STARTER_MONTHLY_PRICE_ID ?? '__none__']: 'starter',
-    [process.env.STRIPE_STARTER_ANNUAL_PRICE_ID  ?? '__none__']: 'starter',
-    [process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID  ?? '__none__']: 'growth',
-    [process.env.STRIPE_GROWTH_ANNUAL_PRICE_ID   ?? '__none__']: 'growth',
-  }
-  return map[priceId] ?? null
-}
 
 async function getRawBody(req: VercelRequest): Promise<Buffer> {
   const chunks: Buffer[] = []
@@ -55,9 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid signature' })
     }
   } else if (req.body && typeof req.body === 'object') {
-    // vercel dev pre-parsed the body — safe to skip verification in local dev only
-    if (process.env.VERCEL_ENV === 'production') {
-      console.error('[stripe] could not read raw body in production')
+    // vercel dev pre-parsed the body — safe to skip verification in local dev only,
+    // never on a deployed (preview or production) function.
+    if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'development') {
+      console.error('[stripe] could not read raw body on a deployed function')
       return res.status(400).json({ error: 'Could not read raw body' })
     }
     console.warn('[stripe] skipping signature verification in dev mode')
@@ -66,65 +58,108 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing body or signature' })
   }
 
+  if (!HANDLED_EVENTS.has(event.type)) return res.json({ received: true })
+
+  // Idempotency (roadmap 1.4): claim the event id first. A replayed or duplicate
+  // delivery finds it taken and does nothing, so emails are never sent twice.
+  let claimed = false
   try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session
-        const workspaceId = session.metadata?.workspaceId
-        const planTier = session.metadata?.planTier as PlanTier | undefined
+    const rows = await db.insert(stripeEvents)
+      .values({ id: event.id, type: event.type })
+      .onConflictDoNothing()
+      .returning({ id: stripeEvents.id })
+    if (rows.length === 0) return res.json({ received: true, duplicate: true })
+    claimed = true
 
-        if (!workspaceId || !planTier) {
-          console.error('[stripe] checkout.session.completed missing metadata:', session.id)
-          break
-        }
-
-        await db.update(workspaces)
-          .set({
-            planTier,
-            stripeCustomerId: session.customer as string | null,
-            stripeSubscriptionId: session.subscription as string | null,
-            updatedAt: new Date(),
-          })
-          .where(eq(workspaces.id, workspaceId))
-
-        console.log(`[stripe] workspace ${workspaceId} upgraded to ${planTier}`)
-        break
-      }
-
-      case 'customer.subscription.deleted': {
-        const sub = event.data.object as Stripe.Subscription
-        await db.update(workspaces)
-          .set({ planTier: 'free', stripeSubscriptionId: null, updatedAt: new Date() })
-          .where(eq(workspaces.stripeSubscriptionId, sub.id))
-
-        console.log(`[stripe] subscription ${sub.id} cancelled → downgraded to free`)
-        break
-      }
-
-      case 'customer.subscription.updated': {
-        const sub = event.data.object as Stripe.Subscription
-        const priceId = sub.items.data[0]?.price.id
-        if (!priceId) break
-
-        const newTier = getTierFromPriceId(priceId)
-        if (!newTier) break
-
-        await db.update(workspaces)
-          .set({ planTier: newTier, updatedAt: new Date() })
-          .where(eq(workspaces.stripeSubscriptionId, sub.id))
-
-        console.log(`[stripe] subscription ${sub.id} updated → ${newTier}`)
-        break
-      }
-
-      default:
-        break
-    }
+    await handleEvent(stripe, event)
   } catch (err) {
+    // Release the claim so Stripe's retry processes the event again.
+    if (claimed) await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {})
     console.error('[stripe] webhook handler error:', err)
     reportError(err, { route: '/api/webhooks/stripe', eventType: event.type })
     return res.status(500).json({ error: 'Webhook handler failed' })
   }
 
   return res.json({ received: true })
+}
+
+const HANDLED_EVENTS = new Set<string>([
+  'checkout.session.completed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'customer.subscription.paused',
+  'customer.subscription.resumed',
+  'invoice.paid',
+  'invoice.payment_failed',
+])
+
+// Every handler re-reads the subscription from Stripe (syncSubscription), so the
+// order events arrive in doesn't matter. The tier comes from the price id.
+async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object
+      const workspaceId = session.metadata?.workspaceId ?? session.client_reference_id ?? undefined
+      const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id
+      if (session.mode !== 'subscription' || !workspaceId || !subscriptionId) {
+        console.error('[stripe] checkout.session.completed without workspace or subscription:', session.id)
+        return
+      }
+      const result = await syncSubscription(stripe, subscriptionId, { workspaceId })
+      if (result) console.log(`[stripe] workspace ${result.workspaceId} subscribed → ${result.tier}`)
+      return
+    }
+
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted':
+    case 'customer.subscription.paused':
+    case 'customer.subscription.resumed': {
+      const result = await syncSubscription(stripe, event.data.object.id)
+      if (result && result.tier !== result.previousTier) {
+        console.log(`[stripe] workspace ${result.workspaceId} ${result.previousTier} → ${result.tier} (${result.status})`)
+      }
+      return
+    }
+
+    case 'invoice.paid':
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object
+      const subscriptionId = invoiceSubscriptionId(invoice)
+      if (!subscriptionId) return
+      const result = await syncSubscription(stripe, subscriptionId)
+      // Email on the first failed renewal attempt only; the banner covers the
+      // rest. A first payment that fails is handled by Checkout itself.
+      if (
+        result && event.type === 'invoice.payment_failed'
+        && invoice.attempt_count === 1 && invoice.billing_reason !== 'subscription_create'
+      ) {
+        await emailAdminsPaymentFailed(result.workspaceId, invoice)
+      }
+      return
+    }
+  }
+}
+
+async function emailAdminsPaymentFailed(workspaceId: string, invoice: Stripe.Invoice): Promise<void> {
+  const [ws] = await db.select({ name: workspaces.name, planTier: workspaces.planTier })
+    .from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1)
+  if (!ws) return
+  const admins = await db.select({ email: workspaceMembers.email })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), inArray(workspaceMembers.permission, ['owner', 'admin'])))
+
+  const planName = ws.planTier.charAt(0).toUpperCase() + ws.planTier.slice(1)
+  const nextAttempt = invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000) : null
+  const manageUrl = `${getAppUrl()}/settings?tab=billing`
+  for (const { email } of admins) {
+    if (!email) continue
+    // One bad address must not fail the webhook (and trigger a replay of the others).
+    try {
+      await sendPaymentFailed({ to: email, workspaceName: ws.name, planName, nextAttempt, manageUrl })
+    } catch (err) {
+      reportError(err, { route: '/api/webhooks/stripe', step: 'payment-failed-email' })
+    }
+  }
 }

@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**187 frontend + 330 backend = 517 passing** (after Phase 0, migrations, invites, removing mock data, and paid-feature locks); `tsc` clean; `lint` 0 errors; build OK.
+**196 frontend + 365 backend = 561 passing** (after Phase 0, migrations, invites, removing mock data, paid-feature locks and the billing life-cycle); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -52,9 +52,7 @@ the real `VITE_CLERK_PUBLISHABLE_KEY` from `.env.local`, so dev-bypass never eng
 and authed routes redirect to Clerk sign-in. The e2e setup needs a way to run without
 the real Clerk key before the suite is reliable again.
 
-**Deferred:** Stripe webhook idempotency — add a `stripe_events` table + dedup guard
-*when* billing-receipt emails are wired (replays would double-send). Not needed yet
-(handlers are idempotent set-ops).
+**Done:** Stripe webhook idempotency (`stripe_events`), shipped with the billing life-cycle (see below).
 
 ---
 
@@ -107,6 +105,18 @@ tier that unlocks it and the copy saying what it does. The list drives four plac
 - **Upgrade modal:** the feature description it shows.
 
 To lock a new feature, add it to `PAID_FEATURES` and guard both the API route and the UI.
+
+## Billing life-cycle (roadmap 1.3 + 1.4, 2026-11-05)
+
+See `docs/BILLING.md`. Summary:
+- **Stripe is the source of truth.** `syncSubscription()` in `api/_lib/billing.ts` re-reads the subscription and sets
+  `planTier`, `subscriptionStatus`, `planExpiresAt` and `cancelAtPeriodEnd`. The tier comes from the price id, never from metadata.
+- `past_due` keeps the plan and shows a banner (`PaymentBanner` in `Layout`). `unpaid` and `canceled` drop to Free. Cancels take effect at the end of the period.
+- **Effective plan:** always use `resolvePlanTier()` (trial override plus the lapsed-cancel safety net). `getEffectivePlan()` and `GET /api/workspace` both use it.
+- `GET /api/workspace` returns `billing: { status, planExpiresAt, cancelAtPeriodEnd, hasBillingAccount }` and never returns Stripe ids.
+  The client keeps it in `useBillingStore().subscription`.
+- `POST /api/billing/portal` (admin) opens the Customer Portal (`ManageBillingButton`). Checkout sends existing subscribers there.
+- **Idempotency:** `stripe_events` dedups webhook deliveries. A failed-payment email goes to owners and admins on the first attempt only.
 
 ## No mock data in production (roadmap 1.7 + 1.8, 2026-11-05)
 
@@ -424,13 +434,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 187 tests
+npm run test:run       # 196 tests
 
 # Run backend API tests
-npm run test:api       # 330 tests (PGlite, no network)
+npm run test:api       # 365 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 517 tests total
+npm run test:all       # 561 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

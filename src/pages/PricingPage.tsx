@@ -264,7 +264,7 @@ export function PricingPage() {
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {[
-            { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime. Changes take effect immediately.' },
+            { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime from Settings → Billing. Upgrades take effect immediately, and you pay the prorated difference. Downgrades and cancellations take effect at the end of your billing period, so you keep what you paid for until then.' },
             { q: 'What happens to my charts if I downgrade?', a: 'Your charts are never deleted. If you exceed the node limit on a lower plan, you can view but not edit until you upgrade.' },
             { q: 'Do guests count towards seat limits?', a: 'No. Only team members with active accounts count. Guests viewing shared charts are free.' },
             { q: 'Is there a free trial?', a: 'Our Free plan is effectively a trial. No credit card required to start.' },

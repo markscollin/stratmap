@@ -50,6 +50,21 @@ describe('GET /api/workspace', () => {
     expect(res._status).toBe(405)
   })
 
+  it('returns subscription state and keeps Stripe ids server-side', async () => {
+    await seedWorkspace()
+    const end = new Date('2030-03-17T00:00:00Z')
+    await testDb.update(schema.workspaces)
+      .set({ planTier: 'starter', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'past_due', planExpiresAt: end, cancelAtPeriodEnd: true })
+      .where(eq(schema.workspaces.id, TEST_WS_ID))
+    const res = createRes()
+    await handler(createReq() as never, res as never)
+    const body = res._body as Record<string, unknown>
+    expect(body.planTier).toBe('starter')
+    expect(body.billing).toEqual({ status: 'past_due', planExpiresAt: end, cancelAtPeriodEnd: true, hasBillingAccount: true })
+    expect(body).not.toHaveProperty('stripeCustomerId')
+    expect(body).not.toHaveProperty('stripeSubscriptionId')
+  })
+
   it('resolves an active admin trial as the effective planTier', async () => {
     await seedWorkspace()
     const future = new Date()

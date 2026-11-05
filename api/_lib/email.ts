@@ -84,3 +84,32 @@ export async function sendBillingReceipt(opts: {
   )
   return sendEmail({ to: opts.to, subject, html })
 }
+
+/** Sent to workspace admins when a renewal payment fails (roadmap 1.3). */
+export async function sendPaymentFailed(opts: {
+  to: string
+  workspaceName: string
+  planName: string
+  /** When Stripe will retry the card, if it will. */
+  nextAttempt: Date | null
+  manageUrl: string
+}): Promise<SendResult> {
+  const ws = escapeHtml(opts.workspaceName)
+  const plan = escapeHtml(opts.planName)
+  const url = escapeHtml(opts.manageUrl)
+  const subject = `Payment failed for ${opts.workspaceName} on StratMap`.replace(/[\r\n]+/g, ' ')
+  const retry = opts.nextAttempt
+    ? `We'll try again on ${opts.nextAttempt.toUTCString().slice(0, 16)}.`
+    : `We won't retry this card again.`
+  const html = shell(
+    `We couldn't take your payment`,
+    `<p style="font-size:14px;line-height:1.6">The latest payment for the <strong>${plan}</strong> plan on
+      <strong>${ws}</strong> didn't go through. ${retry} Your workspace keeps the ${plan} plan while we retry.
+      If the payment still fails, it moves to the Free plan. Your charts are never deleted.</p>
+     <p style="margin:24px 0">
+       <a href="${url}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Update payment method</a>
+     </p>
+     <p style="font-size:12px;color:#94a3b8">Or paste this link into your browser: ${url}</p>`,
+  )
+  return sendEmail({ to: opts.to, subject, html })
+}

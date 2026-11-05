@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Plan, UsageLimits, PlanTier } from '../types'
+import type { Plan, UsageLimits, PlanTier, SubscriptionInfo } from '../types'
 import { PLAN_LIMITS } from '../lib/plans'
 
 const AI_DRAFT_LIMITS: Record<PlanTier, number> = {
@@ -18,8 +18,10 @@ interface BillingStore {
   plan: Plan
   usage: UsageLimits
   isLoading: boolean
+  subscription: SubscriptionInfo
 
   setPlan: (plan: Plan) => void
+  setSubscription: (subscription: SubscriptionInfo | null | undefined) => void
   incrementUsage: (key: keyof UsageLimits, amount?: number) => void
   resetMonthlyUsage: () => void
 }
@@ -38,6 +40,10 @@ export const PLAN_BY_TIER: Record<PlanTier, Plan> = {
   starter: STARTER_PLAN,
   growth: GROWTH_PLAN,
   enterprise: ENTERPRISE_PLAN,
+}
+
+export const NO_SUBSCRIPTION: SubscriptionInfo = {
+  status: null, planExpiresAt: null, cancelAtPeriodEnd: false, hasBillingAccount: false,
 }
 
 const DEFAULT_USAGE: UsageLimits = {
@@ -73,6 +79,10 @@ export const useBillingStore = create<BillingStore>((set) => {
   plan: initialPlan,
   usage: initialUsage,
   isLoading: false,
+  // Not persisted: always comes fresh from /api/workspace.
+  subscription: NO_SUBSCRIPTION,
+
+  setSubscription: (subscription) => set({ subscription: subscription ?? NO_SUBSCRIPTION }),
 
   setPlan: (plan) => {
     try {
