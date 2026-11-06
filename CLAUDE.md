@@ -218,6 +218,30 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
 - **Legal:** the `/privacy` cookies section describes this; it still needs the lawyer review.
 - **Tests:** `api/__tests__/analytics.test.ts`, `src/lib/__tests__/consent.test.ts`.
 
+## SEO, link previews and branding (roadmap 2.5 + 2.6, 2026-11-06)
+
+- **Page metadata:** `index.html` has a `<!--seo:start-->…<!--seo:end-->` block. `src/lib/seo.ts` (pure, no DOM) renders it. The Vite plugin
+  `seoFiles()` in `vite.config.ts` runs after the build and writes one HTML file per public page (`/`, `/pricing/`, `/privacy/`, `/terms/`) with its
+  own title, description, canonical and Open Graph/Twitter tags, plus `app.html` (the **noindex** shell every app route is served from),
+  `sitemap.xml` and `robots.txt`. It is head-only prerendering (owner-decided): the body is still rendered by React.
+- **Site URL:** `siteUrl()` uses `APP_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else `VERCEL_URL`, else the `*.vercel.app` default. **Set `APP_URL` to the
+  custom domain when there is one** (canonical, `og:url`, `og:image`, sitemap all follow it).
+- **OG image:** `public/og-image.png` (1200×630), regenerated from `scripts/og/og.html` with `node scripts/og/make-og.mjs`.
+- **robots.txt blocks the app but NOT `/share/`**: Slack/X/LinkedIn bots obey robots.txt and must read the preview. Share pages are kept out of search with `noindex` instead.
+- **Rewrites (`vercel.json`):** `/share/:code` → `api/share-page.ts`; everything else that isn't `/api/`, `/assets/` or a file (has a dot) → `/app.html`.
+  Real files (`/pricing/index.html`, assets) win first. The function bundles `dist/app.html` (`includeFiles`) and falls back to fetching it from the deployment.
+- **Share previews (`api/share-page.ts`):** the chart name and role count only (owner-decided); never people, titles or salaries. Private, revoked, expired,
+  unknown, rate-limited and legacy-token links all get the same generic preview. Everything is HTML-escaped (`escapeHtml`). Always `noindex`, `no-store`.
+- **`/pricing` is public:** `PricingRoute` shows the plans in the marketing layout (`PublicNav`) to visitors (every CTA → `/sign-up`, no "Current plan") and the in-app
+  layout with real checkout to signed-in people. `AuthProvider` treats it as an *optional-auth* page: no sign-in redirect, but a signed-in person's workspace and plan still load.
+- **Watermark (2.6):** `showsBranding(tier)` in `src/lib/plans.ts` (Free only). `exportAsPNG(…, { watermark })` draws "Made with StratMap" into the pixels
+  (`drawWatermark`). `GET /api/share/:code` returns a `branding` boolean (never the plan); `SharePage` shows the "Made with StratMap" pill only when true (Privacy/Terms stay),
+  and passes it to `OrgChart` as `brandExports`. PDF is paid-only and CSV is data, so neither is marked. It is client-side, so it can be bypassed by a determined user.
+- **Not verifiable locally:** the Vercel rewrites and `includeFiles` only run on Vercel. After the first deploy: open `/charts/x` directly (should load the app),
+  and paste a share link into Slack (should unfurl with the name and role count).
+- **Tests:** `src/lib/__tests__/seo.test.ts`, `vercelRewrites.test.ts`, `src/utils/__tests__/export.test.ts`, `src/pages/__tests__/SharePage.test.tsx`, `PricingRoute.test.tsx`,
+  `api/__tests__/share-page.test.ts`, `share-branding.test.ts`, `tests/e2e/seo-branding.spec.ts`.
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
@@ -360,7 +384,7 @@ src/
 - Dev bypass: absent `CLERK_SECRET_KEY` or `x-dev-user: true` header → `u-dev`/`ws-dev` identity
 - `src/lib/apiClient.ts` — typed fetch wrapper (Clerk Bearer token or dev bypass header)
 - All stores and pages wired to real API — data persists across reloads
-- SPA routing: `vercel.json = {}` (dev), `public/404.html` → sessionStorage redirect (production)
+- SPA routing: Vercel `rewrites` in `vercel.json` (see "SEO, previews and branding"); the old `public/404.html` redirect hack is gone
 - 111 backend tests using PGlite (`npm run test:api`)
 - Schema: `src/lib/db/schema.ts`; migrations in `drizzle/` (see `docs/MIGRATIONS.md`)
   - Tables: workspaces, workspaceMembers, pendingInvites, workspaceDepartments, charts, departments, nodes, edges, jobDescriptions, roleTemplates, headcountPlans, **sharedLinks** (new)

@@ -71,6 +71,8 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
   const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
   const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/privacy')
     || pathname.startsWith('/terms') || pathname.startsWith('/invite/')
+  // Open to everyone (roadmap 2.5) but signed-in people still get their workspace and plan loaded.
+  const isOptionalAuthPage = pathname === '/pricing'
   // True once we know whether this user has a workspace (after any invite acceptance).
   // The onboarding redirect waits for it, so an invited user never lands there.
   // Each workspace load gets a unique key; `resolvedFor` holds the key of the
@@ -86,7 +88,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
     if (!isSignedIn) {
       loadKey.current = null
       storeSignOut()
-      navigate('/sign-in')
+      if (!isOptionalAuthPage) navigate('/sign-in')
       return
     }
     if (!clerkUser || loadKey.current?.startsWith(`${clerkUser.id}#`)) return
@@ -169,7 +171,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
       setResolved()
     }
     void load()
-  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, pathname])
+  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, isOptionalAuthPage, pathname])
 
   // Once we know there is no workspace, send the user to onboarding
   useEffect(() => {
@@ -185,7 +187,9 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
     return <>{children}</>
   }
 
-  if (!isLoaded) {
+  // A signed-in person on an open page waits for their workspace, so the page doesn't flash its signed-out version.
+  const waitingForWorkspace = isOptionalAuthPage && isSignedIn && !resolvedFor
+  if (!isLoaded || waitingForWorkspace) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',

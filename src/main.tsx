@@ -19,13 +19,6 @@ if (SENTRY_DSN) {
   })
 }
 
-// Restore path after 404.html SPA redirect (production direct-URL navigation)
-const spaRedirect = sessionStorage.getItem('spa-redirect')
-if (spaRedirect) {
-  sessionStorage.removeItem('spa-redirect')
-  window.history.replaceState(null, '', spaRedirect)
-}
-
 if (import.meta.env.DEV) {
   (window as Window & { __devTools?: unknown }).__devTools = {
     setPermission: (p: string) => useUserStore.setState({ permission: p as Permission }),

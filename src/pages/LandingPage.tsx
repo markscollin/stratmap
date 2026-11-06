@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Network, FileText, BarChart2 } from 'lucide-react'
 import { LegalFooter } from './LegalPages'
+import { PublicNav } from '../components/layout/PublicNav'
 
 const FEATURES = [
   {
@@ -26,21 +27,7 @@ export function LandingPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
-      {/* Nav */}
-      <nav style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        maxWidth: 1080, margin: '0 auto', padding: '20px 24px',
-      }}>
-        <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--brand)', letterSpacing: '-.4px' }}>StratMap</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link to="/pricing" style={{ fontSize: 14, color: 'var(--muted)', textDecoration: 'none' }}>Pricing</Link>
-          <Link to="/sign-in" style={{ fontSize: 14, color: 'var(--text)', textDecoration: 'none' }}>Sign in</Link>
-          <Link to="/sign-up" style={{
-            fontSize: 14, fontWeight: 600, color: '#fff', textDecoration: 'none',
-            background: 'var(--grad-brand)', padding: '9px 16px', borderRadius: 8,
-          }}>Start free</Link>
-        </div>
-      </nav>
+      <PublicNav />
 
       {/* Hero */}
       <header style={{ maxWidth: 760, margin: '0 auto', padding: '72px 24px 56px', textAlign: 'center' }}>

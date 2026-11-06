@@ -1,5 +1,12 @@
 {
   "buildCommand": "npm run vercel-build",
+  "functions": {
+    "api/share-page.ts": { "includeFiles": "dist/app.html" }
+  },
+  "rewrites": [
+    { "source": "/share/:code", "destination": "/api/share-page?code=:code" },
+    { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/app.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
