@@ -1,12 +1,32 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { CheckoutButton } from '../features/billing/CheckoutButton'
 import { usePlanLimits } from '../hooks/usePlanLimits'
 import { LegalFooter } from './LegalPages'
+import { Layout } from '../components/layout/Layout'
+import { PublicNav } from '../components/layout/PublicNav'
+import { useUserStore } from '../store/userStore'
+
+/**
+ * /pricing is public (roadmap 2.5): visitors see the plans in the marketing layout and are sent to sign-up;
+ * signed-in people keep the in-app version with their current plan and checkout.
+ */
+export function PricingRoute() {
+  const signedIn = useUserStore(s => s.isAuthenticated)
+  if (signedIn) return <Layout><PricingPage /></Layout>
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+      <PublicNav />
+      <PricingPage />
+    </div>
+  )
+}
 
 export function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
   const { currentTier } = usePlanLimits()
+  const signedIn = useUserStore(s => s.isAuthenticated)
 
   useEffect(() => { document.title = 'Pricing — StratMap' }, [])
 
@@ -134,7 +154,7 @@ export function PricingPage() {
       {/* Pricing cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, maxWidth: 1200, margin: '0 auto 40px' }}>
         {plans.map((plan) => {
-          const isCurrent = currentTier === plan.tier
+          const isCurrent = signedIn && currentTier === plan.tier
           return (
             <div
               key={plan.tier}
@@ -204,7 +224,22 @@ export function PricingPage() {
               </div>
 
               {/* CTA */}
-              {plan.tier !== 'free' ? (
+              {!signedIn ? (
+                // Visitors need an account (and a workspace) before they can pay: sign up first, upgrade after.
+                <Link
+                  to="/sign-up"
+                  data-testid={`pricing-cta-${plan.tier}`}
+                  style={{
+                    display: 'block', textAlign: 'center', textDecoration: 'none', padding: '11px 20px', borderRadius: 9,
+                    fontSize: 14, fontWeight: 600, width: '100%', boxSizing: 'border-box',
+                    background: plan.tier === 'free' ? 'var(--surface)' : 'var(--grad-brand)',
+                    border: plan.tier === 'free' ? '1px solid var(--border)' : 'none',
+                    color: plan.tier === 'free' ? 'var(--text)' : '#fff',
+                  }}
+                >
+                  {plan.tier === 'free' ? 'Start free' : `Start free, upgrade to ${plan.name}`}
+                </Link>
+              ) : plan.tier !== 'free' ? (
                 <CheckoutButton tier={plan.tier} billingCycle={billingCycle} />
               ) : (
                 <button

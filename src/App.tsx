@@ -14,7 +14,7 @@ import { HeadcountView }   from './pages/HeadcountView'
 import { SettingsView }    from './pages/SettingsView'
 import { OnboardingPage }  from './pages/OnboardingPage'
 import { SignInPage, SignUpPage } from './pages/SignInPage'
-import { PricingPage }     from './pages/PricingPage'
+import { PricingRoute }    from './pages/PricingPage'
 import { BillingSuccessPage } from './pages/BillingSuccessPage'
 import { SharePage } from './pages/SharePage'
 import { InvitePage } from './pages/InvitePage'
@@ -30,6 +30,7 @@ export default function App() {
           {/* Public marketing + legal pages — no auth, no layout */}
           <Route path="/"        element={<LandingPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/pricing" element={<PricingRoute />} />
           <Route path="/terms"   element={<TermsPage />} />
 
           {/* Invite links from email — public; the page handles sign-in itself */}
@@ -49,7 +50,6 @@ export default function App() {
             <Route path="/roles"      element={<RolesView />} />
             <Route path="/headcount"  element={<HeadcountView />} />
             <Route path="/settings"   element={<SettingsView />} />
-            <Route path="/pricing"    element={<PricingPage />} />
             <Route path="/billing/success" element={<BillingSuccessPage />} />
           </Route>
         </Routes>

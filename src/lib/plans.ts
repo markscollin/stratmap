@@ -23,6 +23,15 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   enterprise: { seats: -1, maxCharts: -1, maxNodesPerChart: -1,  aiDraftsPerMonth: -1 },
 }
 
+/**
+ * Free workspaces carry a "Made with StratMap" mark on PNG exports and on public share pages
+ * (roadmap 2.6). Every paid tier is without it. PDF is already paid-only and CSV is data, so
+ * neither is marked.
+ */
+export function showsBranding(tier: PlanTier): boolean {
+  return tier === 'free'
+}
+
 /** True when `count` items already exist and adding `adding` more stays within `limit`. */
 export function fitsLimit(limit: number, count: number, adding = 1): boolean {
   return limit === UNLIMITED || count + adding <= limit

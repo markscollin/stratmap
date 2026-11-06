@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
+import { showsBranding } from '../../lib/plans'
 import { useChartStore } from '../../store/chartStore'
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
@@ -684,7 +685,7 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, onImported }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported }: {
   chartId?: string
   chartName?: string
   initialNodes?: OrgNode[]
@@ -692,6 +693,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   departments?: Department[]
   readOnly?: boolean
   isPublic?: boolean
+  /** Put the "Made with StratMap" mark on PNG exports. Defaults to the viewer's plan (Free = yes); a share page passes the chart owner's. */
+  brandExports?: boolean
   /** Called after people were imported into this chart, so the page can reload it. */
   onImported?: () => void
 }) {
@@ -756,6 +759,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Plan limits
   const { isAtNodeLimit, currentTier, upgradeRequired } = usePlanLimits()
   const plan = useBillingStore((state) => state.plan)
+  const brandExports = brandExportsProp ?? showsBranding(currentTier)
   const navigate = useNavigate()
 
   // Workspace departments for NodeCard colour lookup
@@ -1086,14 +1090,14 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
     try {
       const slug = chartName.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'chart'
-      if (format === 'png') await exportAsPNG(containerRef.current, slug, { width: chartW, height: chartH })
+      if (format === 'png') await exportAsPNG(containerRef.current, slug, { width: chartW, height: chartH, watermark: brandExports })
       else await exportAsPDF(containerRef.current, slug, { width: chartW, height: chartH })
     } finally {
       setExportOverflow(false)
       setTransform(savedTransform)
       setIsExporting(false)
     }
-  }, [containerRef, nodesRef, isExporting, transform, setTransform, chartName, edges, departments, addToast])
+  }, [containerRef, nodesRef, isExporting, transform, setTransform, chartName, edges, departments, addToast, brandExports])
 
   const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null

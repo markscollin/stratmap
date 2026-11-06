@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopNav } from './TopNav'
 import { PaymentBanner } from '../../features/billing/PaymentBanner'
 import { ChartLimitBanner } from '../../features/billing/ChartLimitBanner'
 
-export function Layout() {
+/** The signed-in app shell. Renders the matched child route, or `children` when used directly (the pricing page does). */
+export function Layout({ children }: { children?: ReactNode } = {}) {
   return (
     <div style={{
       display: 'flex',
@@ -20,7 +22,7 @@ export function Layout() {
         <PaymentBanner />
         <ChartLimitBanner />
         <main style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-          <Outlet />
+          {children ?? <Outlet />}
         </main>
       </div>
     </div>

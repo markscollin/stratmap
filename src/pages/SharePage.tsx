@@ -9,6 +9,8 @@ interface SharedChartData {
   nodes: OrgNode[]
   edges: OrgEdge[]
   departments: Department[]
+  /** Server-side shares: true while the chart's workspace is on the Free plan (roadmap 2.6). */
+  branding?: boolean
 }
 
 export function SharePage() {
@@ -71,6 +73,8 @@ export function SharePage() {
   }
 
   const depts = data.departments
+  // Legacy URL-token shares carry no workspace, so they keep the mark.
+  const branding = data.branding !== false
 
   return (
     <div style={{ height: '100vh', position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -98,6 +102,7 @@ export function SharePage() {
         initialEdges={data.edges}
         departments={depts}
         readOnly
+        brandExports={branding}
       />
 
       <div style={{
@@ -106,11 +111,15 @@ export function SharePage() {
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 20, padding: '6px 14px', boxShadow: 'var(--shadow-sm)',
       }}>
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>Made with</span>
-        <a href="/" style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', textDecoration: 'none', letterSpacing: '-.2px' }}>
-          StratMap
-        </a>
-        <span style={{ fontSize: 12, color: 'var(--dim)' }}>·</span>
+        {branding && (
+          <>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Made with</span>
+            <a href="/" data-testid="share-branding" style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)', textDecoration: 'none', letterSpacing: '-.2px' }}>
+              StratMap
+            </a>
+            <span style={{ fontSize: 12, color: 'var(--dim)' }}>·</span>
+          </>
+        )}
         <a href="/privacy" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Privacy</a>
         <a href="/terms" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>Terms</a>
       </div>
