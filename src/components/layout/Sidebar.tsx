@@ -56,8 +56,10 @@ function NavBtn({
   )
 }
 
-export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+/** `drawer`: the phone version (roadmap 2.8): always full width with labels, and `onNavigate` closes it. */
+export function Sidebar({ drawer = false, onNavigate }: { drawer?: boolean; onNavigate?: () => void } = {}) {
+  const { sidebarCollapsed: storedCollapsed, toggleSidebar } = useUIStore()
+  const sidebarCollapsed = drawer ? false : storedCollapsed
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { hasFeature } = usePlanLimits()
@@ -66,8 +68,9 @@ export function Sidebar() {
     path === '/' ? pathname === '/' : pathname.startsWith(path)
 
   return (
-    <div style={{
-      width: sidebarCollapsed ? 56 : 232,
+    <div data-testid={drawer ? 'nav-drawer' : 'sidebar'} style={{
+      width: drawer ? 264 : sidebarCollapsed ? 56 : 232,
+      height: drawer ? '100%' : undefined,
       flexShrink: 0,
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',
@@ -112,7 +115,7 @@ export function Sidebar() {
             Icon={Icon}
             active={isActive(path)}
             collapsed={sidebarCollapsed}
-            onClick={() => navigate(path)}
+            onClick={() => { navigate(path); onNavigate?.() }}
           />
         ))}
       </nav>
@@ -124,9 +127,9 @@ export function Sidebar() {
           Icon={Settings}
           active={isActive('/settings')}
           collapsed={sidebarCollapsed}
-          onClick={() => navigate('/settings')}
+          onClick={() => { navigate('/settings'); onNavigate?.() }}
         />
-        <button
+        {!drawer && <button
           onClick={toggleSidebar}
           style={{
             width: '100%',
@@ -146,7 +149,7 @@ export function Sidebar() {
             ? <ChevronRight size={15} />
             : <><ChevronLeft size={15} /><span>Collapse</span></>
           }
-        </button>
+        </button>}
       </div>
     </div>
   )

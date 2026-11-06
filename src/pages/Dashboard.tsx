@@ -6,6 +6,7 @@ import { useHeadcountStore } from '../store/headcountStore'
 import { STATUS_META } from '../constants/statusMeta'
 import { api } from '../lib/apiClient'
 import type { ChartStatus } from '../types'
+import { useIsPhone } from '../hooks/useMediaQuery'
 import { OnboardingChecklist } from '../features/onboarding/OnboardingChecklist'
 import { DashboardEmpty } from '../features/onboarding/DashboardEmpty'
 
@@ -34,6 +35,8 @@ interface WorkspaceStats {
 export function Dashboard() {
   const navigate = useNavigate()
   const { charts, loaded } = useChartStore()
+  const isPhone = useIsPhone()
+  const pad = isPhone ? '16px' : '28px 32px'
   const { plans, fetch: fetchPlans } = useHeadcountStore()
 
   const [stats, setStats] = useState<WorkspaceStats | null>(null)
@@ -83,7 +86,7 @@ export function Dashboard() {
   // No chart yet (roadmap 2.7): three ways to start instead of a wall of zeros.
   if (loaded && charts.length === 0) {
     return (
-      <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
+      <div style={{ padding: pad, animation: 'fadeUp .3s ease-out' }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 20 }}>Welcome to StratMap</h1>
         <OnboardingChecklist />
         <DashboardEmpty />
@@ -92,7 +95,7 @@ export function Dashboard() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
+    <div style={{ padding: pad, animation: 'fadeUp .3s ease-out' }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 4 }}>
@@ -104,7 +107,7 @@ export function Dashboard() {
       <OnboardingChecklist />
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
         {kpis.map(({ label, value, sub, color, bg, Icon }) => (
           <div key={label} style={{
             background: 'var(--surface)', border: '1px solid var(--border)',
@@ -125,7 +128,7 @@ export function Dashboard() {
       </div>
 
       {/* Main 2-col section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {/* Department breakdown */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>

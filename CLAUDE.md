@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**321 frontend + 440 backend = 761 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**429 frontend + 474 backend = 903 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -241,6 +241,38 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   and paste a share link into Slack (should unfurl with the name and role count).
 - **Tests:** `src/lib/__tests__/seo.test.ts`, `vercelRewrites.test.ts`, `src/utils/__tests__/export.test.ts`, `src/pages/__tests__/SharePage.test.tsx`, `PricingRoute.test.tsx`,
   `api/__tests__/share-page.test.ts`, `share-branding.test.ts`, `tests/e2e/seo-branding.spec.ts`.
+
+## Onboarding, sample chart and checklist (roadmap 2.7, 2026-11-06)
+
+- **Sample chart (owner-decided: opt-in, marked, easy to delete):** `charts.is_sample` (migration 0006). Created from empty states ("Try a sample chart" on the
+  Dashboard and the Charts page) via `createSampleChart()` in `chartStore` (the 5-role `quickstart` template, name `Sample org chart`). Rules, all server-side in
+  `POST /api/charts`: a sample is **free and never counts toward the plan's chart limit** (`getChartUsage`, the limit check, `useChartLimit`, `usePlanLimits` and the "n of 1
+  chart" label all use `countOwnCharts`), **at most one per workspace** (`409 sample-exists`), and **at most `MAX_SAMPLE_NODES` (20) roles** (`400 sample-too-large`), so it
+  can't be used to dodge the plan. Samples never fire `first_chart_created` or `ten_roles_reached`. UI: a "Sample" badge on the card and `SampleChartBanner` on the canvas
+  ("This is sample data", delete in two clicks for admins; others are told to ask an admin).
+- **Checklist:** `GET /api/workspace/onboarding` (any member) returns `{ steps: { chart, invite, share }, complete, dismissed }`, ticked from real data, never clicks:
+  `chart` = a non-sample chart with at least 3 roles (so a template or Quick start chart counts), `invite` = another member or any invite row, `share` = any share link.
+  `PUT` (admin) dismisses it for the whole workspace (`workspaces.onboarding_dismissed_at`). `OnboardingChecklist` sits on the Dashboard for people who can edit, and hides
+  itself when complete or dismissed.
+- **Empty states:** a workspace with no chart sees `DashboardEmpty` (create / import / sample) instead of zero KPIs; the Charts page empty state offers the same three;
+  an empty canvas shows `EmptyCanvasCard` (add first role / import). `/charts?new=1` and `/charts?import=1` open those dialogs (used by the empty Dashboard).
+- **Tests:** `api/__tests__/onboarding.test.ts`, `src/features/onboarding/__tests__/onboarding.test.tsx`, additions to `ChartView.test.tsx`, `tests/e2e/onboarding.spec.ts`.
+
+## Mobile (roadmap 2.8, 2026-11-06)
+
+- **Phone = under 768px** (`useIsPhone()` / `PHONE_QUERY` in `src/hooks/useMediaQuery.ts`; false when `matchMedia` is missing, e.g. jsdom — tests use `src/test/matchMedia.ts`).
+  All styling is inline, so responsive pages branch on `useIsPhone()`, not CSS media queries.
+- **Drawer:** on a phone `Layout` drops the sidebar; `TopNav` shows a menu button that opens `Sidebar drawer` (always full labels) over a backdrop. It closes on navigation, backdrop,
+  Escape and when the screen grows. `uiStore.mobileNavOpen`. Pages that are built for desktops (`/roles`, `/headcount`, `/settings`) show a dismissible `DesktopHint`.
+- **Canvas (owner-decided: phones view-only, tablets can edit):** `CanvasView` forces `readOnly` on a phone and says so ("View only on phones"); from 768px up editing is unchanged.
+  The header sits above the canvas on phones instead of floating over the toolbar, and the conflict/sample banners go in flow. One finger on empty canvas pans (touch or any read-only
+  canvas, no Pan tool needed) and two fingers pinch-zoom (`src/features/canvas/pinch.ts`, pure and tested; pointers are tracked in the capture phase so it works over nodes).
+  The container has `touch-action: none`. **Bug fixed on the way:** the first fit-to-view ran with a default 1100×600 size before the real size was measured, which put the chart
+  off-screen on a phone; it now waits for the first `ResizeObserver` measurement.
+- **Share page** on a phone: title above, footer below, canvas between (nothing floats over the chart). **Dashboard** KPIs go 2-up and the sections stack; **Charts** library
+  and search fit. Roles, Headcount and Settings only scroll (not reflowed).
+- **Tests:** `src/hooks/__tests__/useMediaQuery.test.tsx`, `src/components/layout/__tests__/Layout.test.tsx`, `src/features/canvas/__tests__/pinch.test.ts`,
+  `src/pages/__tests__/CanvasView.test.tsx`, phone cases in `SharePage.test.tsx`, `tests/e2e/mobile.spec.ts` (real touch pan and pinch through CDP, no sideways scroll, tablet keeps editing).
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 

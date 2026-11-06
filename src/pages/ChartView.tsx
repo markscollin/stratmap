@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useChartStore } from '../store'
 import { countOwnCharts } from '../store/chartStore'
+import { useIsPhone } from '../hooks/useMediaQuery'
 import { STATUS_META, STATUS_ACTIONS } from '../constants/statusMeta'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
@@ -371,6 +372,7 @@ export function ChartView() {
   const ownCount = countOwnCharts(charts)
   const hasSample = charts.some(c => c.isSample)
   const [searchParams, setSearchParams] = useSearchParams()
+  const isPhone = useIsPhone()
   // Deep links from the empty Dashboard (roadmap 2.7): /charts?new=1 and /charts?import=1 open that dialog once.
   const [deepLink] = useState<'new' | 'import' | null>(() =>
     searchParams.get('import') === '1' ? 'import' : searchParams.get('new') === '1' ? 'new' : null)
@@ -416,7 +418,7 @@ export function ChartView() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
+    <div style={{ padding: isPhone ? '16px' : '28px 32px', animation: 'fadeUp .3s ease-out' }}>
       {showModal && <NewChartModal onClose={() => setShowModal(false)} onCreate={handleCreate} />}
       {showImport && <ImportDialog onClose={() => setShowImport(false)} />}
       <UpgradeModal
@@ -429,7 +431,7 @@ export function ChartView() {
       />
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 4 }}>Org Charts</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -470,7 +472,7 @@ export function ChartView() {
 
       {/* Search bar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: `1px solid ${focusSearch ? 'var(--brand)' : 'var(--border)'}`, boxShadow: focusSearch ? '0 0 0 3px var(--brand-bg)' : 'none', borderRadius: 8, padding: '7px 12px', width: 240, transition: 'all .15s' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: `1px solid ${focusSearch ? 'var(--brand)' : 'var(--border)'}`, boxShadow: focusSearch ? '0 0 0 3px var(--brand-bg)' : 'none', borderRadius: 8, padding: '7px 12px', width: isPhone ? '100%' : 240, transition: 'all .15s' }}>
           <Search size={13} color="var(--dim)" />
           <input
             value={search}
@@ -490,7 +492,7 @@ export function ChartView() {
 
       {/* Empty state */}
       {filtered.length === 0 ? (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '64px 40px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: isPhone ? '40px 20px' : '64px 40px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--brand-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
             <Search size={22} color="var(--brand)" />
           </div>
@@ -531,7 +533,7 @@ export function ChartView() {
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(252px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${isPhone ? 220 : 252}px, 1fr))`, gap: 14 }}>
             {filtered.map((chart, i) => (
               <ChartCard
                 key={chart.id}

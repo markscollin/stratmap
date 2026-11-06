@@ -7,6 +7,7 @@ import { VersionPill } from '../components/ui/VersionPill'
 import { OrgChart } from '../features/canvas/OrgChart'
 import { usePermission } from '../hooks/usePermission'
 import { useChartLimit } from '../hooks/useChartLimit'
+import { useIsPhone } from '../hooks/useMediaQuery'
 import { api } from '../lib/apiClient'
 import { useChartConflict } from '../lib/chartRevision'
 import { ChartConflictBanner } from '../features/canvas/ChartConflictBanner'
@@ -31,6 +32,8 @@ export function CanvasView() {
   const { canEdit, canAdmin } = usePermission()
   // Over the chart limit after a downgrade, every chart is view-only (roadmap 1.6).
   const { frozen } = useChartLimit()
+  // Phones are view-only (roadmap 2.8): pan and pinch, no editing. Tablets edit as usual.
+  const isPhone = useIsPhone()
   // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
   const conflicted = useChartConflict(s => s.chartId) === id
 
@@ -95,7 +98,25 @@ export function CanvasView() {
 
   return (
     <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Top-left: back + chart meta */}
+      {isPhone ? (
+        // Phones: the header sits above the canvas instead of floating over its toolbar (roadmap 2.8).
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <button
+              aria-label="All charts"
+              onClick={() => navigate('/charts')}
+              style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', cursor: 'pointer' }}
+            ><ChevronLeft size={16} /></button>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+            <StatusBadge status={status} />
+          </div>
+          {canEdit && !frozen && (
+            <div data-testid="phone-view-only" style={{ flexShrink: 0, padding: '6px 12px', fontSize: 12, color: 'var(--muted)', background: 'var(--raised)', borderBottom: '1px solid var(--border)' }}>
+              View only on phones. Edit on a tablet or computer.
+            </div>
+          )}
+        </>
+      ) : (
       <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
         <button
           onClick={() => navigate('/charts')}
@@ -109,15 +130,18 @@ export function CanvasView() {
         <StatusBadge status={status} />
         <VersionPill version={version} />
       </div>
+      )}
 
-      <ChartConflictBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} />
+      <ChartConflictBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} flow={isPhone} />
       {isSample && (
         <SampleChartBanner
+          flow={isPhone}
           canDelete={canAdmin}
           onDelete={async () => { await deleteChart(fullChart.id); navigate('/charts') }}
         />
       )}
 
+      <div style={isPhone ? { flex: 1, position: 'relative', minHeight: 0 } : { display: 'contents' }}>
       <OrgChart
         key={`${fullChart.id}:${canvasKey}`}
         onImported={() => setReloadKey(k => k + 1)}
@@ -126,9 +150,10 @@ export function CanvasView() {
         initialNodes={fullChart.nodes}
         initialEdges={fullChart.edges}
         departments={depts}
-        readOnly={!canEdit || frozen || conflicted}
+        readOnly={!canEdit || frozen || conflicted || isPhone}
         isPublic={chartMeta?.isPublic ?? false}
       />
+      </div>
     </div>
   )
 }

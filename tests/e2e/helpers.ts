@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test'
 
 export const RUN = process.env.E2E_RUN_ID ?? 'local'
 
@@ -10,8 +10,8 @@ export function testUser(name: string) {
 }
 
 /** A fresh browser context signed in as that dev-bypass user (see src/lib/devIdentity.ts). */
-export async function signedInContext(browser: Browser, slug: string): Promise<BrowserContext> {
-  const ctx = await browser.newContext()
+export async function signedInContext(browser: Browser, slug: string, options: BrowserContextOptions = {}): Promise<BrowserContext> {
+  const ctx = await browser.newContext(options)
   await ctx.addInitScript((id) => {
     try {
       localStorage.setItem('stratmap_dev_user', id)

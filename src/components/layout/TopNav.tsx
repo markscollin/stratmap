@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronRight, Search, Sun, Moon, Bell } from 'lucide-react'
+import { ChevronRight, Search, Sun, Moon, Bell, Menu } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
 import { useAuth, IS_DEV_BYPASS } from '../../features/auth/useAuth'
 import { useUserStore } from '../../store/userStore'
 import { useClerk } from '@clerk/clerk-react'
+import { useIsPhone } from '../../hooks/useMediaQuery'
 
 const PAGE_LABELS: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -13,6 +14,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/roles':     'Roles',
   '/headcount': 'Headcount',
   '/settings':  'Settings',
+  '/pricing':   'Pricing',
 }
 
 function getLabel(pathname: string): string {
@@ -49,7 +51,8 @@ function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
 }
 
 export function TopNav() {
-  const { isDark, toggleTheme, setSpotlightOpen } = useUIStore()
+  const { isDark, toggleTheme, setSpotlightOpen, setMobileNavOpen } = useUIStore()
+  const isPhone = useIsPhone()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [hovBtn, setHovBtn] = useState<string | null>(null)
@@ -84,22 +87,33 @@ export function TopNav() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '0 24px',
+      padding: isPhone ? '0 12px' : '0 24px',
+      gap: 8,
       background: 'var(--surface)',
       borderBottom: '1px solid var(--border)',
       flexShrink: 0,
     }}>
-      {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 12, color: 'var(--dim)' }}>StratMap</span>
-        <ChevronRight size={12} color="var(--dim)" />
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{label}</span>
+      {/* Menu (phones) + breadcrumb */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? 10 : 6, minWidth: 0 }}>
+        {isPhone && (
+          <button
+            data-testid="nav-menu"
+            aria-label="Open navigation"
+            onClick={() => setMobileNavOpen(true)}
+            style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer' }}
+          ><Menu size={17} /></button>
+        )}
+        {!isPhone && <><span style={{ fontSize: 12, color: 'var(--dim)' }}>StratMap</span>
+        <ChevronRight size={12} color="var(--dim)" /></>}
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
       </div>
 
       {/* Right controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Search hint — opens Spotlight */}
-        <button onClick={() => setSpotlightOpen(true)} style={{
+        {isPhone ? (
+          <IconBtn id="search" Icon={Search} onClick={() => setSpotlightOpen(true)} hovBtn={hovBtn} setHovBtn={setHovBtn} />
+        ) : <button onClick={() => setSpotlightOpen(true)} style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--input-bg)', border: '1px solid var(--border)',
           borderRadius: 8, padding: '6px 12px', width: 196,
@@ -115,10 +129,10 @@ export function TopNav() {
             background: 'var(--raised)', border: '1px solid var(--border)',
             borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace',
           }}>⌘K</kbd>
-        </button>
+        </button>}
 
         <IconBtn id="theme" Icon={isDark ? Sun : Moon} onClick={toggleTheme} hovBtn={hovBtn} setHovBtn={setHovBtn} />
-        <IconBtn id="bell"  Icon={Bell}                onClick={() => {}}   hovBtn={hovBtn} setHovBtn={setHovBtn} />
+        {!isPhone && <IconBtn id="bell"  Icon={Bell}                onClick={() => {}}   hovBtn={hovBtn} setHovBtn={setHovBtn} />}
 
         {/* User avatar */}
         {user?.avatarUrl ? (
