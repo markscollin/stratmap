@@ -9,6 +9,8 @@ import { usePermission } from '../hooks/usePermission'
 import { useToastStore } from '../store/toastStore'
 import { buildHeadcountCsv } from '../lib/exportOrg'
 import { downloadText } from '../lib/csvSafe'
+import { BudgetPanel } from '../features/headcount/BudgetPanel'
+import { formatMoney } from '../lib/headcountBudget'
 import type { RoleType } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -161,13 +163,24 @@ function DeptSelect({ value, onChange, placeholder = 'Select department' }: {
 
 // ─── Add / Edit hire panel ─────────────────────────────────────────────────────
 
-function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
+interface HireFormData {
+  title: string; departmentId: string; roleType: RoleType
+  targetQuarter: string; chartId: string; notes: string
+  /** Only present when the person may set salaries (owner/admin). null clears. */
+  salary?: { min: number | null; max: number | null; currency: string | null }
+}
+
+const CURRENCY_KEY = 'stratmap_headcount_currency'
+function lastCurrency(): string {
+  try { return localStorage.getItem(CURRENCY_KEY) || 'USD' } catch { return 'USD' }
+}
+const toNumber = (s: string): number | null => (s.trim() === '' ? null : Number(s.replace(/[, _]/g, '')))
+
+function HireForm({ initialQuarter, plan, canSetSalary, onSubmit, onCancel }: {
   initialQuarter: string
   plan?: HeadcountPlan
-  onSubmit: (data: {
-    title: string; departmentId: string; roleType: RoleType
-    targetQuarter: string; chartId: string; notes: string
-  }) => void
+  canSetSalary: boolean
+  onSubmit: (data: HireFormData) => void
   onCancel: () => void
 }) {
   const { charts } = useChartStore()
@@ -177,8 +190,26 @@ function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
   const [quarter,  setQuarter]  = useState(plan?.targetQuarter ?? initialQuarter)
   const [chartId,  setChartId]  = useState(plan?.chartId ?? '')
   const [notes,    setNotes]    = useState(plan?.notes ?? '')
+  const [minText,  setMinText]  = useState(plan?.salaryMin != null ? String(plan.salaryMin) : '')
+  const [maxText,  setMaxText]  = useState(plan?.salaryMax != null ? String(plan.salaryMax) : '')
+  const [currency, setCurrency] = useState(plan?.salaryCurrency ?? lastCurrency())
 
-  const isValid = title.trim() !== ''
+  const min = toNumber(minText), max = toNumber(maxText)
+  const hasAmount = min !== null || max !== null
+  const salaryError = !canSetSalary ? null
+    : (min !== null && (!Number.isInteger(min) || min < 0)) || (max !== null && (!Number.isInteger(max) || max < 0)) ? 'Use whole numbers, 0 or more.'
+    : min !== null && max !== null && min > max ? 'The minimum cannot be above the maximum.'
+    : hasAmount && !/^[A-Za-z]{3}$/.test(currency.trim()) ? 'Use a 3-letter currency code, such as USD.'
+    : null
+  const isValid = title.trim() !== '' && salaryError === null
+
+  const submit = () => {
+    if (canSetSalary && hasAmount) { try { localStorage.setItem(CURRENCY_KEY, currency.trim().toUpperCase()) } catch { /* ignore */ } }
+    onSubmit({
+      title: title.trim(), departmentId: deptId, roleType, targetQuarter: quarter, chartId, notes,
+      ...(canSetSalary ? { salary: hasAmount ? { min, max, currency: currency.trim().toUpperCase() } : { min: null, max: null, currency: null } } : {}),
+    })
+  }
 
   return (
     <div style={{ padding: '14px 16px', background: 'var(--raised)', borderRadius: 10, border: '1px solid var(--border)' }}>
@@ -235,6 +266,23 @@ function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
         </select>
       </div>
 
+      {canSetSalary && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 5 }}>
+            Salary per year <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional · only admins see this)</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input aria-label="Minimum salary" inputMode="numeric" value={minText} onChange={e => setMinText(e.target.value)} placeholder="Min"
+              style={{ flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 12, background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }} />
+            <input aria-label="Maximum salary" inputMode="numeric" value={maxText} onChange={e => setMaxText(e.target.value)} placeholder="Max"
+              style={{ flex: 1, minWidth: 0, padding: '8px 10px', fontSize: 12, background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }} />
+            <input aria-label="Salary currency" value={currency} onChange={e => setCurrency(e.target.value.toUpperCase().slice(0, 3))} placeholder="USD" maxLength={3}
+              style={{ width: 56, padding: '8px 8px', fontSize: 12, textAlign: 'center', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }} />
+          </div>
+          {salaryError && <p role="alert" style={{ fontSize: 11, color: 'var(--danger)', margin: '5px 0 0' }}>{salaryError}</p>}
+        </div>
+      )}
+
       <div style={{ marginBottom: 12 }}>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)"
           rows={2}
@@ -244,7 +292,7 @@ function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
 
       <div style={{ display: 'flex', gap: 7 }}>
         <button type="button" onClick={onCancel} style={{ flex: 1, padding: '8px', fontSize: 12, background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', cursor: 'pointer' }}>Cancel</button>
-        <button type="button" disabled={!isValid} onClick={() => onSubmit({ title: title.trim(), departmentId: deptId, roleType, targetQuarter: quarter, chartId, notes })}
+        <button type="button" disabled={!isValid} onClick={submit}
           style={{ flex: 2, padding: '8px', fontSize: 12, fontWeight: 600, background: isValid ? 'var(--grad-brand)' : 'var(--raised)', border: 'none', borderRadius: 8, color: isValid ? '#fff' : 'var(--dim)', cursor: isValid ? 'pointer' : 'default' }}>
           {plan ? 'Save changes' : 'Add hire'}
         </button>
@@ -255,7 +303,8 @@ function HireForm({ initialQuarter, plan, onSubmit, onCancel }: {
 
 // ─── Plan card ────────────────────────────────────────────────────────────────
 
-function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly }: {
+function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly, showSalary }: {
+  showSalary?: boolean
   plan: HeadcountPlan
   onEdit: () => void
   onDelete: () => void
@@ -304,6 +353,14 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly
           )}
           <RoleTypeBadge roleType={plan.roleType} />
         </div>
+
+        {showSalary && (plan.salaryMin != null || plan.salaryMax != null) && plan.salaryCurrency && (
+          <div data-testid="plan-salary" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+            {plan.salaryMin != null && plan.salaryMax != null && plan.salaryMin !== plan.salaryMax
+              ? `${formatMoney(plan.salaryMin, plan.salaryCurrency)} – ${Math.round(plan.salaryMax).toLocaleString('en-US')}`
+              : formatMoney((plan.salaryMin ?? plan.salaryMax)!, plan.salaryCurrency)} / yr
+          </div>
+        )}
 
         {linkedChart && (
           <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 8 }}>
@@ -447,7 +504,8 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
 
 // ─── Quarter column ────────────────────────────────────────────────────────────
 
-function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatusChange, canApprove, readOnly }: {
+function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatusChange, canApprove, readOnly, showSalary }: {
+  showSalary?: boolean
   quarter: string; plans: HeadcountPlan[]; year: number
   onAdd: (quarter: string) => void
   onEdit: (plan: HeadcountPlan) => void
@@ -493,6 +551,7 @@ function QuarterColumn({ quarter, plans, year, onAdd, onEdit, onDelete, onStatus
             onStatusChange={status => onStatusChange(p.id, status)}
             canApprove={canApprove}
             readOnly={readOnly}
+            showSalary={showSalary}
           />
         ))}
       </div>
@@ -633,7 +692,7 @@ export function HeadcountView() {
   const totalApproved = filteredPlans.filter(p => p.status === 'approved').length
   const totalFilled   = filteredPlans.filter(p => p.status === 'filled').length
 
-  const handleAdd = async (data: { title: string; departmentId: string; roleType: RoleType; targetQuarter: string; chartId: string; notes: string }) => {
+  const handleAdd = async (data: HireFormData) => {
     await create({
       title: data.title,
       departmentId: data.departmentId || undefined,
@@ -641,11 +700,14 @@ export function HeadcountView() {
       targetQuarter: data.targetQuarter,
       chartId: data.chartId || undefined,
       notes: data.notes || undefined,
+      ...(data.salary && (data.salary.min !== null || data.salary.max !== null)
+        ? { salaryMin: data.salary.min, salaryMax: data.salary.max, salaryCurrency: data.salary.currency }
+        : {}),
     })
     setAddingToQuarter(null)
   }
 
-  const handleEdit = async (data: { title: string; departmentId: string; roleType: RoleType; targetQuarter: string; chartId: string; notes: string }) => {
+  const handleEdit = async (data: HireFormData) => {
     if (!editingPlan) return
     await update(editingPlan.id, {
       title: data.title,
@@ -654,6 +716,7 @@ export function HeadcountView() {
       targetQuarter: data.targetQuarter,
       chartId: data.chartId || null,
       notes: data.notes || null,
+      ...(data.salary ? { salaryMin: data.salary.min, salaryMax: data.salary.max, salaryCurrency: data.salary.currency } : {}),
     })
     setEditingPlan(null)
   }
@@ -761,6 +824,7 @@ export function HeadcountView() {
         <div style={{ marginBottom: 16 }}>
           <HireForm
             initialQuarter={addingToQuarter}
+            canSetSalary={canAdmin}
             onSubmit={handleAdd}
             onCancel={() => setAddingToQuarter(null)}
           />
@@ -771,11 +835,15 @@ export function HeadcountView() {
           <HireForm
             initialQuarter={editingPlan.targetQuarter}
             plan={editingPlan}
+            canSetSalary={canAdmin}
             onSubmit={handleEdit}
             onCancel={() => setEditingPlan(null)}
           />
         </div>
       )}
+
+      {/* Budget by quarter: owners and admins only (the server never sends salaries to anyone else) */}
+      {canAdmin && <BudgetPanel plans={filteredPlans} year={year} />}
 
       {/* Kanban */}
       {loading && plans.length === 0 ? (
@@ -794,6 +862,7 @@ export function HeadcountView() {
               onStatusChange={handleStatusChange}
               canApprove={canAdmin}
               readOnly={readOnly}
+              showSalary={canAdmin}
             />
           ))}
         </div>

@@ -166,7 +166,7 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 
 - Real-time collaboration (Liveblocks/PartyKit), presence cursors, comments for the `commenter` role
 - Chart version history and scenario comparison ("Plan A vs Plan B")
-- Headcount cost modelling (salary band × headcount plan → budget by quarter)
+- Headcount cost modelling (salary band × headcount plan → budget by quarter) **Done 2026-11-06** (salary range per plan, budget by quarter, admin only)
 - HRIS sync (BambooHR, Rippling, HiBob, Workday) for the Enterprise tier
 - SSO/SAML + SCIM (WorkOS), audit log export, SOC 2 Type I prep
 - Embeds (Notion/Confluence) and Slack integration for share links

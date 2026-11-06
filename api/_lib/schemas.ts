@@ -130,15 +130,28 @@ const headcountFields = {
   notes: z.string().max(5000).nullable().optional(),
 }
 
+// Cost of a planned hire (owner/admin only; the routes check the role). Whole units per year.
+export const HEADCOUNT_SALARY_FIELDS = ['salaryMin', 'salaryMax', 'salaryCurrency'] as const
+const salaryFields = {
+  salaryMin: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  salaryMax: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  salaryCurrency: z.string().trim().regex(/^[A-Za-z]{3}$/, 'use a 3-letter currency code').transform(c => c.toUpperCase()).nullable().optional(),
+}
+const minNotAboveMax = (v: { salaryMin?: number | null; salaryMax?: number | null }) =>
+  v.salaryMin == null || v.salaryMax == null || v.salaryMin <= v.salaryMax
+const SALARY_ORDER = { message: 'the minimum cannot be above the maximum', path: ['salaryMin'] }
+
 export const HeadcountCreate = z.object({
   ...headcountFields,
+  ...salaryFields,
   roleType: headcountFields.roleType.default('new-headcount'),
-})
+}).refine(minNotAboveMax, SALARY_ORDER)
 
 export const HeadcountUpdate = z.object({
   ...headcountFields,
+  ...salaryFields,
   status: enumOf(headcountStatusEnum),
-}).partial()
+}).partial().refine(minNotAboveMax, SALARY_ORDER)
 
 const Colour = z.string().trim().min(1).max(50)
 
