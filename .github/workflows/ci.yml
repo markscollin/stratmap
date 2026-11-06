@@ -49,7 +49,8 @@ jobs:
   # secret E2E_DATABASE_URL. Without it (e.g. PRs from forks) the job passes and skips.
   # Deliberately a separate job from `check`: add it to branch protection once it is stable.
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright's browser install doesn't support the newest ubuntu-latest image yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
