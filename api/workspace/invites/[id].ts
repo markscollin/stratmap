@@ -4,6 +4,7 @@ import { requireAuth } from '../../_lib/auth'
 import { requireRole, ROLE_RANK, getEffectivePlan, getSeatUsage, sendPlanLimit } from '../../_lib/access'
 import { enforceRateLimit } from '../../_lib/rateLimit'
 import { db } from '../../_lib/db'
+import { logAudit } from '../../_lib/audit'
 import { reportError } from '../../_lib/sentry'
 import { sendInviteEmail, toInviteView } from '../../_lib/invites'
 import { newInviteToken, isExpired } from '../../_lib/inviteTokens'
@@ -37,6 +38,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       await db.delete(pendingInvites).where(where)
+      await logAudit({
+        workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.revoked',
+        targetType: 'invite', targetId: invite.id, details: { email: invite.email, role: invite.permission },
+      })
       return res.status(204).end()
     }
 
@@ -60,6 +65,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where(where)
       .returning()
     await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email: updated.email, token })
+    await logAudit({
+      workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.resent',
+      targetType: 'invite', targetId: updated.id, details: { email: updated.email, role: updated.permission },
+    })
     return res.json(toInviteView(updated))
   } catch (err) {
     console.error('/api/workspace/invites/[id]', err)

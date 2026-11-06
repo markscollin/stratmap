@@ -7,16 +7,20 @@ import { usePlanLimits } from '../hooks/usePlanLimits'
 import { api, ApiError } from '../lib/apiClient'
 import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
 import { useBillingStore } from '../store/billingStore'
+import { ActivityTab } from '../features/audit/ActivityTab'
 import { ManageBillingButton } from '../features/billing/ManageBillingButton'
 import type { Permission, PlanTier, SubscriptionInfo } from '../types'
 
-type Tab = 'general' | 'members' | 'billing' | 'notifications'
-const TABS: Tab[] = ['general', 'members', 'billing', 'notifications']
+type Tab = 'general' | 'members' | 'billing' | 'notifications' | 'activity'
+const TABS: Tab[] = ['general', 'members', 'billing', 'notifications', 'activity']
 
 export function SettingsView() {
   // ?tab=billing deep-links here (the Customer Portal and payment emails return to it).
   const [params] = useSearchParams()
   const initial = params.get('tab') as Tab | null
+  const { canAdmin } = usePermission()
+  // The activity log is for owners and admins (roadmap 4.4); the API enforces it too.
+  const visibleTabs = (['General', 'Members', 'Billing', 'Notifications', ...(canAdmin ? ['Activity'] : [])]) as string[]
   const [tab, setTab] = useState<Tab>(initial && TABS.includes(initial) ? initial : 'general')
   return (
     <div style={{ padding: 32, animation: 'fadeUp .3s ease-out' }}>
@@ -26,8 +30,8 @@ export function SettingsView() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 28 }}>
-        {(['General','Members','Billing','Notifications'] as const).map(t => {
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 28, overflowX: 'auto' }}>
+        {visibleTabs.map(t => {
           const key = t.toLowerCase() as Tab
           const active = tab === key
           return (
@@ -46,6 +50,7 @@ export function SettingsView() {
       {tab === 'members'       && <MembersTab />}
       {tab === 'billing'       && <BillingTab />}
       {tab === 'notifications' && <NotificationsTab />}
+      {tab === 'activity'      && canAdmin && <ActivityTab />}
     </div>
   )
 }

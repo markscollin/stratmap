@@ -10,6 +10,7 @@ import {
   bigint,
   index,
   uniqueIndex,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -255,3 +256,18 @@ export type HeadcountPlan = typeof headcountPlans.$inferSelect
 export type NewHeadcountPlan = typeof headcountPlans.$inferInsert
 export type SharedLink = typeof sharedLinks.$inferSelect
 export type NewSharedLink = typeof sharedLinks.$inferInsert
+
+// ─── Audit log (roadmap 4.4) ─────────────────────────────────────────────────
+// Who changed what, when, for member, permission, invite, share and salary changes. Append-only.
+// `details` holds small facts about the event (emails, roles, chart/role names) and NEVER salary
+// amounts. Rows are removed with the workspace (cascade).
+export const auditLog = pgTable('audit_log', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  actorUserId: text('actor_user_id').notNull(),   // Clerk userId
+  action: text('action').notNull(),               // e.g. 'member.role_changed' (see api/_lib/audit.ts)
+  targetType: text('target_type').notNull(),      // 'member' | 'invite' | 'chart' | 'role'
+  targetId: text('target_id'),
+  details: jsonb('details').$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('audit_log_workspace_created_idx').on(t.workspaceId, t.createdAt)])

@@ -5,6 +5,7 @@ import { requireAuth } from '../../_lib/auth'
 import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, requireChartsEditable } from '../../_lib/access'
 import { db } from '../../_lib/db'
+import { logAudit } from '../../_lib/audit'
 import { charts, sharedLinks } from '../../../src/lib/db/schema'
 
 // 12 random bytes → 16 URL-safe chars (96 bits). Must stay ≤ 20 chars: SharePage
@@ -21,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const chartId = req.query.id as string
 
     const [chart] = await db
-      .select({ id: charts.id, isPublic: charts.isPublic })
+      .select({ id: charts.id, name: charts.name, isPublic: charts.isPublic })
       .from(charts)
       .where(and(eq(charts.id, chartId), eq(charts.workspaceId, auth.workspaceId)))
       .limit(1)
@@ -50,13 +51,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdBy: auth.userId,
       })
 
+      await logAudit({
+        workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'share.link_created',
+        targetType: 'chart', targetId: chartId, details: { chartName: chart.name },
+      })
       await track('share_enabled', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req) })
 
       return res.status(201).json({ code })
     }
 
     if (req.method === 'DELETE') {
-      await db.delete(sharedLinks).where(eq(sharedLinks.chartId, chartId))
+      const revoked = await db.delete(sharedLinks).where(eq(sharedLinks.chartId, chartId)).returning({ id: sharedLinks.id })
+      if (revoked.length) {
+        await logAudit({
+          workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'share.link_revoked',
+          targetType: 'chart', targetId: chartId, details: { chartName: chart.name },
+        })
+      }
       return res.status(204).end()
     }
 

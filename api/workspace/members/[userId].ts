@@ -6,6 +6,7 @@ import { parseBody } from '../../_lib/validate'
 import { MemberUpdate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { workspaceMembers } from '../../../src/lib/db/schema'
+import { logAudit } from '../../_lib/audit'
 
 // Members are managed by admins+. A caller may only act on members ranked
 // strictly below themselves, and may only grant roles strictly below their own
@@ -60,6 +61,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ))
         .returning()
 
+      await logAudit({
+        workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'member.role_changed',
+        targetType: 'member', targetId: targetUserId,
+        details: { email: member.email, from: member.permission, to: body.permission },
+      })
       return res.json(updated)
     }
 
@@ -69,6 +75,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         eq(workspaceMembers.workspaceId, auth.workspaceId),
         eq(workspaceMembers.userId, targetUserId),
       ))
+    await logAudit({
+      workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'member.removed',
+      targetType: 'member', targetId: targetUserId, details: { email: member.email, role: member.permission },
+    })
     return res.status(204).end()
   } catch (err) {
     console.error('/api/workspace/members/[userId]', err)

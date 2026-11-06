@@ -5,6 +5,7 @@ import { parseBody } from '../_lib/validate'
 import { InviteAccept } from '../_lib/schemas'
 import { enforceRateLimit } from '../_lib/rateLimit'
 import { db } from '../_lib/db'
+import { logAudit } from '../_lib/audit'
 import { reportError } from '../_lib/sentry'
 import { getUserIdentity } from '../_lib/identity'
 import { hashInviteToken, isExpired } from '../_lib/inviteTokens'
@@ -113,6 +114,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw err
     }
 
+    await logAudit({
+      workspaceId: claimed.workspaceId, actorUserId: user.userId, action: 'member.joined',
+      targetType: 'member', targetId: user.userId, details: { email: claimed.email, role: claimed.permission, invitedBy: claimed.invitedBy },
+    })
     return res.status(201).json({ workspaceId: claimed.workspaceId, permission: claimed.permission })
   } catch (err) {
     console.error('/api/invites/accept', err)
