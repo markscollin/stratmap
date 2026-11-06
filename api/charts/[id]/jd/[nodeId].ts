@@ -5,7 +5,8 @@ import { getPermission, atLeast, type Permission, requireFeature, requireChartsE
 import { parseBody } from '../../../_lib/validate'
 import { JDUpdate, SALARY_FIELDS } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
-import { charts, jobDescriptions } from '../../../../src/lib/db/schema'
+import { logAudit } from '../../../_lib/audit'
+import { charts, jobDescriptions, nodes } from '../../../../src/lib/db/schema'
 
 // Salary bands are confidential: only admins/owners may read or write them.
 function canSeeSalary(permission: Permission | null): boolean {
@@ -21,6 +22,20 @@ function redactSalary<T extends Record<string, unknown>>(jd: T, permission: Perm
 
 // Moving a JD into these states is an approval step (admin+), matching JDPanel.
 const ADMIN_ONLY_STATUSES = new Set(['approved', 'published', 'hired'])
+
+// Audit (roadmap 4.4): record THAT a salary band changed and which parts, never the amounts.
+async function logSalaryChange(
+  auth: { workspaceId: string; userId: string }, chartId: string, nodeId: string, changed: readonly string[],
+) {
+  if (changed.length === 0) return
+  const [node] = await db.select({ title: nodes.title }).from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))).limit(1)
+  await logAudit({
+    workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'salary.updated',
+    targetType: 'role', targetId: nodeId,
+    details: { chartId, roleTitle: node?.title ?? null, changed: changed.join(',') },
+  })
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -82,7 +97,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const [existing] = await db
-        .select({ id: jobDescriptions.id, version: jobDescriptions.version })
+        .select({
+          id: jobDescriptions.id, version: jobDescriptions.version,
+          salaryBandMin: jobDescriptions.salaryBandMin, salaryBandMax: jobDescriptions.salaryBandMax, salaryCurrency: jobDescriptions.salaryCurrency,
+        })
         .from(jobDescriptions)
         .where(and(eq(jobDescriptions.nodeId, nodeId), eq(jobDescriptions.chartId, chartId)))
         .limit(1)
@@ -95,6 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .set({ ...body, version, updatedAt: new Date(), updatedBy: auth.userId })
           .where(eq(jobDescriptions.id, existing.id))
           .returning()
+        await logSalaryChange(auth, chartId, nodeId, SALARY_FIELDS.filter(f => body[f] !== undefined && body[f] !== (existing[f] ?? null)))
         return res.json(redactSalary(updated, permission))
       }
 
@@ -113,6 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         .returning()
 
+      await logSalaryChange(auth, chartId, nodeId, SALARY_FIELDS.filter(f => body[f] !== undefined && body[f] !== null))
       return res.status(201).json(redactSalary(created, permission))
     }
 

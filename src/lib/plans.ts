@@ -43,7 +43,7 @@ export function fitsLimit(limit: number, count: number, adding = 1): boolean {
 // we describe them. Used by the API (enforcement), the lock UI and UpgradeModal
 // (copy) and the pricing page, so all of them agree on what is locked.
 
-export type PaidFeature = 'jd-editor' | 'approval-workflow' | 'pdf-export' | 'ai-drafting' | 'auto-layout' | 'headcount-planning'
+export type PaidFeature = 'jd-editor' | 'approval-workflow' | 'pdf-export' | 'ai-drafting' | 'auto-layout' | 'headcount-planning' | 'audit-export'
 
 export interface FeatureInfo {
   /** Cheapest tier that includes the feature. */
@@ -83,6 +83,11 @@ export const PAID_FEATURES: Record<PaidFeature, FeatureInfo> = {
     minTier: 'growth',
     label: 'Headcount planning',
     unlocks: 'Plan hires quarter by quarter on a board linked to your charts and departments, with admin approval.',
+  },
+  'audit-export': {
+    minTier: 'enterprise',
+    label: 'Audit log export',
+    unlocks: 'Download the full history of member, permission, sharing and salary changes as a CSV for compliance reviews.',
   },
 }
 

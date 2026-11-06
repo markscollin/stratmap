@@ -185,7 +185,7 @@ export async function requireFeature(workspaceId: string, res: VercelResponse, f
     feature,
     requiredTier: info.minTier,
     tier: plan?.tier ?? 'free',
-    message: `${info.label} ${info.label.endsWith('s') ? 'are' : 'is'} available on the ${info.minTier === 'starter' ? 'Starter' : 'Growth'} plan and above. ${info.unlocks}`,
+    message: `${info.label} ${info.label.endsWith('s') ? 'are' : 'is'} available on the ${info.minTier === 'starter' ? 'Starter' : info.minTier === 'growth' ? 'Growth' : 'Enterprise'} plan and above. ${info.unlocks}`,
   })
   return false
 }

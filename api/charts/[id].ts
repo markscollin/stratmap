@@ -6,6 +6,7 @@ import { claimRevision } from '../_lib/revision'
 import { parseBody } from '../_lib/validate'
 import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
+import { logAudit } from '../_lib/audit'
 import { APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
@@ -68,6 +69,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(eq(charts.id, chartId))
         .returning()
 
+      if (isPublic !== undefined && isPublic !== chart.isPublic) {
+        await logAudit({
+          workspaceId: auth.workspaceId, actorUserId: auth.userId, action: isPublic ? 'share.public_on' : 'share.public_off',
+          targetType: 'chart', targetId: chartId, details: { chartName: updated.name },
+        })
+      }
       return res.json(updated)
     }
 

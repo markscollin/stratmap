@@ -50,6 +50,13 @@
       "when": 1793953424044,
       "tag": "0006_onboarding_samples",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793959363799,
+      "tag": "0007_white_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

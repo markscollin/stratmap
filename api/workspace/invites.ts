@@ -7,6 +7,7 @@ import { parseBody } from '../_lib/validate'
 import { InviteCreate } from '../_lib/schemas'
 import { enforceRateLimit } from '../_lib/rateLimit'
 import { db } from '../_lib/db'
+import { logAudit } from '../_lib/audit'
 import { reportError } from '../_lib/sentry'
 import { sendInviteEmail, toInviteView } from '../_lib/invites'
 import { newInviteToken } from '../_lib/inviteTokens'
@@ -75,6 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .values({ id: crypto.randomUUID(), workspaceId: auth.workspaceId, email, permission, tokenHash, expiresAt, invitedBy: auth.userId })
         .returning()
       created.push(toInviteView(row))
+      await logAudit({
+        workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.sent',
+        targetType: 'invite', targetId: row.id, details: { email, role: permission },
+      })
       await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email, token })
     }
 

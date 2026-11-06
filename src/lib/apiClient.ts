@@ -97,6 +97,13 @@ async function send<T>(
   return data as T
 }
 
+// A text download such as a CSV (the JSON helpers above would try to parse it). Throws ApiError on non-2xx.
+async function getText(path: string): Promise<string> {
+  const res = await fetch(path, { headers: await getAuthHeaders() })
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})))
+  return res.text()
+}
+
 // Returns the raw Response so callers can read a streaming body (res.body).
 // Does not throw on non-2xx — the caller inspects res.status / res.ok itself.
 async function postStream(
@@ -115,6 +122,7 @@ async function postStream(
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
+  getText,
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>

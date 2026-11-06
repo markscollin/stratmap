@@ -309,6 +309,23 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
 - **AI disclosure (4.3):** the AI draft panel says the role title, department, tone and notes go to Anthropic and nothing else (no names, emails, salaries). `api/__tests__/ai-draft.test.ts` proves
   the prompt holds only those fields; keep it that way if the prompt changes, and update the disclosure text with it.
 
+## Audit log (roadmap 4.4, 2026-11-06)
+
+- **Table `audit_log`** (migration 0007, append-only, cascades with the workspace): `actor_user_id`, `action`, `target_type`, `target_id`, small `details` jsonb, `created_at`.
+  Write with `logAudit()` from `api/_lib/audit.ts`, **after** the change succeeded. It is best-effort: a failed write is logged to the server console and never fails the action.
+  A refused or no-op change logs nothing.
+- **Recorded:** `member.joined` (invite accepted; the joiner is the actor), `member.role_changed`, `member.removed`, `invite.sent` / `resent` / `revoked`, `share.link_created` /
+  `link_revoked`, `share.public_on` / `public_off` (only when the value actually changes), `salary.updated`. To log a new kind of event add it to `AuditAction`, call `logAudit`, and add a line
+  in `src/lib/auditText.ts`.
+- **Owner-decided: never salary amounts.** `salary.updated` stores only the role title and which parts changed (`changed: 'salaryBandMin,salaryBandMax'`). `details` must never hold amounts,
+  invite tokens or other secrets; `api/__tests__/audit.test.ts` checks both. Emails (member/invitee) are stored in `details` because the member row is gone after a removal.
+- **Reading:** `GET /api/workspace/audit?limit&before` (owner/admin, newest first, `nextBefore` cursor, readable on every plan). `?format=csv` needs the Enterprise feature `audit-export`
+  (in `PAID_FEATURES`; 402 `plan-feature` otherwise) and goes through `toCsv` (formula-safe). Actors are resolved from current members; someone who left shows as "A former member".
+- **UI:** Settings → **Activity** tab, shown to owner/admin only (`ActivityTab`). Non-Enterprise plans see a `LockedFeatureCard` instead of the export button. `api.getText()` is the client helper for text downloads.
+- **Also:** the pure CSV functions moved to `src/lib/csvText.ts` (no browser types, so `api/` can import them); `csvSafe.ts` re-exports them and keeps `downloadText`.
+- **Not logged yet:** workspace rename, chart delete, billing changes, anything in 4.2 (workspace/account deletion should log when it is built).
+- **Tests:** `api/__tests__/audit.test.ts`, `src/lib/__tests__/auditText.test.ts`, `src/features/audit/__tests__/ActivityTab.test.tsx`, `tests/e2e/audit.spec.ts`.
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
