@@ -184,4 +184,55 @@ describe('ImportDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review' }))
     expect(await screen.findByLabelText('New chart name')).toBeInTheDocument()
   })
+
+  // What "Export as CSV" writes, in a few rows: positions, formatting and reporting lines.
+  const EXPORT_CSV = [
+    'ID,Name,Title,Department,Reports to,Location,Start date,Role type,Status,Employment type,X,Y,Department colour',
+    '1,Alex,CEO,Leadership,,,,,Active,Full-time,500,0,#64748B',
+    '2,Sam,CTO,Engineering,1,,,,Active,Full-time,100.5,180,#0EA5E9',
+    '3,,Engineer,Engineering,2,,,New headcount,Open,Full-time,-40,360,#0EA5E9',
+  ].join('\n') + '\n'
+
+  it('shows the layout and formatting columns open when the file has them', async () => {
+    renderDialog()
+    await upload(EXPORT_CSV)
+    await screen.findByText(/people.csv/)
+    const details = screen.getByText('Layout and formatting (optional)').closest('details')!
+    expect(details).toHaveAttribute('open')
+    expect((screen.getByLabelText('X position') as HTMLSelectElement).value).toBe('10')
+    expect((screen.getByLabelText('Department colour') as HTMLSelectElement).value).toBe('12')
+  })
+
+  it('keeps the exact positions, colours and status when importing into a new chart', async () => {
+    vi.mocked(api.post).mockResolvedValue({ id: 'n1', name: 'people', status: 'draft', version: 1, createdAt: '', updatedAt: '' })
+    renderDialog()
+    await upload(EXPORT_CSV)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
+    expect(await screen.findByText(/keep the positions in your file/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Import 3 roles' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+
+    const body = vi.mocked(api.post).mock.calls[0][1] as {
+      templateNodes: { title: string; x: number; y: number; status: string }[]
+      templateDepts: { name: string; colour: string }[]
+    }
+    expect(body.templateNodes.map(n => [n.title, n.x, n.y])).toEqual([['CEO', 500, 0], ['CTO', 100.5, 180], ['Engineer', -40, 360]])
+    expect(body.templateNodes[2].status).toBe('open')
+    expect(body.templateDepts.find(d => d.name === 'Engineering')?.colour).toBe('#0EA5E9')
+  })
+
+  it('moves the shape to the right of the chart when adding to it, keeping relative positions', async () => {
+    vi.mocked(api.post).mockResolvedValue({})
+    renderDialog({ chart: CHART(2), onImported: vi.fn() }) // existing nodes at x 0 and 100
+    await upload(EXPORT_CSV)
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Import 3 roles' }))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const { nodes } = vi.mocked(api.post).mock.calls[0][1] as { nodes: OrgNode[] }
+    const xs = nodes.map(n => n.x)
+    expect(Math.min(...xs)).toBeGreaterThan(100)                 // clear of what's there
+    expect(nodes[0].x - nodes[2].x).toBeCloseTo(540, 2)          // 500 - (-40)
+    expect(nodes[2].y - nodes[0].y).toBe(360)
+  })
 })
+

@@ -11,7 +11,8 @@ const map = (m: Partial<ColumnMapping>): ColumnMapping => ({ ...emptyMapping(), 
 describe('guessMapping', () => {
   it('maps common header names', () => {
     const m = guessMapping(['Employee ID', 'Full Name', 'Job Title', 'Department', 'Manager', 'Work Email', 'Office', 'Hire Date', 'Role Type'])
-    expect(m).toEqual({ rowId: 0, name: 1, title: 2, department: 3, manager: 4, email: 5, location: 6, startDate: 7, roleType: 8 })
+    expect(m).toMatchObject({ rowId: 0, name: 1, title: 2, department: 3, manager: 4, email: 5, location: 6, startDate: 7, roleType: 8 })
+    expect([m.status, m.employmentType, m.x, m.y, m.departmentColour]).toEqual([null, null, null, null, null])
   })
 
   it('gives "Manager Email" to the manager, not to email', () => {

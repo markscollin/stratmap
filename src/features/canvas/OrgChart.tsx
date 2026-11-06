@@ -19,6 +19,8 @@ import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStor
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
 import { ImportDialog } from '../import/ImportDialog'
+import { buildChartCsv } from '../../lib/exportOrg'
+import { downloadText, fileSlug } from '../../lib/csvSafe'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -178,7 +180,7 @@ function ConnectingLine({ fromNode, mousePos, transform }: {
 
 type ActiveTool = 'select' | 'pan' | 'zoom' | 'connect'
 
-function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) {
+function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf' | 'csv') => void }) {
   const [open, setOpen] = useState(false)
   const [hov, setHov] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
@@ -210,7 +212,7 @@ function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf') => void }) 
             borderRadius: 8, padding: 4, zIndex: 50,
             boxShadow: 'var(--shadow-sm)', minWidth: 150,
           }}>
-            {(['png', 'pdf'] as const).map(fmt => (
+            {(['png', 'pdf', 'csv'] as const).map(fmt => (
               <button
                 key={fmt}
                 onClick={() => {
@@ -553,7 +555,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onAutoLayout,
   onAddNode: () => void; onImport: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
-  onExport: (format: 'png' | 'pdf') => void
+  onExport: (format: 'png' | 'pdf' | 'csv') => void
   chartId: string; isPublic: boolean
   filterOpen: boolean; onFilterOpenChange: (open: boolean) => void
   departments: Department[]; filters: ActiveFilters; onFiltersChange: (f: ActiveFilters) => void
@@ -1047,7 +1049,18 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   const [isExporting,    setIsExporting]    = useState(false)
   const [exportOverflow, setExportOverflow] = useState(false)
 
-  const handleExport = useCallback(async (format: 'png' | 'pdf') => {
+  const handleExport = useCallback(async (format: 'png' | 'pdf' | 'csv') => {
+    if (format === 'csv') {
+      // Free for everyone, built in the browser from what's on screen. Also a valid import file.
+      if (nodesRef.current.length === 0) { addToast('This chart has no roles to export yet.', 'info'); return }
+      const out = buildChartCsv({ nodes: nodesRef.current, edges, departments })
+      downloadText(`${fileSlug(chartName, 'chart')}.csv`, out.csv)
+      addToast(`Exported ${out.rows} role${out.rows === 1 ? '' : 's'} to CSV.`, 'success')
+      if (out.multiManager > 0) {
+        addToast(`${out.multiManager} role${out.multiManager === 1 ? ' has' : 's have'} more than one manager. Only the first is in the file.`, 'warning')
+      }
+      return
+    }
     if (!containerRef.current || isExporting) return
     const ns = nodesRef.current
     if (ns.length === 0) return
@@ -1080,7 +1093,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       setTransform(savedTransform)
       setIsExporting(false)
     }
-  }, [containerRef, nodesRef, isExporting, transform, setTransform, chartName])
+  }, [containerRef, nodesRef, isExporting, transform, setTransform, chartName, edges, departments, addToast])
 
   const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null

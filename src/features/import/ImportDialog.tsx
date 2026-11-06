@@ -246,6 +246,7 @@ function MapStep({ sheet, fileName, mapping, onChange, chart, target, onTarget, 
   onBack: () => void; onNext: () => void
 }) {
   const ok = mapping.name !== null || mapping.title !== null
+  const advancedMapped = IMPORT_FIELDS.some(f => f.advanced && mapping[f.field] !== null)
   const sample = (col: number) =>
     sheet.rows.map(r => r[col]).filter(v => v && v.trim()).slice(0, 2).join(' · ')
 
@@ -273,8 +274,8 @@ function MapStep({ sheet, fileName, mapping, onChange, chart, target, onTarget, 
       <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
         Match your columns. A row needs a <strong>name</strong> or a <strong>title</strong>; leave the name blank for a role you haven't filled yet.
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '10px 12px', alignItems: 'start' }}>
-        {IMPORT_FIELDS.map(f => (
+      <div style={fieldGrid}>
+        {IMPORT_FIELDS.filter(f => !f.advanced).map(f => (
           <FieldRow
             key={f.field} field={f.field} label={f.label} hint={f.hint}
             value={mapping[f.field]} headers={sheet.headers} sample={sample}
@@ -282,6 +283,21 @@ function MapStep({ sheet, fileName, mapping, onChange, chart, target, onTarget, 
           />
         ))}
       </div>
+      {/* Files exported from StratMap fill these in, which keeps the chart's shape and formatting. */}
+      <details open={advancedMapped} style={{ marginTop: 14 }}>
+        <summary style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer', marginBottom: 10 }}>
+          Layout and formatting (optional)
+        </summary>
+        <div style={fieldGrid}>
+          {IMPORT_FIELDS.filter(f => f.advanced).map(f => (
+            <FieldRow
+              key={f.field} field={f.field} label={f.label} hint={f.hint}
+              value={mapping[f.field]} headers={sheet.headers} sample={sample}
+              onChange={v => onChange({ ...mapping, [f.field]: v })}
+            />
+          ))}
+        </div>
+      </details>
       {!ok && <p role="alert" style={{ ...errorBox, marginTop: 14 }}>Choose a Name column or a Title column to continue.</p>}
 
       <Footer>
@@ -344,7 +360,8 @@ function ReviewStep({ plan, chart, target, maxNodes, newName, onNewName, newChar
           <Check size={14} /> No problems found.{' '}
           {appending
             ? `${stats.imported} role${stats.imported === 1 ? '' : 's'} will be added next to the existing chart.`
-            : 'These roles will be laid out into a new chart.'}
+            : plan.layout === 'file' ? 'These roles will keep the positions in your file.' : 'These roles will be laid out into a new chart.'}
+          {appending && plan.layout === 'file' && ' They keep their shape from your file.'}
         </p>
       )}
       {plan.overLimit && (
@@ -444,6 +461,7 @@ function Footer({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>{children}</div>
 }
 
+const fieldGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '140px 1fr', gap: '10px 12px', alignItems: 'start' }
 const primaryBtn: React.CSSProperties = { padding: '11px', background: 'var(--grad-brand)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, boxShadow: '0 4px 14px var(--brand-glow)' }
 const secondaryBtn: React.CSSProperties = { flex: 1, padding: '11px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 9, color: 'var(--muted)', fontSize: 14, cursor: 'pointer' }
 const linkBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: 'var(--brand)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }
