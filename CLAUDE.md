@@ -299,6 +299,16 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   webhook failure emails, how to prove an alert reaches a phone, and a runbook for a red health check. Each health check wakes Neon's compute, so poll every 3 to 5 minutes, not seconds.
 - The uptime monitors, alert channels and status page are **dashboard actions**, not code.
 
+## Consent and AI disclosure (roadmap 4.5 + 4.3, 2026-11-06)
+
+- **Nothing third-party loads before the cookie banner is answered.** Fonts are bundled (`@fontsource-variable/dm-sans`, `@fontsource/jetbrains-mono`, imported in
+  `src/styles/fonts.css`; the family is `'DM Sans Variable'`, JetBrains Mono keeps its name), so there is no request to Google Fonts and the CSP no longer allows it. Do not add a
+  CDN stylesheet, script or font to `index.html` or the CSS. `src/lib/__tests__/monitoring.test.ts` fails if one appears.
+- **Sentry (`src/lib/monitoring.ts`):** crash reports go to everyone (running the service), but `sendDefaultPii: false` and only the error integrations are installed: no Replay, tracing or
+  feedback. If replay is ever added, start it only after `hasAnalyticsConsent()`. Analytics is server-side and already consent-gated (2.3).
+- **AI disclosure (4.3):** the AI draft panel says the role title, department, tone and notes go to Anthropic and nothing else (no names, emails, salaries). `api/__tests__/ai-draft.test.ts` proves
+  the prompt holds only those fields; keep it that way if the prompt changes, and update the disclosure text with it.
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically

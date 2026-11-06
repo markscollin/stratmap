@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/react'
+import { initMonitoring } from './lib/monitoring'
 import './styles/globals.css'
 import App from './App.tsx'
 import { useUserStore } from './store/userStore'
@@ -8,16 +9,8 @@ import { useBillingStore, PLAN_BY_TIER } from './store/billingStore'
 import type { Permission } from './types/user'
 import type { PlanTier } from './types'
 
-// Error monitoring — no-op unless VITE_SENTRY_DSN is configured. The DSN is a
-// public client identifier, so the VITE_ prefix is correct here (unlike API keys).
-const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
-if (SENTRY_DSN) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    environment: import.meta.env.MODE,
-    tracesSampleRate: 0.1,
-  })
-}
+// Error monitoring — no-op unless VITE_SENTRY_DSN is configured (see lib/monitoring.ts for what is sent).
+initMonitoring()
 
 if (import.meta.env.DEV) {
   (window as Window & { __devTools?: unknown }).__devTools = {
