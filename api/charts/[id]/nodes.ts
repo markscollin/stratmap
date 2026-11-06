@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and, count } from 'drizzle-orm'
+import { eq, and, count, sql } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
@@ -67,11 +67,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const positions = parseBody(NodePositions, req, res)
       if (!positions) return
 
-      await Promise.all(
-        positions.map(({ id, x, y }) =>
-          db.update(nodes).set({ x, y }).where(and(eq(nodes.id, id), eq(nodes.chartId, chartId)))
-        )
-      )
+      // One statement however many roles moved (roadmap 3.4): a drag of a 1,000-role chart used to be
+      // 1,000 UPDATEs. Scoped to this chart, so ids from elsewhere match nothing.
+      if (positions.length > 0) {
+        const values = sql.join(positions.map(p => sql`(${p.id}::text, ${p.x}::real, ${p.y}::real)`), sql`, `)
+        await db.execute(sql`
+          UPDATE ${nodes} AS n SET x = v.x, y = v.y
+          FROM (VALUES ${values}) AS v(id, x, y)
+          WHERE n.id = v.id AND n.chart_id = ${chartId}`)
+      }
 
       await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
 

@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**429 frontend + 474 backend = 903 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**444 frontend + 491 backend = 935 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -273,6 +273,31 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   and search fit. Roles, Headcount and Settings only scroll (not reflowed).
 - **Tests:** `src/hooks/__tests__/useMediaQuery.test.tsx`, `src/components/layout/__tests__/Layout.test.tsx`, `src/features/canvas/__tests__/pinch.test.ts`,
   `src/pages/__tests__/CanvasView.test.tsx`, phone cases in `SharePage.test.tsx`, `tests/e2e/mobile.spec.ts` (real touch pan and pinch through CDP, no sideways scroll, tablet keeps editing).
+
+## Performance on big charts (roadmap 3.4, 2026-11-06)
+
+- **Measured** with `tests/e2e/performance.spec.ts` (builds a 1,000-role chart through the API on an Enterprise workspace via `setPlanFor()` in `tests/e2e/helpers.ts`, then
+  measures in a real browser; the numbers are printed as `[perf] …`). Before: opens in 2.5 s with all 1,000 cards in the DOM, dragging p95 frame 167 ms (worst 367 ms, about 6 fps).
+  After, same machine: opens in about 1.6 to 2.1 s (mostly the fetch from the remote Neon database), dragging p95 16.8 ms at the zoomed-out view and 16.7 ms zoomed in (60 fps).
+- **Canvas** (`src/features/canvas/viewport.ts`, pure and tested): above 300 roles (`VIRTUALIZE_ABOVE`) only roles whose card is near the screen are rendered
+  (`visibleNodeIds`, with a 240 px margin so panning never shows a blank edge), and a reporting line is drawn when its bounding box touches the view (`edgeInView`, so a long line
+  that crosses the screen between two off-screen roles still shows). Below 40% zoom (`CHIP_BELOW_SCALE`) a big chart draws `NodeChip` (one empty element, coloured by department) and
+  `EdgeLine` (a plain path) instead of full cards, because a card is a few unreadable pixels there. The selected and connecting role are always rendered. **Exports render everything**
+  (`exportOverflow`). `NodeChip` and `EdgeLine` are memoised with id-taking handlers, so a drag re-renders one chip and its lines, not all of them. The minimap's dots are memoised too.
+- **Fewer saves:** a drag sends only the roles that moved (`movedPositions` against `syncedPositions`, updated after each successful save), not the whole chart.
+- **Server:** `PUT /api/charts/:id/nodes` (bulk positions) is one `UPDATE … FROM (VALUES …)` scoped to the chart, instead of one UPDATE per role. Ids are still validated
+  (safe charset), ids from another chart match nothing, and it does not bump `revision`. Note: **a single multi-thousand-row INSERT breaks the in-memory test database**
+  (about 15 bound parameters per node row, 65k limit): use `chunk()` from `api/_lib/chunk.ts`, as the import route does.
+- **Small fixes on the way:** the zoom buttons now have accessible names ("Zoom in", "Zoom out", "Fit to view"); `NodeCard` has `data-testid="node-card"`.
+- **Tests:** `src/features/canvas/__tests__/viewport.test.ts`, `api/__tests__/positions.test.ts`, `tests/e2e/performance.spec.ts` (bounds are loose for CI: open under 6 s, drag p95 under 120 ms).
+
+## Monitoring (roadmap 3.9, 2026-11-06)
+
+- **`GET /api/health`** (`api/health.ts`): public and read-only; 200 `{status:'ok'}` when the database answers `select 1`, 503 `{status:'degraded'}` when it errors or takes over 3 s. It never
+  says why (the reason goes to the logs as `[health] database check failed: …`). `HEAD` works. Tests: `api/__tests__/health.test.ts`, `tests/e2e/health.spec.ts`.
+- **`docs/MONITORING.md`** is the owner's step-by-step: Sentry DSNs (`VITE_SENTRY_DSN` is build-time) and alert rules, two uptime monitors (`/` and `/api/health`), a status page, Stripe
+  webhook failure emails, how to prove an alert reaches a phone, and a runbook for a red health check. Each health check wakes Neon's compute, so poll every 3 to 5 minutes, not seconds.
+- The uptime monitors, alert channels and status page are **dashboard actions**, not code.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 

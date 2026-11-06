@@ -98,6 +98,7 @@ export function NodeCard({
 
   return (
     <div
+      data-testid="node-card"
       style={{
         position: 'absolute', left: node.x, top: node.y,
         width: NODE_W, height: NODE_H,
