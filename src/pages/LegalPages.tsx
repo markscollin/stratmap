@@ -102,6 +102,12 @@ export function PrivacyPage() {
         We use strictly necessary cookies to operate the Service (for example, authentication sessions) and may
         use limited analytics cookies subject to your consent. See the cookie banner shown on first visit.
       </p>
+      <p>
+        If you choose &quot;Accept all&quot;, our servers send a small number of product-usage events (for example
+        &quot;created a first chart&quot; or &quot;invited a teammate&quot;) to our analytics provider, PostHog. These events
+        carry only random account and workspace identifiers and your plan, never your name, email address or the
+        content of your charts. If you choose &quot;Necessary only&quot;, no analytics events are sent.
+      </p>
 
       <H2>7. Contact</H2>
       <p>Questions about this policy: [privacy@yourdomain].</p>

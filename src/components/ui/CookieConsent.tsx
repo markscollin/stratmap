@@ -1,15 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-const CONSENT_KEY = 'stratmap_cookie_consent'
-
-function getStoredConsent(): string | null {
-  try { return localStorage.getItem(CONSENT_KEY) } catch { return null }
-}
-
-function storeConsent(value: 'all' | 'necessary') {
-  try { localStorage.setItem(CONSENT_KEY, value) } catch { /* ignore */ }
-}
+import { getStoredConsent, storeConsent } from '../../lib/consent'
 
 export function CookieConsent() {
   const [dismissed, setDismissed] = useState(() => getStoredConsent() !== null)

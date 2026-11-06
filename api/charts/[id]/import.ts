@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, count } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
+import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
 import { claimRevision } from '../../_lib/revision'
 import { parseBody } from '../../_lib/validate'
@@ -92,6 +93,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
     for (const part of chunk(newEdges)) await db.insert(edges).values(part)
+
+    if (nodeCount < 10 && nodeCount + newNodes.length >= 10) {
+      await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier, via: 'import' } })
+    }
 
     return res.status(201).json({
       imported: newNodes.length,

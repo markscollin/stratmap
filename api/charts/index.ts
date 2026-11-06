@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, desc, count, sql, getTableColumns } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { track, hasAnalyticsConsent } from '../_lib/analytics'
 import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { ChartCreate } from '../_lib/schemas'
@@ -111,6 +112,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           targetId: nodeIdMap.get(e.targetId)!,
         }))
       for (const part of chunk(newEdges)) await db.insert(edges).values(part)
+
+      // Funnel: the workspace's first chart (the plan's chart count was 0 before this one).
+      if (chartCount === 0) {
+        await track('first_chart_created', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier } })
+      }
 
       return res.status(201).json(chart)
     }

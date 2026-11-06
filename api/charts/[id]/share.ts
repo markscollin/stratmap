@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { randomBytes } from 'node:crypto'
 import { requireAuth } from '../../_lib/auth'
+import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, requireChartsEditable } from '../../_lib/access'
 import { db } from '../../_lib/db'
 import { charts, sharedLinks } from '../../../src/lib/db/schema'
@@ -48,6 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         chartId,
         createdBy: auth.userId,
       })
+
+      await track('share_enabled', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req) })
 
       return res.status(201).json({ code })
     }

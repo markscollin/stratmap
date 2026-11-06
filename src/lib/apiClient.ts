@@ -1,6 +1,7 @@
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
 import { getSelectedWorkspaceId, setSelectedWorkspaceId } from './workspaceSelection'
 import { devUserHeader } from './devIdentity'
+import { hasAnalyticsConsent } from './consent'
 import {
   REVISION_HEADER, chartIdOfPath, isChartRead, structuralChartId, rememberRevision,
   revisionHeader, inOrder, hasConflict, useChartConflict,
@@ -9,7 +10,11 @@ import {
 async function getAuthHeaders(): Promise<Record<string, string>> {
   // The selected workspace (roadmap 1.2). The server checks membership.
   const workspaceId = getSelectedWorkspaceId()
-  const ws: Record<string, string> = workspaceId ? { 'X-Workspace-Id': workspaceId } : {}
+  const ws: Record<string, string> = {
+    ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+    // Only after "Accept all": lets the server send product analytics for this request (roadmap 2.3).
+    ...(hasAnalyticsConsent() ? { 'X-Analytics-Consent': '1' } : {}),
+  }
   if (IS_DEV_BYPASS) {
     return { 'X-Dev-User': devUserHeader(), ...ws }
   }

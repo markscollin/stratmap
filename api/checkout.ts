@@ -10,6 +10,7 @@ import { getAppUrl } from './_lib/url'
 import { db } from './_lib/db'
 import { createPortalSession, priceIdFor } from './_lib/billing'
 import { workspaces } from '../src/lib/db/schema'
+import { hasAnalyticsConsent } from './_lib/analytics'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -54,7 +55,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...(ws?.stripeCustomerId ? { customer: ws.stripeCustomerId } : {}),
       client_reference_id: auth.workspaceId,
       // The tier is derived from the price id by the webhook; metadata only links the workspace.
-      metadata: { workspaceId: auth.workspaceId },
+      // `analyticsUser` is set only if the buyer accepted analytics: the webhook (no browser) needs it
+      // to know it may send the 'upgraded' event, and for whom. It is the opaque user id, nothing else.
+      metadata: { workspaceId: auth.workspaceId, ...(hasAnalyticsConsent(req) ? { analyticsUser: auth.userId } : {}) },
       subscription_data: { metadata: { workspaceId: auth.workspaceId } },
       allow_promotion_codes: true,
       success_url: `${appUrl}/billing/success?plan=${tier}&session_id={CHECKOUT_SESSION_ID}`,
