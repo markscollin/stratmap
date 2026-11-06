@@ -8,6 +8,8 @@ import { OrgChart } from '../features/canvas/OrgChart'
 import { usePermission } from '../hooks/usePermission'
 import { useChartLimit } from '../hooks/useChartLimit'
 import { api } from '../lib/apiClient'
+import { useChartConflict } from '../lib/chartRevision'
+import { ChartConflictBanner } from '../features/canvas/ChartConflictBanner'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
 interface FullChart {
@@ -27,6 +29,8 @@ export function CanvasView() {
   const { canEdit } = usePermission()
   // Over the chart limit after a downgrade, every chart is view-only (roadmap 1.6).
   const { frozen } = useChartLimit()
+  // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
+  const conflicted = useChartConflict(s => s.chartId) === id
 
   // Metadata from the store (name, status, version for the header)
   const chartMeta = charts.find(c => c.id === id)
@@ -48,7 +52,11 @@ export function CanvasView() {
     if (reloadKey === 0) setLoading(true)
     setError(false)
     api.get<FullChart>(`/api/charts/${id}`)
-      .then(chart => { setFullChart(chart); if (reloadKey > 0) setCanvasKey(k => k + 1) })
+      .then(chart => {
+        setFullChart(chart)
+        if (reloadKey > 0) setCanvasKey(k => k + 1)
+        useChartConflict.getState().clear()
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [id, reloadKey])
@@ -99,6 +107,8 @@ export function CanvasView() {
         <VersionPill version={version} />
       </div>
 
+      <ChartConflictBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} />
+
       <OrgChart
         key={`${fullChart.id}:${canvasKey}`}
         onImported={() => setReloadKey(k => k + 1)}
@@ -107,7 +117,7 @@ export function CanvasView() {
         initialNodes={fullChart.nodes}
         initialEdges={fullChart.edges}
         departments={depts}
-        readOnly={!canEdit || frozen}
+        readOnly={!canEdit || frozen || conflicted}
         isPublic={chartMeta?.isPublic ?? false}
       />
     </div>

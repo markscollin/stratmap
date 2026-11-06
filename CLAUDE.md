@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**293 frontend + 407 backend = 700 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**318 frontend + 424 backend = 742 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -187,6 +187,20 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   `unguardCell` on every cell. Numbers are not guarded. Files start with a BOM. Use `toCsv`/`downloadText` for any new export.
 - **Headcount CSV:** "Export CSV" on the Headcount page writes the plans shown (selected year and chart filter). It is a read, so it
   stays available when editing is locked by plan or role. Open roles without a role type come back from import as "new headcount".
+
+## Edit conflicts (roadmap 2.4, 2026-11-06)
+
+- **Server:** `charts.revision` (new column, migration 0005; separate from the user-visible `version` pill) goes up by one on every
+  *structural* edit: node create/edit/delete, edge create/delete, import, chart rename or status change. `claimRevision()` in
+  `api/_lib/revision.ts` checks and bumps in one conditional UPDATE and is called last, after validation, role and plan checks. A client
+  sends the revision it last saw in `X-Chart-Revision`; a mismatch is `409 { error: 'chart-changed', revision }`. No header means no check
+  (scripts, old clients) but it still bumps. Every structural response carries the new `X-Chart-Revision`; `GET /api/charts/:id` returns `revision`.
+- **Not counted (owner-decided):** moving boxes (`PUT /nodes`, bulk positions) and turning sharing on/off never conflict and never bump.
+- **Client:** `src/lib/chartRevision.ts` + `apiClient`. Structural writes to one chart are sent one at a time (the canvas fires a node and its
+  edge back to back, and each needs the revision the previous one returned). On `chart-changed` the chart is flagged, nothing more is sent,
+  and `ChartConflictBanner` shows "changed elsewhere, last edit not saved" with Reload; `CanvasView` goes read-only until the reload succeeds.
+  Auto-reload-and-replay was rejected for now (belongs with real-time collaboration).
+- **Tests:** `api/__tests__/revision.test.ts`, `src/lib/__tests__/chartRevision.test.ts`, `ChartConflictBanner.test.tsx`, `tests/e2e/conflict.spec.ts`.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 

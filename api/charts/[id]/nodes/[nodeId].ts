@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
 import { requireRole, requireChartsEditable } from '../../../_lib/access'
+import { claimRevision } from '../../../_lib/revision'
 import { parseBody } from '../../../_lib/validate'
 import { NodeUpdate } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
@@ -30,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updates = parseBody(NodeUpdate, req, res)
       if (!updates) return
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No updatable fields' })
+      if ((await claimRevision(req, res, chartId)) === null) return
       const [updated] = await db
         .update(nodes)
         .set(updates)
@@ -38,14 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!updated) return res.status(404).json({ error: 'Node not found' })
 
-      await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
-
       return res.json(updated)
     }
 
     if (req.method === 'DELETE') {
+      if ((await claimRevision(req, res, chartId)) === null) return
       await db.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId)))
-      await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
       return res.status(204).end()
     }
 

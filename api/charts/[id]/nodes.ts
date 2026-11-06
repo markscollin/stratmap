@@ -6,6 +6,7 @@ import { parseBody } from '../../_lib/validate'
 import { NodeCreate, NodePositions } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { charts, nodes } from '../../../src/lib/db/schema'
+import { claimRevision } from '../../_lib/revision'
 import { fitsLimit } from '../../../src/lib/plans'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -41,13 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // The client generates the id so it can draw edges optimistically; it is
       // validated (charset/length) and always scoped to this chart.
+      if ((await claimRevision(req, res, chartId)) === null) return
       const [node] = await db
         .insert(nodes)
         .values({ ...body, id: body.id ?? crypto.randomUUID(), chartId })
         .returning()
-
-      // Bump chart updatedAt
-      await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
 
       return res.status(201).json(node)
     }

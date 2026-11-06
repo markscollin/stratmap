@@ -97,7 +97,8 @@ export const charts = pgTable('charts', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   status: chartStatusEnum('status').notNull().default('draft'),
-  version: integer('version').notNull().default(1),
+  version: integer('version').notNull().default(1),   // user-visible chart version (the v1 pill)
+  revision: integer('revision').notNull().default(0), // bumped by every structural edit; optimistic concurrency (roadmap 2.4)
   isPublic: boolean('is_public').notNull().default(false),
   ownerId: text('owner_id').notNull(),         // Clerk userId
   creatorId: text('creator_id').notNull(),     // Clerk userId
