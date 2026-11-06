@@ -42,6 +42,7 @@ describe('GET /api/workspaces', () => {
         // An active admin trial counts, like everywhere else.
         { id: 'ws-2', name: 'Beta', myPermission: 'editor', planTier: 'growth' },
       ],
+      deleted: [],   // workspaces this person deleted and can still restore (roadmap 4.2)
     })
   })
 
@@ -49,7 +50,7 @@ describe('GET /api/workspaces', () => {
     vi.mocked(requireUser).mockResolvedValue({ userId: 'u-nobody' })
     const res = createRes()
     await handler(createReq({ method: 'GET' }) as never, res as never)
-    expect(res._body).toEqual({ workspaces: [] })
+    expect(res._body).toEqual({ workspaces: [], deleted: [] })
   })
 
   it('returns 405 for other methods', async () => {

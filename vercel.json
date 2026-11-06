@@ -3,6 +3,9 @@
   "functions": {
     "api/share-page.ts": { "includeFiles": "dist/app.html" }
   },
+  "crons": [
+    { "path": "/api/cron/purge-deleted", "schedule": "17 3 * * *" }
+  ],
   "rewrites": [
     { "source": "/share/:code", "destination": "/api/share-page?code=:code" },
     { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/app.html" }

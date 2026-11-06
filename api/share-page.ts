@@ -5,7 +5,7 @@ import path from 'node:path'
 import { eq, count } from 'drizzle-orm'
 import { db } from './_lib/db'
 import { hitRateLimit, clientIp } from './_lib/rateLimit'
-import { sharedLinks, charts, nodes } from '../src/lib/db/schema'
+import { sharedLinks, charts, nodes, workspaces } from '../src/lib/db/schema'
 import { injectSeo, renderSeoBlock, shareMeta, siteUrl } from '../src/lib/seo'
 
 // GET /share/:code (rewritten here by vercel.json). Serves the app's HTML with link-preview tags for
@@ -44,6 +44,8 @@ async function lookup(code: string): Promise<{ name: string; roleCount: number }
   if (!link || (link.expiresAt && link.expiresAt < new Date())) return null
   const [chart] = await db.select().from(charts).where(eq(charts.id, link.chartId)).limit(1)
   if (!chart || !chart.isPublic) return null
+  const [owner] = await db.select({ deletedAt: workspaces.deletedAt }).from(workspaces).where(eq(workspaces.id, chart.workspaceId)).limit(1)
+  if (!owner || owner.deletedAt) return null // a deleted workspace's links show the generic preview (roadmap 4.2)
   const [{ value }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chart.id))
   return { name: chart.name, roleCount: value }
 }

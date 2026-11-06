@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { requireAuth, requireUser } from './_lib/auth'
 import { track, hasAnalyticsConsent } from './_lib/analytics'
 import { requireRole, getPermission } from './_lib/access'
 import { parseBody } from './_lib/validate'
-import { WorkspaceCreate, WorkspaceUpdate } from './_lib/schemas'
+import { WorkspaceCreate, WorkspaceUpdate, WorkspaceDelete } from './_lib/schemas'
 import { db } from './_lib/db'
 import { resolvePlanTier } from './_lib/billing'
+import { softDeleteWorkspace, eraseDate } from './_lib/workspaceLifecycle'
+import { reportError } from './_lib/sentry'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -56,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [existing] = await db
         .select({ workspaceId: workspaceMembers.workspaceId })
         .from(workspaceMembers)
+        .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.deletedAt)))
         .where(eq(workspaceMembers.userId, user.userId))
         .limit(1)
 
@@ -105,6 +108,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .returning()
 
       return res.json(updated)
+    }
+
+    // Delete the workspace (roadmap 4.2): owner only, and only after typing its name. It is hidden at once, the
+    // subscription is cancelled, members are emailed, and the owner can restore it for 30 days.
+    if (req.method === 'DELETE') {
+      const auth = await requireAuth(req, res)
+      if (!auth) return
+      if (!(await requireRole(auth, res, 'owner'))) return
+      const body = parseBody(WorkspaceDelete, req, res)
+      if (!body) return
+
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1)
+      if (!ws) return res.status(404).json({ error: 'Workspace not found' })
+      if (body.confirmName !== ws.name) {
+        return res.status(400).json({ error: 'confirm-name-mismatch', message: 'Type the workspace name exactly to confirm.' })
+      }
+
+      try {
+        await softDeleteWorkspace(ws, auth.userId)
+      } catch (err) {
+        // Stripe could not cancel the subscription: nothing was deleted, so nothing keeps billing a deleted workspace.
+        console.error('/api/workspace DELETE', err)
+        reportError(err, { route: '/api/workspace DELETE' })
+        return res.status(502).json({ error: 'cancel-failed', message: 'We could not cancel the subscription, so nothing was deleted. Please try again.' })
+      }
+      return res.json({ deleted: true, eraseOn: eraseDate(new Date()).toISOString() })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

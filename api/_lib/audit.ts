@@ -14,6 +14,7 @@ export type AuditAction =
   | 'member.joined'
   | 'member.role_changed'
   | 'member.removed'
+  | 'member.left'
   | 'invite.sent'
   | 'invite.resent'
   | 'invite.revoked'
@@ -22,8 +23,11 @@ export type AuditAction =
   | 'share.public_on'
   | 'share.public_off'
   | 'salary.updated'
+  | 'workspace.deleted'
+  | 'workspace.restored'
+  | 'workspace.exported'
 
-export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role'
+export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace'
 export type AuditDetails = Record<string, string | number | boolean | null>
 
 export interface AuditEvent {

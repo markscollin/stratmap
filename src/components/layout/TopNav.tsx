@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { ChevronRight, Search, Sun, Moon, Bell, Menu } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
-import { useAuth, IS_DEV_BYPASS } from '../../features/auth/useAuth'
-import { useUserStore } from '../../store/userStore'
-import { useClerk } from '@clerk/clerk-react'
+import { useAuth } from '../../features/auth/useAuth'
+import { useSignOut } from '../../features/auth/useSignOut'
 import { useIsPhone } from '../../hooks/useMediaQuery'
 
 const PAGE_LABELS: Record<string, string> = {
@@ -54,32 +53,13 @@ export function TopNav() {
   const { isDark, toggleTheme, setSpotlightOpen, setMobileNavOpen } = useUIStore()
   const isPhone = useIsPhone()
   const { pathname } = useLocation()
-  const navigate = useNavigate()
   const [hovBtn, setHovBtn] = useState<string | null>(null)
   const [avatarHov, setAvatarHov] = useState(false)
   const label = getLabel(pathname)
   const { user } = useAuth()
-  const { signOut: storeSignOut } = useUserStore()
+  const signOut = useSignOut()
 
-  // Get Clerk signOut — works in real Clerk mode, undefined in dev-bypass.
-  // IS_DEV_BYPASS is a module-level build constant, so the hook order is stable
-  // across renders. We can't call useClerk() unconditionally because it throws
-  // when no ClerkProvider is mounted (dev-bypass renders DevBypassProvider instead).
-  let clerkSignOut: (() => Promise<void>) | undefined
-  if (!IS_DEV_BYPASS) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const clerk = useClerk()
-    clerkSignOut = () => clerk.signOut({ redirectUrl: '/sign-in' })
-  }
-
-  const handleSignOut = async () => {
-    storeSignOut()
-    if (clerkSignOut) {
-      await clerkSignOut()
-    } else {
-      navigate('/sign-in')
-    }
-  }
+  const handleSignOut = () => signOut()
 
   return (
     <div style={{

@@ -157,7 +157,7 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 | ID | Task | Fixes | Effort | Done when |
 |---|---|---|---|---|
 | 4.1 | Lawyer review of `/privacy` and `/terms`. Add a **DPA** (customers upload employee personal data, so you are a processor) and a **subprocessor list** (Vercel, Neon, Clerk, Stripe, Resend, Sentry, Anthropic). | W14 | — | Signed off by counsel. |
-| 4.2 | **Data rights:** workspace export (JSON + CSV), workspace deletion (cascade, plus Stripe cancel), account deletion, and member removal that revokes access immediately. | W14 | M | Each action is self-serve and tested. |
+| 4.2 | **Data rights:** workspace export (JSON + CSV), workspace deletion (cascade, plus Stripe cancel), account deletion, and member removal that revokes access immediately. | W14 | M | Each action is self-serve and tested. **Done 2026-11-06** (set `CRON_SECRET` in Vercel for the 30-day purge). |
 | 4.3 | Disclose in-product that JD prompts go to Anthropic. Confirm no employee personal data is included in AI prompts (today only title/department/notes are sent, so keep it that way and say so). | — | S | The disclosure is visible in the AI draft UI. **Done 2026-11-06.** |
 | 4.4 | Basic **audit log** table (who changed what, when) for member, permission, share and salary changes. Show it to owners; export it for Enterprise. | W14 | M | Permission changes appear in the log. **Done 2026-11-06** (owners and admins see it; CSV is Enterprise). |
 | 4.5 | Make sure the cookie consent banner actually controls Sentry replay and analytics (no tracking before consent in the EU). | — | S | No analytics requests before the user accepts. **Done 2026-11-06** (fonts self-hosted; Sentry has no replay or default PII). |
