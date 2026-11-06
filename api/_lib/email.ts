@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { appendFileSync } from 'node:fs'
 import { Resend } from 'resend'
 
 const FROM = process.env.EMAIL_FROM ?? 'StratMap <onboarding@stratmap.app>'
@@ -18,6 +19,10 @@ function getClient(): Resend | null {
 export async function sendEmail(opts: { to: string; subject: string; html: string }): Promise<SendResult> {
   const client = getClient()
   if (!client) {
+    // e2e tests read invite links from here instead of a real inbox (roadmap 3.3).
+    if (process.env.E2E_EMAIL_OUTBOX) {
+      appendFileSync(process.env.E2E_EMAIL_OUTBOX, JSON.stringify(opts) + '\n')
+    }
     console.warn(`[email] RESEND_API_KEY not set — skipping email to ${opts.to} ("${opts.subject}")`)
     return { sent: false, skipped: true }
   }

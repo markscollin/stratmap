@@ -1,12 +1,13 @@
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
 import { getSelectedWorkspaceId, setSelectedWorkspaceId } from './workspaceSelection'
+import { devUserHeader } from './devIdentity'
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   // The selected workspace (roadmap 1.2). The server checks membership.
   const workspaceId = getSelectedWorkspaceId()
   const ws: Record<string, string> = workspaceId ? { 'X-Workspace-Id': workspaceId } : {}
   if (IS_DEV_BYPASS) {
-    return { 'X-Dev-User': 'true', ...ws }
+    return { 'X-Dev-User': devUserHeader(), ...ws }
   }
   // Get Clerk session token from the global Clerk singleton
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

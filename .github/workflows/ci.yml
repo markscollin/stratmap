@@ -43,3 +43,56 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # End-to-end journey in a real browser (roadmap 3.3). Runs the app in dev-bypass mode
+  # (scripts/e2e-server.mjs) against a throwaway Neon branch, so it needs the repository
+  # secret E2E_DATABASE_URL. Without it (e.g. PRs from forks) the job passes and skips.
+  # Deliberately a separate job from `check`: add it to branch protection once it is stable.
+  e2e:
+    # Pinned: Playwright's browser install doesn't support the newest ubuntu-latest image yet.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+    steps:
+      - name: Check for the e2e database secret
+        id: gate
+        run: |
+          if [ -z "$E2E_DATABASE_URL" ]; then
+            echo "::notice::E2E_DATABASE_URL is not set - skipping e2e."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.gate.outputs.run
+        run: npm ci
+      - name: Install Chromium
+        if: steps.gate.outputs.run
+        run: npx playwright install --with-deps chromium
+
+      # Additive migrations onto the throwaway branch (see docs/MIGRATIONS.md).
+      - name: Migrate the e2e database
+        if: steps.gate.outputs.run
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+
+      - name: Playwright
+        if: steps.gate.outputs.run
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.gate.outputs.run
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

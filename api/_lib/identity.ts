@@ -12,8 +12,14 @@ export interface UserIdentity {
 }
 
 const DEV_USER_ID = 'u-dev'
+const DEV_PREFIX = 'dev-' // extra dev-bypass identities, see api/_lib/auth.ts
 
 export async function getUserIdentity(userId: string): Promise<UserIdentity> {
+  if (userId.startsWith(DEV_PREFIX)) {
+    // `x-dev-user: alice` → dev-alice, alice@e2e.test. Clerk ids never start with "dev-".
+    const slug = userId.slice(DEV_PREFIX.length)
+    return { emails: [`${slug}@e2e.test`], name: slug, avatarUrl: null }
+  }
   if (userId === DEV_USER_ID || !process.env.CLERK_SECRET_KEY) {
     // Dev bypass identity (local only — requireUser never yields u-dev on deployed envs).
     return { emails: ['dev@example.com'], name: 'Dev User', avatarUrl: null }
