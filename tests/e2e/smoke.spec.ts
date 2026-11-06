@@ -1,10 +1,22 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type BrowserContext, type Page } from '@playwright/test'
+import { testUser, signedInContext, onboard, createChart } from './helpers'
 
-// All tests run in dev bypass mode (VITE_CLERK_PUBLISHABLE_KEY=pk_test_placeholder)
-// so no real Clerk session is needed.
+// Page-level smoke tests. They run as their own user in a fresh Free workspace
+// with one chart, so they don't depend on whatever the shared dev workspace holds.
+const user = testUser('smoke')
+let ctx: BrowserContext
+let page: Page
+
+test.beforeAll(async ({ browser }) => {
+  ctx = await signedInContext(browser, user.slug)
+  page = await ctx.newPage()
+  await onboard(page, 'Smoke Co')
+  await createChart(page, 'Smoke chart')
+})
+test.afterAll(async () => { await ctx?.close() })
 
 test.describe('Dashboard', () => {
-  test('loads and shows all four stat cards', async ({ page }) => {
+  test('loads and shows all four stat cards', async () => {
     await page.goto('/dashboard')
     await expect(page.getByText('Total headcount', { exact: true })).toBeVisible()
     await expect(page.getByText('Open roles', { exact: true })).toBeVisible()
@@ -12,76 +24,53 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Live org charts', { exact: true })).toBeVisible()
   })
 
-  test('sidebar navigation is visible', async ({ page }) => {
+  test('sidebar navigation is visible', async () => {
     await page.goto('/dashboard')
     await expect(page.getByRole('button', { name: 'Org Charts', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Roles', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Headcount', exact: true })).toBeVisible()
+    // Headcount is a paid feature, so on Free its label carries a plan badge.
+    await expect(page.getByRole('button', { name: /^Headcount/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible()
   })
 })
 
 test.describe('Charts', () => {
-  test('renders chart list', async ({ page }) => {
+  test('lists the chart and the new-chart tile', async () => {
     await page.goto('/charts')
     await expect(page.getByRole('heading', { name: 'Org Charts' })).toBeVisible()
+    await expect(page.getByText('Smoke chart').first()).toBeVisible()
     await expect(page.getByText('New chart').first()).toBeVisible()
   })
 
-  test('overflow menu contains Delete option', async ({ page }) => {
+  test('delete asks for confirmation and cancel keeps the chart', async () => {
     await page.goto('/charts')
-
-    const overflowBtns = page.locator('[data-testid="chart-overflow-btn"]')
-    const count = await overflowBtns.count()
-
-    if (count === 0) {
-      test.skip(true, 'No charts in workspace to test overflow menu')
-    }
-
-    await overflowBtns.first().click()
-    await expect(page.getByText('Delete')).toBeVisible()
-  })
-
-  test('delete shows confirmation dialog, cancel dismisses it', async ({ page }) => {
-    await page.goto('/charts')
-
-    const overflowBtns = page.locator('[data-testid="chart-overflow-btn"]')
-    const count = await overflowBtns.count()
-
-    if (count === 0) {
-      test.skip(true, 'No charts in workspace to test delete confirmation')
-    }
-
-    await overflowBtns.first().click()
+    await page.locator('[data-testid="chart-overflow-btn"]').first().click()
     await page.getByText('Delete').first().click()
 
     const confirm = page.locator('[data-testid="chart-delete-confirm"]')
     await expect(confirm).toBeVisible()
     await expect(confirm.getByText('cannot be undone')).toBeVisible()
 
-    // Cancel — don't actually delete during tests
     await confirm.getByRole('button', { name: 'Cancel' }).click()
     await expect(confirm).not.toBeVisible()
+    await expect(page.getByText('Smoke chart').first()).toBeVisible()
   })
 })
 
 test.describe('Settings', () => {
-  test('workspace name input is pre-populated', async ({ page }) => {
+  test('workspace name is pre-populated', async () => {
     await page.goto('/settings')
-    const input = page.getByRole('textbox').first()
-    await expect(input).toBeVisible()
-    // Store hydrates asynchronously — wait up to 4s for the value to appear
-    await expect(input).not.toHaveValue('', { timeout: 4000 })
+    await expect(page.getByRole('textbox').first()).toHaveValue('Smoke Co')
   })
 
-  test('save button is present', async ({ page }) => {
+  test('save button is present', async () => {
     await page.goto('/settings')
     await expect(page.getByRole('button', { name: /save/i })).toBeVisible()
   })
 })
 
 test.describe('Roles', () => {
-  test('renders template library', async ({ page }) => {
+  test('renders template library', async () => {
     await page.goto('/roles')
     await expect(page.getByRole('heading', { name: 'Roles' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New template' })).toBeVisible()
@@ -89,7 +78,7 @@ test.describe('Roles', () => {
 })
 
 test.describe('Headcount', () => {
-  test('renders headcount view', async ({ page }) => {
+  test('renders the page', async () => {
     await page.goto('/headcount')
     await expect(page.getByRole('heading', { name: 'Headcount' })).toBeVisible()
   })

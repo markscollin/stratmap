@@ -13,6 +13,9 @@ export interface AuthContext {
 
 const DEV_USER_ID = 'u-dev'
 const DEV_WORKSPACE_ID = 'ws-dev'
+/** Prefix of the extra dev-bypass identities. Clerk ids never start with it. */
+export const DEV_PREFIX = 'dev-'
+const DEV_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/i
 
 // Dev auth bypass is allowed only on local/unset environments — never on deployed
 // Vercel environments. Preview deployments have public URLs, so they must require
@@ -20,6 +23,20 @@ const DEV_WORKSPACE_ID = 'ws-dev'
 function isDevBypassAllowed(): boolean {
   const env = process.env.VERCEL_ENV
   return env !== 'production' && env !== 'preview'
+}
+
+/**
+ * Who the dev bypass acts as. `x-dev-user: true` is the classic single dev identity
+ * (`u-dev`, with a ready-made workspace). Any other short slug (`x-dev-user: alice`)
+ * is a distinct user `dev-alice` who starts with no workspace, so e2e tests can run
+ * sign-up → onboarding → invites with several people (roadmap 3.3). Only called
+ * after isDevBypassAllowed(), so none of this exists on preview or production.
+ */
+function devUserFromHeader(req: VercelRequest): string | null {
+  const raw = req.headers['x-dev-user']
+  if (typeof raw !== 'string') return null
+  if (raw === 'true') return DEV_USER_ID
+  return DEV_SLUG.test(raw) ? `${DEV_PREFIX}${raw.toLowerCase()}` : null
 }
 
 async function ensureDevWorkspace() {
@@ -57,9 +74,8 @@ export async function requireUser(
 ): Promise<{ userId: string } | null> {
   const bypassAllowed = isDevBypassAllowed()
 
-  if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
-    return { userId: DEV_USER_ID }
-  }
+  const devUser = bypassAllowed ? devUserFromHeader(req) : null
+  if (devUser) return { userId: devUser }
 
   if (!process.env.CLERK_SECRET_KEY && bypassAllowed) {
     return { userId: DEV_USER_ID }
@@ -90,9 +106,10 @@ export async function requireAuth(
   const bypassAllowed = isDevBypassAllowed()
 
   // Dev bypass via header (local/unset environments only — not preview or production)
-  if (req.headers['x-dev-user'] === 'true' && bypassAllowed) {
-    await ensureDevWorkspace()
-    return resolveWorkspace(req, res, DEV_USER_ID)
+  const devUser = bypassAllowed ? devUserFromHeader(req) : null
+  if (devUser) {
+    if (devUser === DEV_USER_ID) await ensureDevWorkspace()
+    return resolveWorkspace(req, res, devUser)
   }
 
   // If no Clerk secret key on a local/unset environment, fall back to dev identity

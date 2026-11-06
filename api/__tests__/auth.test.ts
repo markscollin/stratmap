@@ -206,3 +206,42 @@ describe('requireAuth — choosing the workspace (roadmap 1.2)', () => {
   })
 })
 
+
+// Extra dev-bypass identities (`x-dev-user: alice`) for e2e tests (roadmap 3.3).
+describe('multi-identity dev bypass', () => {
+  it('maps x-dev-user: <slug> to its own user, without creating a workspace', async () => {
+    const req = createReq({ headers: { 'x-dev-user': 'Alice-1' } })
+    expect(await requireUser(req as never, createRes() as never)).toEqual({ userId: 'dev-alice-1' })
+
+    const res = createRes()
+    expect(await requireAuth(req as never, res as never)).toBeNull()
+    expect(res._status).toBe(404) // no workspace yet → onboarding
+    expect(await testDb.select().from(schema.workspaces)).toHaveLength(0)
+  })
+
+  it('resolves the workspace that identity belongs to', async () => {
+    await testDb.insert(schema.workspaces).values({ id: 'ws-a', name: 'A', ownerId: 'dev-alice', ownerRole: 'Founder/CEO', size: '11-50' })
+    await testDb.insert(schema.workspaceMembers).values({ id: 'wm-a', workspaceId: 'ws-a', userId: 'dev-alice', email: 'alice@e2e.test', name: 'alice', permission: 'owner' })
+    const req = createReq({ headers: { 'x-dev-user': 'alice' } })
+    expect(await requireAuth(req as never, createRes() as never))
+      .toEqual({ userId: 'dev-alice', workspaceId: 'ws-a', permission: 'owner' })
+  })
+
+  it('ignores malformed slugs', async () => {
+    for (const bad of ['', 'a b', '../x', 'a'.repeat(41), '-x']) {
+      const res = createRes()
+      // CLERK_SECRET_KEY is set so the "no key → u-dev" fallback doesn't mask it.
+      process.env.CLERK_SECRET_KEY = 'sk_test_x'
+      expect(await requireUser(createReq({ headers: { 'x-dev-user': bad } }) as never, res as never)).toBeNull()
+      expect(res._status).toBe(401)
+    }
+  })
+
+  it.each(['production', 'preview'])('is refused on %s', async (env) => {
+    process.env.VERCEL_ENV = env
+    process.env.CLERK_SECRET_KEY = 'sk_live_test'
+    const res = createRes()
+    expect(await requireUser(createReq({ headers: { 'x-dev-user': 'alice' } }) as never, res as never)).toBeNull()
+    expect(res._status).toBe(401)
+  })
+})

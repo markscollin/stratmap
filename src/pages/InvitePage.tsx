@@ -5,6 +5,7 @@ import { Users } from 'lucide-react'
 import { switchWorkspace } from '../lib/workspaceSelection'
 import { api, ApiError } from '../lib/apiClient'
 import { IS_DEV_BYPASS } from '../features/auth/useAuth'
+import { getDevIdentity, devIdentityEmail } from '../lib/devIdentity'
 import { rememberInviteToken, forgetInviteToken } from '../features/auth/pendingInvite'
 import type { Permission } from '../types'
 
@@ -24,7 +25,10 @@ const ROLE_LABEL: Record<Permission, string> = {
 // sign up / sign in (and back here), or accepts the invite if you're signed in.
 export function InvitePage() {
   // Dev bypass: no Clerk, so no account switching; the server decides as u-dev.
-  if (IS_DEV_BYPASS) return <InviteCard signedIn userEmail={null} />
+  if (IS_DEV_BYPASS) {
+    const id = getDevIdentity()
+    return <InviteCard signedIn userEmail={id ? devIdentityEmail(id) : null} />
+  }
   return <ClerkInvite />
 }
 

@@ -18,7 +18,7 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
-    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=/Users/markcollin/Library/Caches/ms-playwright playwright test"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

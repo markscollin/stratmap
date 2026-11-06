@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**212 frontend + 389 backend = 601 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**212 frontend + 394 backend = 606 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -47,10 +47,18 @@ Stripe + Clerk + `ADMIN_SECRET` + `DATABASE_URL` already in `.env.local`.
 (currently `pk_test_`), Vercel Pro upgrade, custom domain. Plus: have the legal page
 content reviewed by a lawyer.
 
-**Known issue — e2e:** `npm run test:e2e` currently fails because `vercel dev` loads
-the real `VITE_CLERK_PUBLISHABLE_KEY` from `.env.local`, so dev-bypass never engages
-and authed routes redirect to Clerk sign-in. The e2e setup needs a way to run without
-the real Clerk key before the suite is reliable again.
+**e2e (roadmap 3.3, 2026-11-06):** `npm run test:e2e` runs Playwright against `scripts/e2e-server.mjs`
+(Vite in dev-bypass mode plus every `api/**/*.ts` mounted; no Clerk/Stripe/AI/email keys). It uses
+`E2E_DATABASE_URL`, else `DATABASE_URL` — a throwaway Neon branch only. In the cloud sandbox run
+`NODE_USE_ENV_PROXY=1 PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` (the pre-installed
+Chromium is a different build from the one Playwright 1.60 expects; elsewhere `npx playwright install chromium`).
+- **Multi-identity dev bypass:** `X-Dev-User: true` is still `u-dev`/`ws-dev`. Any other slug (`alice`) is user
+  `dev-alice`, email `alice@e2e.test`, with no workspace until onboarding. Client: `localStorage['stratmap_dev_user']`
+  (`src/lib/devIdentity.ts`); a named identity goes through the same `UserSync` flow as Clerk users. Refused on
+  preview/production like the rest of the bypass.
+- Invite mail is appended to `E2E_EMAIL_OUTBOX` (JSON lines) when `RESEND_API_KEY` is unset. Tests use
+  `testUser()` (unique per run) and `global-teardown.ts` deletes the run's workspaces.
+- CI job `e2e` needs the `E2E_DATABASE_URL` secret and skips without it. Not covered: Clerk sign-up UI, Stripe checkout.
 
 **Done:** Stripe webhook idempotency (`stripe_events`), shipped with the billing life-cycle (see below).
 
@@ -462,10 +470,10 @@ npm test
 npm run test:run       # 212 tests
 
 # Run backend API tests
-npm run test:api       # 389 tests (PGlite, no network)
+npm run test:api       # 394 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 601 tests total
+npm run test:all       # 606 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

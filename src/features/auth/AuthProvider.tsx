@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
@@ -8,6 +8,7 @@ import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingSto
 import type { PlanTier, Permission, WorkspaceRole, CompanySize, SubscriptionInfo } from '../../types'
 import { IS_DEV_BYPASS } from './useAuth'
 import { api, ApiError } from '../../lib/apiClient'
+import { getDevIdentity, devIdentityEmail } from '../../lib/devIdentity'
 import { getRememberedInviteToken, forgetInviteToken } from './pendingInvite'
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
@@ -15,13 +16,24 @@ const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 // ── Dev bypass provider (no real Clerk key) ────────────────────────────────
 function DevBypassProvider({ children }: { children: ReactNode }) {
   const { setUser, setWorkspace } = useUserStore()
+  const devId = getDevIdentity()
 
   useEffect(() => {
+    if (devId) return // a named dev identity goes through UserSync instead
     setUser(MOCK_USER, 'owner')
     setWorkspace(MOCK_WORKSPACE)
-  }, [setUser, setWorkspace])
+  }, [devId, setUser, setWorkspace])
 
+  // A named dev identity (e2e tests) is treated like a real signed-in user.
+  if (devId) return <DevIdentitySync devId={devId}>{children}</DevIdentitySync>
   return <>{children}</>
+}
+
+function DevIdentitySync({ devId, children }: { devId: string; children: ReactNode }) {
+  const identity = useMemo<SyncIdentity>(() => ({
+    id: `dev-${devId}`, name: devId, email: devIdentityEmail(devId), imageUrl: undefined,
+  }), [devId])
+  return <UserSync isLoaded isSignedIn identity={identity}>{children}</UserSync>
 }
 
 // ── Clerk sync: hydrates userStore from Clerk's useUser ────────────────────
@@ -34,8 +46,24 @@ interface WorkspaceResponse {
   members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
 }
 
+interface SyncIdentity { id: string; name: string; email: string; imageUrl?: string }
+
 function ClerkUserSync({ children }: { children: ReactNode }) {
-  const { user: clerkUser, isLoaded, isSignedIn } = useUser()
+  const { user, isLoaded, isSignedIn } = useUser()
+  const identity = useMemo<SyncIdentity | null>(() => user ? {
+    id: user.id,
+    name: user.fullName ?? user.username ?? user.emailAddresses[0]?.emailAddress ?? 'User',
+    email: user.emailAddresses[0]?.emailAddress ?? '',
+    imageUrl: user.imageUrl ?? undefined,
+  } : null, [user])
+  return <UserSync isLoaded={isLoaded} isSignedIn={!!isSignedIn} identity={identity}>{children}</UserSync>
+}
+
+// Hydrates userStore from a signed-in identity (Clerk's, or a dev-bypass one) and
+// the server's view of the workspace. Shared so both go through the same flow.
+function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
+  isLoaded: boolean; isSignedIn: boolean; identity: SyncIdentity | null; children: ReactNode
+}) {
   const { setUser, setPermission, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
   const { setPlan, setSubscription } = useBillingStore()
   const navigate = useNavigate()
@@ -66,10 +94,9 @@ function ClerkUserSync({ children }: { children: ReactNode }) {
     loadKey.current = key
     const setResolved = () => setResolvedFor(key)
 
-    const name = clerkUser.fullName ?? clerkUser.username ?? clerkUser.emailAddresses[0]?.emailAddress ?? 'User'
     // Least privilege until the server says otherwise.
     setUser(
-      { id: clerkUser.id, name, email: clerkUser.emailAddresses[0]?.emailAddress ?? '', avatarUrl: clerkUser.imageUrl ?? undefined },
+      { id: clerkUser.id, name: clerkUser.name, email: clerkUser.email, avatarUrl: clerkUser.imageUrl },
       'viewer',
     )
 

@@ -359,6 +359,10 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
               <button
                 onClick={handleToggle}
                 disabled={busy}
+                role="switch"
+                aria-checked={isPublic}
+                aria-label="Public link"
+                data-testid="share-toggle"
                 style={{
                   width: 38, height: 22, borderRadius: 11,
                   background: isPublic ? 'var(--brand)' : 'var(--dim)',
@@ -383,6 +387,7 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
                     <input
                       readOnly
                       value={shareUrl}
+                      data-testid="share-url"
                       onClick={e => (e.target as HTMLInputElement).select()}
                       style={{
                         flex: 1, fontSize: 11, padding: '6px 8px',
