@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, count } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
+import { claimRevision } from '../../_lib/revision'
 import { parseBody } from '../../_lib/validate'
 import { ChartImport } from '../../_lib/schemas'
 import { chunk } from '../../_lib/chunk'
@@ -51,6 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
     }
 
+    if ((await claimRevision(req, res, chartId)) === null) return
+
     // Departments: reuse the chart's own by name (case-insensitive), create the rest.
     const existing = await db.select().from(departments).where(eq(departments.chartId, chartId))
     const byName = new Map(existing.map(d => [d.name.toLowerCase(), d.id]))
@@ -89,7 +92,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
     for (const part of chunk(newEdges)) await db.insert(edges).values(part)
-    await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
 
     return res.status(201).json({
       imported: newNodes.length,

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { requireRole, requireFeature, requireChartsEditable } from '../_lib/access'
+import { claimRevision } from '../_lib/revision'
 import { parseBody } from '../_lib/validate'
 import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
@@ -51,6 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Free plans can draft, edit and archive charts; review/approve/publish is the paid approval workflow.
       if (status && status !== chart.status && (APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
         && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return
+
+      // Renaming or changing status is a structural edit: stale clients get 409 (roadmap 2.4).
+      // Sharing on/off is a setting, not content, so it never conflicts.
+      if ((name !== undefined || status !== undefined) && (await claimRevision(req, res, chartId)) === null) return
 
       const [updated] = await db
         .update(charts)

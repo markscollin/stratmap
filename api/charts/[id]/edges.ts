@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { requireRole, requireChartsEditable } from '../../_lib/access'
+import { claimRevision } from '../../_lib/revision'
 import { parseBody } from '../../_lib/validate'
 import { EdgeCreate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
@@ -37,12 +38,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(and(eq(nodes.chartId, chartId), inArray(nodes.id, [sourceId, targetId])))
       if (endpoints.length !== 2) return res.status(400).json({ error: 'sourceId and targetId must be nodes in this chart' })
 
+      if ((await claimRevision(req, res, chartId)) === null) return
       const [edge] = await db
         .insert(edges)
         .values({ id: crypto.randomUUID(), chartId, sourceId, targetId })
         .returning()
-
-      await db.update(charts).set({ updatedAt: new Date() }).where(eq(charts.id, chartId))
 
       return res.status(201).json(edge)
     }

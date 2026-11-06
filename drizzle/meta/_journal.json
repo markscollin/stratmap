@@ -36,6 +36,13 @@
       "when": 1793876062481,
       "tag": "0004_billing_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793949150244,
+      "tag": "0005_chart_revision",
+      "breakpoints": true
     }
   ]
 }
