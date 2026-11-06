@@ -35,15 +35,23 @@ export function CanvasView() {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(false)
 
+  // Bumped after people are imported into this chart to reload it from the server.
+  const [reloadKey, setReloadKey] = useState(0)
+  // The canvas keeps its own copy of the nodes, so after a reload it must remount once
+  // the NEW data has arrived (not when the reload starts, or it would remount with the
+  // old data). The first load doesn't remount: the canvas isn't mounted until it ends.
+  const [canvasKey, setCanvasKey] = useState(0)
+
   useEffect(() => {
     if (!id) return
-    setLoading(true)
+    // Keep the canvas on screen during a reload; only the first load shows the spinner.
+    if (reloadKey === 0) setLoading(true)
     setError(false)
     api.get<FullChart>(`/api/charts/${id}`)
-      .then(setFullChart)
+      .then(chart => { setFullChart(chart); if (reloadKey > 0) setCanvasKey(k => k + 1) })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, reloadKey])
 
   useEffect(() => {
     const name = fullChart?.name ?? chartMeta?.name
@@ -92,6 +100,8 @@ export function CanvasView() {
       </div>
 
       <OrgChart
+        key={`${fullChart.id}:${canvasKey}`}
+        onImported={() => setReloadKey(k => k + 1)}
         chartId={fullChart.id}
         chartName={name}
         initialNodes={fullChart.nodes}

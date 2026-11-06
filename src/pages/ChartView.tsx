@@ -20,6 +20,7 @@ import { formatUpdated } from '../utils/formatUpdated'
 import { APPROVAL_CHART_STATUSES } from '../lib/plans'
 import { PlanBadge, FeatureUpgradeModal } from '../components/ui/FeatureLock'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
+import { ImportDialog } from '../features/import/ImportDialog'
 
 const PERMISSION_RANK: Record<string, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
 
@@ -370,6 +371,7 @@ export function ChartView() {
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
   const [showModal, setShowModal]   = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   useEffect(() => { document.title = 'StratMap — Org Charts' }, [])
   useEffect(() => { if (!loaded) fetchCharts() }, [loaded, fetchCharts])
@@ -402,6 +404,7 @@ export function ChartView() {
   return (
     <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
       {showModal && <NewChartModal onClose={() => setShowModal(false)} onCreate={handleCreate} />}
+      {showImport && <ImportDialog onClose={() => setShowImport(false)} />}
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
@@ -425,7 +428,13 @@ export function ChartView() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ padding: '9px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>Import CSV</button>
+          {canEdit && (
+            <button
+              data-testid="import-btn"
+              onClick={() => { if (isAtChartLimit()) setShowUpgradeModal(true); else setShowImport(true) }}
+              style={{ padding: '9px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
+            >Import</button>
+          )}
           {canEdit && (
             <button
               onClick={() => {

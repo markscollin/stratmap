@@ -66,6 +66,14 @@ export const ChartCreate = z.object({
   })).max(500).default([]),
 })
 
+/** Roadmap 2.1: people imported from a spreadsheet into an existing chart. */
+export const ChartImport = z.object({
+  nodes: z.array(z.object({ ...nodeFields, id: Id })).min(1).max(MAX_TEMPLATE_NODES),
+  edges: z.array(z.object({ sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2).default([]),
+  /** Every department the nodes use; same-named ones on the chart are reused. */
+  departments: z.array(z.object({ id: Id, name: Name, colour: z.string().max(50) })).max(500).default([]),
+})
+
 export const ChartUpdate = z.object({
   name: Name.optional(),
   status: enumOf(chartStatusEnum).optional(),
