@@ -23,11 +23,12 @@ export type AuditAction =
   | 'share.public_on'
   | 'share.public_off'
   | 'salary.updated'
+  | 'headcount.salary_updated'
   | 'workspace.deleted'
   | 'workspace.restored'
   | 'workspace.exported'
 
-export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace'
+export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace' | 'headcount'
 export type AuditDetails = Record<string, string | number | boolean | null>
 
 export interface AuditEvent {

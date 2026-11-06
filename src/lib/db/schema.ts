@@ -181,6 +181,11 @@ export const headcountPlans = pgTable('headcount_plans', {
   chartId: text('chart_id').references(() => charts.id, { onDelete: 'set null' }),
   status: headcountStatusEnum('status').notNull().default('planned'),
   notes: text('notes'),
+  // Expected yearly pay for the planned hire (roadmap 5: cost modelling). Owner/admin only, like job-description
+  // salary bands: other roles never receive these columns. Whole currency units per year; the currency is a 3-letter code.
+  salaryMin: integer('salary_min'),
+  salaryMax: integer('salary_max'),
+  salaryCurrency: text('salary_currency'),
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),

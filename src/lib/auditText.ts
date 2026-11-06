@@ -15,6 +15,7 @@ const cap = (s: unknown) => (typeof s === 'string' && s ? s.charAt(0).toUpperCas
 const str = (v: unknown, fallback: string) => (typeof v === 'string' && v ? v : fallback)
 
 const SALARY_PARTS: Record<string, string> = { salaryBandMin: 'minimum', salaryBandMax: 'maximum', salaryCurrency: 'currency' }
+const HEADCOUNT_PARTS: Record<string, string> = { salaryMin: 'minimum', salaryMax: 'maximum', salaryCurrency: 'currency' }
 
 export function actorLabel(e: AuditEventView): string {
   return e.actor.name || e.actor.email || 'A former member'
@@ -40,6 +41,10 @@ export function describeAudit(e: AuditEventView): string {
     case 'share.link_revoked': return `${who} turned off the share link for ${chart}`
     case 'share.public_on': return `${who} made ${chart} public`
     case 'share.public_off': return `${who} made ${chart} private`
+    case 'headcount.salary_updated': {
+      const parts = str(d.changed, '').split(',').map(p => HEADCOUNT_PARTS[p]).filter(Boolean)
+      return `${who} changed the salary range (${parts.join(', ') || 'details'}) for planned hire ${str(d.planTitle, 'a hire')}`
+    }
     case 'salary.updated': {
       const parts = str(d.changed, '').split(',').map(p => SALARY_PARTS[p]).filter(Boolean)
       return `${who} changed the salary band (${parts.join(', ') || 'details'}) for ${str(d.roleTitle, 'a role')}`

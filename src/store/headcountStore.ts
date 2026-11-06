@@ -16,6 +16,10 @@ export interface HeadcountPlan {
   chartId: string | null
   status: HeadcountStatus
   notes: string | null
+  /** Expected yearly pay (owner/admin only: the server never sends these to anyone else). */
+  salaryMin?: number | null
+  salaryMax?: number | null
+  salaryCurrency?: string | null
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -32,8 +36,11 @@ interface HeadcountStore {
     targetQuarter: string
     chartId?: string
     notes?: string
+    salaryMin?: number | null
+    salaryMax?: number | null
+    salaryCurrency?: string | null
   }) => Promise<HeadcountPlan | null>
-  update: (id: string, updates: Partial<Pick<HeadcountPlan, 'title' | 'departmentId' | 'roleType' | 'targetQuarter' | 'chartId' | 'status' | 'notes'>>) => Promise<void>
+  update: (id: string, updates: Partial<Pick<HeadcountPlan, 'title' | 'departmentId' | 'roleType' | 'targetQuarter' | 'chartId' | 'status' | 'notes' | 'salaryMin' | 'salaryMax' | 'salaryCurrency'>>) => Promise<void>
   remove: (id: string) => Promise<void>
 }
 
@@ -50,6 +57,11 @@ function rawToPlan(raw: Record<string, unknown>): HeadcountPlan {
     chartId:           raw.chartId ? String(raw.chartId) : null,
     status:            (raw.status as HeadcountStatus) ?? 'planned',
     notes:             raw.notes ? String(raw.notes) : null,
+    ...('salaryMin' in raw ? {
+      salaryMin:       raw.salaryMin == null ? null : Number(raw.salaryMin),
+      salaryMax:       raw.salaryMax == null ? null : Number(raw.salaryMax),
+      salaryCurrency:  raw.salaryCurrency ? String(raw.salaryCurrency) : null,
+    } : {}),
     createdBy:         String(raw.createdBy ?? ''),
     createdAt:         raw.createdAt ? String(raw.createdAt) : new Date().toISOString(),
     updatedAt:         raw.updatedAt ? String(raw.updatedAt) : new Date().toISOString(),

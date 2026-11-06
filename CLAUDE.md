@@ -350,6 +350,21 @@ All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/dat
 - **Owner action:** set `CRON_SECRET` in Vercel (any long random string) or the purge never runs and deleted workspaces are kept forever.
 - **Not built:** "leave this workspace" for a member who keeps their account; ownership transfer.
 
+## Headcount cost modelling (roadmap 5, 2026-11-06)
+
+Salary range per planned hire → budget by quarter. Part of Growth-plan headcount planning (no new `PAID_FEATURES` entry). Owner decisions are the comments at the top of `src/lib/headcountBudget.ts`:
+- **Cost source:** `headcount_plans.salary_min / salary_max / salary_currency` (migration 0009, whole units per year, 3-letter code). A plan without them is "no cost yet": listed under the budget and left out of the totals.
+- **Timing:** a hire starts at the **start** of its target quarter and costs ¼ of the yearly pay in that quarter and every later quarter *of that year* (Q2 hire → Q2+Q3+Q4 = ¾). The full-year **run-rate** is shown too.
+  Expected = middle of the range (one bound alone counts as both). The budget covers hires *targeted in the chosen year*; earlier years are **not** carried over (so next year's view understates payroll for hires made this year).
+- **Currency:** totals per currency, never converted (`USD 90,000` and `GBP 80,000` are separate tables).
+- **Access:** owner/admin only, same rule as job-description salary bands. `GET /api/headcount` leaves the three fields out entirely (not even null) for editors/viewers; creating or editing a salary as an editor is `403 forbidden`;
+  the PUT/POST replies are redacted too. Editors still manage the plans themselves. Planned, approved and filled hires all count (the board's year and chart filter apply).
+- **Server:** zod rejects a min above max, negatives, fractions, > 100,000,000, and a currency that is not 3 letters (upper-cased); a PUT that sends only one bound is checked against the stored value. Salary changes are logged as
+  `headcount.salary_updated` (plan title and *which* fields changed, never amounts). The workspace export (owner/admin) includes the salaries.
+- **UI:** `BudgetPanel` (`src/features/headcount/`) above the board for admins, with a "Budget CSV" (`buildBudgetCsv`); salary fields in `HireForm` for admins only (the last currency is remembered in localStorage); the range on each card.
+  The existing headcount CSV does **not** include salaries.
+- **Tests:** `src/lib/__tests__/headcountBudget.test.ts`, `api/__tests__/headcount-salary.test.ts`, `src/pages/__tests__/HeadcountBudget.test.tsx`, `tests/e2e/headcount-budget.spec.ts` (includes an invited editor who never receives the fields).
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically

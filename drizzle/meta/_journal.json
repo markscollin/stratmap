@@ -64,6 +64,13 @@
       "when": 1793960899728,
       "tag": "0008_omniscient_lester",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793965790942,
+      "tag": "0009_dizzy_firebrand",
+      "breakpoints": true
     }
   ]
 }
