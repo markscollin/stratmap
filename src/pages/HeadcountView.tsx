@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash2, Pencil } from 'lucide-react'
+import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash2, Pencil, Download } from 'lucide-react'
 import { useHeadcountStore, type HeadcountPlan, type HeadcountStatus } from '../store/headcountStore'
 import { useWorkspaceDepartmentStore, type WorkspaceDepartment } from '../store/workspaceDepartmentStore'
 import { useChartStore } from '../store'
 import { usePlanLimits } from '../hooks/usePlanLimits'
 import { LockedFeatureCard } from '../components/ui/FeatureLock'
 import { usePermission } from '../hooks/usePermission'
+import { useToastStore } from '../store/toastStore'
+import { buildHeadcountCsv } from '../lib/exportOrg'
+import { downloadText } from '../lib/csvSafe'
 import type { RoleType } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -588,6 +591,8 @@ export function HeadcountView() {
   const { plans, loading, fetch, create, update, remove } = useHeadcountStore()
   const { fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const { canAdmin, canEdit } = usePermission()
+  const { charts } = useChartStore()
+  const addToast = useToastStore(s => s.addToast)
   // Headcount planning is a Growth feature. Lower plans (and non-editors) see the board read-only.
   const locked   = !usePlanLimits().hasFeature('headcount-planning')
   const readOnly = locked || !canEdit
@@ -657,6 +662,15 @@ export function HeadcountView() {
     update(id, { status })
   }
 
+  // For finance: exactly what the board shows (this year, and the chart filter if set).
+  // Export is a read, so it stays available on plans where editing is locked.
+  const handleExport = () => {
+    if (filteredPlans.length === 0) { addToast(`There are no plans for ${year} to export.`, 'info'); return }
+    const out = buildHeadcountCsv(filteredPlans, id => charts.find(c => c.id === id)?.name)
+    downloadText(`headcount-plan-${year}.csv`, out.csv)
+    addToast(`Exported ${out.rows} planned role${out.rows === 1 ? '' : 's'} for ${year}.`, 'success')
+  }
+
   return (
     <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -696,6 +710,20 @@ export function HeadcountView() {
         <ChartFilter value={chartFilter} onChange={setChartFilter} />
 
         <div style={{ flex: 1 }} />
+
+        <button
+          onClick={handleExport}
+          title={`Download the ${year} plans shown here as a CSV`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 8, cursor: 'pointer', fontSize: 12, color: 'var(--muted)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted)' }}
+        >
+          <Download size={12} /> Export CSV
+        </button>
 
         <button onClick={() => setShowDeptManager(true)} style={{
           display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px',

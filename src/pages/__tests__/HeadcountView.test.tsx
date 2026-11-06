@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('../../lib/apiClient', () => {
@@ -7,7 +7,11 @@ vi.mock('../../lib/apiClient', () => {
   return { ApiError, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }
 })
 
+vi.mock('../../lib/csvSafe', async (orig) => ({ ...(await orig<typeof import('../../lib/csvSafe')>()), downloadText: vi.fn() }))
+
 import { api } from '../../lib/apiClient'
+import { downloadText } from '../../lib/csvSafe'
+import { useToastStore } from '../../store/toastStore'
 import { HeadcountView } from '../HeadcountView'
 import { useBillingStore, PLAN_BY_TIER } from '../../store/billingStore'
 import { useUserStore } from '../../store/userStore'
@@ -21,6 +25,7 @@ const PLAN = {
 }
 
 beforeEach(() => {
+  vi.mocked(downloadText).mockReset()
   vi.mocked(api.get).mockImplementation((path: string) => Promise.resolve(path === '/api/headcount' ? [PLAN] : []) as never)
   useHeadcountStore.setState({ plans: [], loading: false })
   useUserStore.setState({ permission: 'admin' })
@@ -59,5 +64,38 @@ describe('HeadcountView plan gating', () => {
     expect(await screen.findByText('Platform Engineer')).toBeInTheDocument()
     expect(screen.queryByTestId('locked-headcount-planning')).toBeNull()
     expect(screen.queryByRole('button', { name: /Add hire/ })).toBeNull()
+  })
+})
+
+describe('HeadcountView CSV export (roadmap 2.2)', () => {
+  it('downloads the plans on the board for finance', async () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.growth })
+    renderView()
+    await screen.findByText('Platform Engineer')
+    fireEvent.click(screen.getByRole('button', { name: /Export CSV/ }))
+    expect(downloadText).toHaveBeenCalledTimes(1)
+    const [name, csv] = vi.mocked(downloadText).mock.calls[0]
+    expect(name).toBe(`headcount-plan-${YEAR}.csv`)
+    expect(csv).toContain('Title,Department,Role type,Target quarter,Status,Chart,Notes')
+    expect(csv).toContain(`Platform Engineer,,New headcount,${YEAR}-Q2,Planned,,`)
+  })
+
+  it('stays available when editing is locked, because it only reads', async () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.starter })
+    renderView()
+    await screen.findByText('Platform Engineer')
+    fireEvent.click(screen.getByRole('button', { name: /Export CSV/ }))
+    expect(downloadText).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so instead of downloading an empty file', async () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.growth })
+    vi.mocked(api.get).mockImplementation(() => Promise.resolve([]) as never)
+    useToastStore.setState({ toasts: [] })
+    renderView()
+    await screen.findByRole('button', { name: /Export CSV/ })
+    fireEvent.click(screen.getByRole('button', { name: /Export CSV/ }))
+    expect(downloadText).not.toHaveBeenCalled()
+    expect(useToastStore.getState().toasts.at(-1)?.message).toMatch(/no plans for/)
   })
 })

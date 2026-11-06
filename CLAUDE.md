@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**264 frontend + 407 backend = 671 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**293 frontend + 407 backend = 700 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -173,6 +173,20 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   (changing it earlier remounts with stale nodes).
 - **Tests:** `src/lib/__tests__/importOrg.test.ts`, `readSheetFile.test.ts` (real `.xlsx` fixture), `ImportDialog.test.tsx`,
   `api/__tests__/import.test.ts`, `tests/e2e/import.spec.ts`.
+
+## Export (roadmap 2.2, 2026-11-06)
+
+- **Chart CSV:** canvas Export menu → "Export as CSV" (free). `buildChartCsv()` in `src/lib/exportOrg.ts`, built in the browser from
+  the canvas state. It is also an import file: it writes every column the importer reads, including `X`/`Y` and `Department colour`,
+  so export → import keeps the shape. If every imported row has X and Y they are used instead of auto-layout (exact in a new chart;
+  moved next to the existing roles when appending). `src/lib/__tests__/exportOrg.test.ts` proves the round trip, including a
+  byte-identical second export.
+- **Reporting lines come from edges** (what is drawn). `OrgNode.managerId` is only set by the node modal and the importer; the Connect
+  tool draws edges and does not update it. A role with several incoming edges exports the first; the toast says how many.
+- **CSV safety (`src/lib/csvSafe.ts`):** `toCsv` prefixes text cells that start with `= + - @ \t \r` with `'`, and import calls
+  `unguardCell` on every cell. Numbers are not guarded. Files start with a BOM. Use `toCsv`/`downloadText` for any new export.
+- **Headcount CSV:** "Export CSV" on the Headcount page writes the plans shown (selected year and chart filter). It is a read, so it
+  stays available when editing is locked by plan or role. Open roles without a role type come back from import as "new headcount".
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 
@@ -485,13 +499,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 264 tests
+npm run test:run       # 293 tests
 
 # Run backend API tests
 npm run test:api       # 407 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 671 tests total
+npm run test:all       # 700 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

@@ -1,6 +1,7 @@
-import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../types'
+import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus, EmploymentType } from '../types'
 import { calculateLayout } from '../utils/layout'
 import { TEMPLATE_DEPARTMENTS } from './chartTemplates'
+import { unguardCell, toCsv } from './csvSafe'
 
 // Roadmap 2.1: turn a spreadsheet of people into a reporting tree.
 //
@@ -20,11 +21,14 @@ const FALLBACK_TITLE = 'Team member'
 
 export type ImportField =
   | 'rowId' | 'name' | 'title' | 'department' | 'manager' | 'email' | 'location' | 'startDate' | 'roleType'
+  | 'status' | 'employmentType' | 'x' | 'y' | 'departmentColour'
 
 export interface ImportFieldInfo {
   field: ImportField
   label: string
   hint: string
+  /** Shown under "Layout and formatting" in the mapping step. Files exported from StratMap carry these. */
+  advanced?: boolean
 }
 
 /** Order here is the order of the mapping step. */
@@ -38,6 +42,11 @@ export const IMPORT_FIELDS: ImportFieldInfo[] = [
   { field: 'location',   label: 'Location',    hint: 'Optional.' },
   { field: 'startDate',  label: 'Start date',  hint: 'Optional. Use YYYY-MM-DD.' },
   { field: 'roleType',   label: 'Role type',   hint: 'Optional: existing, new headcount, backfill, contractor or TBD.' },
+  { field: 'status',     label: 'Status',      hint: 'Optional: active, open, planned or backfill.', advanced: true },
+  { field: 'employmentType', label: 'Employment type', hint: 'Optional: full-time, part-time, contractor or advisor.', advanced: true },
+  { field: 'x',          label: 'X position',  hint: 'Optional. With Y, keeps the chart\'s shape. Otherwise the tree is laid out for you.', advanced: true },
+  { field: 'y',          label: 'Y position',  hint: 'Optional. Use with X.', advanced: true },
+  { field: 'departmentColour', label: 'Department colour', hint: 'Optional: a hex colour such as #0EA5E9.', advanced: true },
 ]
 
 export type ColumnMapping = Record<ImportField, number | null>
@@ -62,7 +71,11 @@ export interface ImportOptions {
   maxNodes?: number
   /** Departments already on the target chart, to report which ones are new. */
   existingDepartments?: { name: string }[]
-  /** Top-left corner for the laid-out tree. */
+  /**
+   * Top-left corner for the tree. A laid-out tree always starts here (default 60, 50).
+   * Positions from X/Y columns are kept exactly unless an origin is given, in which
+   * case the whole shape is moved there.
+   */
   origin?: { x: number; y: number }
 }
 
@@ -89,6 +102,8 @@ export interface ImportPlan {
   overLimit: { max: number; wouldHave: number } | null
   /** Any error blocks the import: nothing is written until the file is fixed. */
   blocked: boolean
+  /** "file": positions came from the X and Y columns. "auto": the tree was laid out. */
+  layout: 'file' | 'auto'
 }
 
 // ─── Column guessing ─────────────────────────────────────────────────────────
@@ -106,13 +121,24 @@ const SYNONYMS: Record<ImportField, string[]> = {
   location:   ['location', 'office', 'city', 'site', 'country'],
   startDate:  ['start date', 'hire date', 'joined', 'date hired', 'start', 'date joined', 'joining date'],
   roleType:   ['role type', 'type', 'headcount type', 'hiring status'],
+  status:     ['status', 'role status', 'node status'],
+  employmentType: ['employment type', 'employment', 'contract type', 'worker type'],
+  x:          ['x', 'x position', 'pos x', 'position x'],
+  y:          ['y', 'y position', 'pos y', 'position y'],
+  departmentColour: ['department colour', 'department color', 'dept colour', 'dept color', 'colour', 'color'],
 }
 
 // "manager" must claim its columns before "name"/"email" can match "Manager Name".
-const GUESS_ORDER: ImportField[] = ['rowId', 'manager', 'email', 'name', 'title', 'department', 'location', 'startDate', 'roleType']
+const GUESS_ORDER: ImportField[] = [
+  'rowId', 'manager', 'email', 'name', 'title', 'departmentColour', 'department', 'location', 'startDate',
+  'roleType', 'status', 'employmentType', 'x', 'y',
+]
 
 export function emptyMapping(): ColumnMapping {
-  return { rowId: null, name: null, title: null, department: null, manager: null, email: null, location: null, startDate: null, roleType: null }
+  return {
+    rowId: null, name: null, title: null, department: null, manager: null, email: null, location: null, startDate: null, roleType: null,
+    status: null, employmentType: null, x: null, y: null, departmentColour: null,
+  }
 }
 
 /** Best-effort column mapping from the header names. The user can change every choice. */
@@ -129,6 +155,9 @@ export function guessMapping(headers: string[]): ColumnMapping {
         if (used.has(i) || !h) return false
         if (pass === 1) return SYNONYMS[field].includes(h)
         if (field !== 'manager' && /manager|reports/.test(h)) return false
+        // "Department colour" is not the department, "Employment type" is not the role type.
+        if (field !== 'departmentColour' && /colou?r/.test(h)) return false
+        if (field === 'roleType' && /employ/.test(h)) return false
         return SYNONYMS[field].some(s => s.length >= 4 && h.includes(s))
       })
       if (idx >= 0) { mapping[field] = idx; used.add(idx) }
@@ -150,6 +179,31 @@ export function parseRoleType(raw: string): RoleType | null {
   if (/exist|current|filled|active|employee/.test(v)) return 'existing'
   return null
 }
+
+/** Maps free text like "Open" or "Planned" to a node status; null if unrecognised. */
+export function parseStatus(raw: string): NodeStatus | null {
+  const v = norm(raw)
+  if (!v) return null
+  if (/backfill/.test(v)) return 'backfill'
+  if (/open|vacant/.test(v)) return 'open'
+  if (/plan/.test(v)) return 'planned'
+  if (/active|filled|current|employed/.test(v)) return 'active'
+  return null
+}
+
+/** Maps free text like "Full-time" to an employment type; null if unrecognised. */
+export function parseEmployment(raw: string): EmploymentType | null {
+  const v = norm(raw)
+  if (!v) return null
+  if (/part/.test(v)) return 'part-time'
+  if (/contract|freelanc/.test(v)) return 'contractor'
+  if (/advis/.test(v)) return 'advisor'
+  if (/full/.test(v)) return 'full-time'
+  return null
+}
+
+const HEX_COLOUR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const COORD_MAX = 1_000_000
 
 function statusFor(roleType: RoleType | undefined, vacant: boolean): NodeStatus {
   if (roleType === 'backfill') return 'backfill'
@@ -197,18 +251,24 @@ interface Rec {
   location: string
   startDate: string
   roleType: RoleType | undefined
+  /** Explicit status from the file; otherwise derived from role type and whether the role has a name. */
+  status: NodeStatus | undefined
+  employmentType: EmploymentType | undefined
+  x: number | null
+  y: number | null
+  colour: string
 }
 
 export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, options: ImportOptions = {}): ImportPlan {
   const issues: ImportIssue[] = []
   const issue = (row: number | null, severity: ImportIssue['severity'], message: string) =>
     issues.push({ row, severity, message })
-  const cell = (r: string[], idx: number | null) => (idx === null ? '' : (r[idx] ?? '').trim())
+  const cell = (r: string[], idx: number | null) => (idx === null ? '' : unguardCell((r[idx] ?? '').trim()))
 
   const empty = (): ImportPlan => ({
     nodes: [], edges: [], departments: [], issues,
     stats: { rows: 0, imported: 0, skipped: 0, vacant: 0, roots: 0, departments: 0, newDepartments: 0 },
-    overLimit: null, blocked: issues.some(i => i.severity === 'error'),
+    overLimit: null, blocked: issues.some(i => i.severity === 'error'), layout: 'auto',
   })
 
   if (mapping.name === null && mapping.title === null) {
@@ -260,6 +320,31 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     }
     if (!roleType) roleType = vacant ? 'new-headcount' : undefined
 
+    const statusRaw = cell(r, mapping.status)
+    const status = statusRaw ? parseStatus(statusRaw) ?? undefined : undefined
+    if (statusRaw && !status) issue(row, 'warning', `Status "${statusRaw}" not recognised, so it was worked out from the role type.`)
+
+    const empRaw = cell(r, mapping.employmentType)
+    const employmentType = empRaw ? parseEmployment(empRaw) ?? undefined : undefined
+    if (empRaw && !employmentType) issue(row, 'warning', `Employment type "${empRaw}" not recognised, so it was left as full-time.`)
+
+    const coord = (idx: number | null, label: string): number | null => {
+      const raw = cell(r, idx)
+      if (!raw) return null
+      const n = Number(raw)
+      if (!Number.isFinite(n) || Math.abs(n) > COORD_MAX) {
+        issue(row, 'warning', `${label} "${raw}" is not a usable number.`)
+        return null
+      }
+      return n
+    }
+    const x = coord(mapping.x, 'X position')
+    const y = coord(mapping.y, 'Y position')
+
+    const colourRaw = cell(r, mapping.departmentColour)
+    const colour = HEX_COLOUR.test(colourRaw) ? colourRaw : ''
+    if (colourRaw && !colour) issue(row, 'warning', `Department colour "${colourRaw}" is not a hex colour like #0EA5E9, so it was ignored.`)
+
     const dateRaw = cell(r, mapping.startDate)
     const date = normaliseDate(dateRaw)
     if (dateRaw && date.looksOdd) issue(row, 'warning', `Start date "${dateRaw}" is not YYYY-MM-DD; kept as written.`)
@@ -271,7 +356,7 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
       email: cell(r, mapping.email).toLowerCase(),
       location: clip(cell(r, mapping.location), NAME_MAX, 'Location'),
       startDate: clip(date.value, DATE_MAX, 'Start date'),
-      roleType,
+      roleType, status, employmentType, x, y, colour,
     })
   })
 
@@ -348,12 +433,18 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
   const deptByName = new Map<string, Department>()
   const usedColours = new Set<string>()
   const departments: Department[] = []
+  // The first colour given in the file for a department wins.
+  const fileColour = new Map<string, string>()
+  for (const rec of recs) {
+    const key = rec.department.toLowerCase()
+    if (rec.department && rec.colour && !fileColour.has(key)) fileColour.set(key, rec.colour)
+  }
   const deptFor = (name: string): string => {
     if (!name) return ''
     const key = name.toLowerCase()
     let d = deptByName.get(key)
     if (!d) {
-      const colour = pickColour(name, usedColours, departments.length)
+      const colour = fileColour.get(key) ?? pickColour(name, usedColours, departments.length)
       usedColours.add(colour)
       d = { id: `dept-${departments.length}`, name, colour }
       deptByName.set(key, d)
@@ -369,8 +460,8 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     title: rec.title,
     departmentId: deptFor(rec.department),
     managerId: managerOf[i] === null ? null : ids[managerOf[i]!],
-    status: statusFor(rec.roleType, rec.vacant),
-    employmentType: rec.roleType === 'contractor' ? 'contractor' : 'full-time',
+    status: rec.status ?? statusFor(rec.roleType, rec.vacant),
+    employmentType: rec.employmentType ?? (rec.roleType === 'contractor' ? 'contractor' : 'full-time'),
     ...(rec.roleType ? { roleType: rec.roleType } : {}),
     ...(rec.location ? { location: rec.location } : {}),
     ...(rec.startDate ? { startDate: rec.startDate } : {}),
@@ -381,14 +472,28 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     if (m !== null) edges.push({ id: `imp-e${i}`, sourceId: ids[m], targetId: ids[i] })
   })
 
-  // 6. Lay the tree out -------------------------------------------------------
-  const positions = calculateLayout(nodes, edges)
-  let minX = Infinity, minY = Infinity
-  positions.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y) })
-  const origin = options.origin ?? { x: 60, y: 50 }
-  for (const n of nodes) {
-    const p = positions.get(n.id)
-    if (p) { n.x = Math.round(p.x - minX + origin.x); n.y = Math.round(p.y - minY + origin.y) }
+  // 6. Positions: from the file when every role has X and Y, else laid out ----
+  const given = recs.filter(r => r.x !== null && r.y !== null).length
+  const useFile = mapping.x !== null && mapping.y !== null && recs.length > 0 && given === recs.length
+  if (mapping.x !== null && mapping.y !== null && given > 0 && !useFile) {
+    issue(null, 'warning', `Only ${given} of ${recs.length} roles have both X and Y, so the positions were ignored and the chart was laid out automatically.`)
+  }
+  if (useFile) {
+    nodes.forEach((n, i) => { n.x = recs[i].x!; n.y = recs[i].y! })
+    if (options.origin) {
+      const dx = options.origin.x - Math.min(...nodes.map(n => n.x))
+      const dy = options.origin.y - Math.min(...nodes.map(n => n.y))
+      for (const n of nodes) { n.x = Math.round((n.x + dx) * 100) / 100; n.y = Math.round((n.y + dy) * 100) / 100 }
+    }
+  } else {
+    const positions = calculateLayout(nodes, edges)
+    let minX = Infinity, minY = Infinity
+    positions.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y) })
+    const origin = options.origin ?? { x: 60, y: 50 }
+    for (const n of nodes) {
+      const p = positions.get(n.id)
+      if (p) { n.x = Math.round(p.x - minX + origin.x); n.y = Math.round(p.y - minY + origin.y) }
+    }
   }
 
   // 7. Plan limit: all or nothing ---------------------------------------------
@@ -421,6 +526,7 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
   return {
     nodes, edges, departments, issues, stats, overLimit,
     blocked: issues.some(i => i.severity === 'error'),
+    layout: useFile ? 'file' : 'auto',
   }
 }
 
@@ -435,9 +541,5 @@ export function buildTemplateCsv(): string {
     ['3', '', 'Software Engineer', 'Engineering', '2', '', 'Remote', '', 'New headcount'],
     ['4', 'Jo Example', 'Head of Sales', 'Go-to-Market', 'alex@example.com', 'jo@example.com', 'New York', '2023-05-15', 'Existing'],
   ]
-  return rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n'
-}
-
-function csvCell(v: string): string {
-  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+  return toCsv(rows)
 }
