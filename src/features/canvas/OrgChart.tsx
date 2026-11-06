@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
@@ -8,6 +8,8 @@ import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../t
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import { useCanvasState } from './useCanvasState'
 import { NodeCard } from '../nodes/NodeCard'
+import { NodeChip } from '../nodes/NodeChip'
+import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
 import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
@@ -49,6 +51,19 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 // ─── Edge SVG ─────────────────────────────────────────────────────────────────
+
+/** A reporting line with no hit area, arrowhead or controls: what a big chart draws when zoomed far out (roadmap 3.4). */
+const EdgeLine = memo(function EdgeLine({ source, target, transform, colour, opacity }: {
+  source: OrgNode; target: OrgNode; transform: Transform; colour: string; opacity: number
+}) {
+  const s  = toScreen(source.x + NODE_W / 2, source.y + NODE_H, transform)
+  const e  = toScreen(target.x + NODE_W / 2, target.y,          transform)
+  const dy = Math.max((e.y - s.y) * 0.45, 10)
+  return (
+    <path d={`M ${s.x} ${s.y} C ${s.x} ${s.y + dy} ${e.x} ${e.y - dy} ${e.x} ${e.y}`}
+      fill="none" stroke={colour} strokeOpacity={0.55 * opacity} strokeWidth={1} style={{ pointerEvents: 'none' }} />
+  )
+})
 
 function EdgePath({
   source, target, transform, selected, hovered, deptColour, opacity,
@@ -116,16 +131,38 @@ function EdgePath({
 const MM_W = 160
 const MM_H = 90
 
+const MINIMAP_DEPT_COLOURS: Record<string, string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
+
+/** The minimap's role dots. Memoised: panning and zooming change only the viewport rectangle, not these. */
+const MinimapDots = memo(function MinimapDots({ nodes, minX, minY, mmScale }: { nodes: OrgNode[]; minX: number; minY: number; mmScale: number }) {
+  return (
+    <>
+      {nodes.map(n => (
+        <rect key={n.id}
+          x={(n.x - minX) * mmScale} y={(n.y - minY) * mmScale}
+          width={NODE_W * mmScale} height={NODE_H * mmScale}
+          rx={2} fill={MINIMAP_DEPT_COLOURS[n.departmentId] ?? '#94A3B8'} fillOpacity={0.55}
+        />
+      ))}
+    </>
+  )
+})
+
 function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
   nodes: OrgNode[]; transform: Transform; vpW: number; vpH: number
   onPanTo: (x: number, y: number) => void
 }) {
-  if (nodes.length === 0) return null
-  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y)
-  const minX = Math.min(...xs) - 40, minY = Math.min(...ys) - 40
-  const maxX = Math.max(...xs) + NODE_W + 40, maxY = Math.max(...ys) + NODE_H + 40
-  const cW = maxX - minX, cH = maxY - minY
-  const mmScale = Math.min(MM_W / cW, MM_H / cH)
+  // Bounds only change when roles move, not when the view pans or zooms (roadmap 3.4).
+  const bounds = useMemo(() => {
+    if (nodes.length === 0) return null
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+    for (const n of nodes) { if (n.x < x0) x0 = n.x; if (n.y < y0) y0 = n.y; if (n.x > x1) x1 = n.x; if (n.y > y1) y1 = n.y }
+    const minX = x0 - 40, minY = y0 - 40
+    const cW = x1 + NODE_W + 40 - minX, cH = y1 + NODE_H + 40 - minY
+    return { minX, minY, mmScale: Math.min(MM_W / cW, MM_H / cH) }
+  }, [nodes])
+  if (!bounds) return null
+  const { minX, minY, mmScale } = bounds
   const vpCX = -transform.x / transform.scale, vpCY = -transform.y / transform.scale
   const vpCW = vpW / transform.scale,           vpCH = vpH / transform.scale
   const vpMMX = (vpCX - minX) * mmScale, vpMMY = (vpCY - minY) * mmScale
@@ -138,8 +175,6 @@ function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
     onPanTo(-(mx * transform.scale - vpW / 2), -(my * transform.scale - vpH / 2))
   }
 
-  const deptColors: Record<string,string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
-
   return (
     <div data-export-ignore style={{
       position: 'absolute', bottom: 56, left: 16, zIndex: 20,
@@ -147,13 +182,7 @@ function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
     }}>
       <svg width={MM_W} height={MM_H} style={{ display: 'block', cursor: 'crosshair' }} onClick={handleClick}>
-        {nodes.map(n => (
-          <rect key={n.id}
-            x={(n.x - minX) * mmScale} y={(n.y - minY) * mmScale}
-            width={NODE_W * mmScale} height={NODE_H * mmScale}
-            rx={2} fill={deptColors[n.departmentId] ?? '#94A3B8'} fillOpacity={0.55}
-          />
-        ))}
+        <MinimapDots nodes={nodes} minX={minX} minY={minY} mmScale={mmScale} />
         <rect x={vpMMX} y={vpMMY} width={vpMMW} height={vpMMH}
           fill="rgba(14,165,233,0.08)" stroke="var(--brand)" strokeWidth={1.5}
           rx={2} style={{ pointerEvents: 'none' }}
@@ -669,11 +698,11 @@ function ZoomControls({ scale, onZoom, onFit }: { scale: number; onZoom: (d: num
       borderRadius: 8, padding: '5px 8px',
       display: 'flex', alignItems: 'center', gap: 6, boxShadow: 'var(--shadow-sm)',
     }}>
-      <button onClick={() => onZoom(-0.1)} style={zoomBtnStyle}><Minus size={11} /></button>
-      <button onClick={onFit} style={{ ...zoomBtnStyle, minWidth: 46, fontSize: 11, color: 'var(--muted)' }}>
+      <button aria-label="Zoom out" onClick={() => onZoom(-0.1)} style={zoomBtnStyle}><Minus size={11} /></button>
+      <button aria-label="Fit to view" title="Fit to view" onClick={onFit} style={{ ...zoomBtnStyle, minWidth: 46, fontSize: 11, color: 'var(--muted)' }}>
         {Math.round(scale * 100)}%
       </button>
-      <button onClick={() => onZoom(+0.1)} style={zoomBtnStyle}><Plus size={11} /></button>
+      <button aria-label="Zoom in" onClick={() => onZoom(+0.1)} style={zoomBtnStyle}><Plus size={11} /></button>
     </div>
   )
 }
@@ -878,6 +907,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   // ── Touch: pinch to zoom (roadmap 2.8) ────────────────────────────────────
   // Pointers are tracked in the capture phase so a pinch works even when a finger lands on a node.
+  // What the server last saw for each role's position, so a drag sends only what moved (roadmap 3.4).
+  const syncedPositions = useRef(new Map<string, Point>(initialNodes.map(n => [n.id, { x: n.x, y: n.y }])))
   const pointersRef = useRef(new Map<number, Point>())
   const pinchRef = useRef<{ start: ViewTransform; startMid: Point; startDist: number } | null>(null)
   const transformRef = useRef(transform)
@@ -967,10 +998,12 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     if (ia.mode === 'dragging' && ia.hasMoved) {
       commitDrag(nodesRef.current)
       if (chartId) {
-        const positions = nodesRef.current.map(n => ({ id: n.id, x: n.x, y: n.y }))
-        api.put(`/api/charts/${chartId}/nodes`, positions).catch(err =>
-          console.error('[canvas] position sync failed:', err)
-        )
+        const moved = movedPositions(nodesRef.current, syncedPositions.current)
+        if (moved.length) {
+          api.put(`/api/charts/${chartId}/nodes`, moved)
+            .then(() => moved.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
+            .catch(err => console.error('[canvas] position sync failed:', err))
+        }
       }
     }
     if (ia.mode === 'panning' && !ia.hasMoved && activeTool === 'select') { setSelectedId(null); setSelectedEdgeId(null) }
@@ -1096,6 +1129,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         return { id: n.id, x: p?.x ?? n.x, y: p?.y ?? n.y }
       })
       api.put(`/api/charts/${chartId}/nodes`, posArr)
+        .then(() => posArr.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
         .catch(err => console.error('[canvas] layout sync failed:', err))
     }
   }, [upgradeRequired, edges, applyLayout, fitToView, addToast])
@@ -1156,6 +1190,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Dept colour lookup for edges
   const deptColourMap = Object.fromEntries(departments.map(d => [d.id, d.colour]))
 
+  // Big charts (roadmap 3.4): draw only what is near the screen, and plain chips when zoomed far out.
+  // Exports render everything, because they capture the whole chart rather than the screen.
+  const virtualize = !exportOverflow && shouldVirtualize(nodes.length)
+  const chips = virtualize && shouldUseChips(nodes.length, transform.scale)
+  const view = useMemo(() => (virtualize ? viewRect(transform, vpSize) : null), [virtualize, transform, vpSize])
+  const visibleIds = useMemo(() => (view ? visibleNodeIds(nodes, view) : null), [view, nodes])
+
   return (
     <div
       ref={containerRef}
@@ -1202,9 +1243,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
             const src = nodeMap[edge.sourceId]
             const tgt = nodeMap[edge.targetId]
             if (!src || !tgt) return null
+            if (view && edge.id !== selectedEdgeId && !edgeInView(src, tgt, view)) return null
             const deptColour = deptColourMap[src.departmentId] ?? '#94A3B8'
             const edgeDimmed = matchedNodeIds !== null &&
               (!matchedNodeIds.has(edge.sourceId) || !matchedNodeIds.has(edge.targetId))
+            if (chips) {
+              return <EdgeLine key={edge.id} source={src} target={tgt} transform={transform} colour={deptColour} opacity={edgeDimmed ? 0.1 : 1} />
+            }
             return (
               <EdgePath
                 key={edge.id}
@@ -1236,20 +1281,24 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           willChange: 'transform',
         }}
       >
-        {nodes.map(node => (
-          <NodeCard
-            key={node.id}
-            node={node}
-            selected={node.id === selectedId}
-            connecting={node.id === connectingFrom}
-            isConnectTarget={!!connectingFrom && node.id !== connectingFrom}
-            dimmed={matchedNodeIds !== null && !matchedNodeIds.has(node.id)}
-            departments={wsDepts}
-            onPointerDown={e => handleNodePointerDown(e, node.id)}
-            onClick={e => handleNodeClick(e, node.id)}
-            onDoubleClick={e => handleNodeDoubleClick(e, node.id)}
-          />
-        ))}
+        {nodes.map(node => {
+          // Off-screen roles are skipped on big charts; the one being selected or connected always stays.
+          if (visibleIds && !visibleIds.has(node.id) && node.id !== selectedId && node.id !== connectingFrom) return null
+          const state = {
+            node,
+            selected: node.id === selectedId,
+            connecting: node.id === connectingFrom,
+            isConnectTarget: !!connectingFrom && node.id !== connectingFrom,
+            dimmed: matchedNodeIds !== null && !matchedNodeIds.has(node.id),
+          }
+          return chips
+            ? <NodeChip key={node.id} {...state} colour={deptColourMap[node.departmentId] ?? '#94A3B8'}
+                onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick} />
+            : <NodeCard key={node.id} {...state} departments={wsDepts}
+                onPointerDown={(e: React.PointerEvent) => handleNodePointerDown(e, node.id)}
+                onClick={(e: React.MouseEvent) => handleNodeClick(e, node.id)}
+                onDoubleClick={(e: React.MouseEvent) => handleNodeDoubleClick(e, node.id)} />
+        })}
       </div>
 
       <Toolbar

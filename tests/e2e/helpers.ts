@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { neon } from '@neondatabase/serverless'
 import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test'
 
 export const RUN = process.env.E2E_RUN_ID ?? 'local'
@@ -53,4 +54,16 @@ export async function createChart(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create chart' }).click()
   await expect(page).toHaveURL(/\/charts\/[^/]+/)
   await expect(page.getByText(name).first()).toBeVisible()
+}
+
+/**
+ * Puts a test user's workspace on a plan, straight in the database (there is no checkout in e2e).
+ * The workspace must already exist (call after `onboard`). Only ever touches this run's own `dev-e2e<run>-…` users.
+ */
+export async function setPlanFor(slug: string, tier: 'free' | 'starter' | 'growth' | 'enterprise') {
+  const url = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
+  if (!url) throw new Error('No database URL for setPlanFor')
+  if (!slug.startsWith(`e2e${RUN}-`)) throw new Error(`Refusing to change the plan of a user outside this run: ${slug}`)
+  const rows = await neon(url)`UPDATE workspaces SET plan_tier = ${tier} WHERE owner_id = ${`dev-${slug}`} RETURNING id`
+  if (rows.length !== 1) throw new Error(`Expected one workspace for ${slug}, changed ${rows.length}`)
 }
