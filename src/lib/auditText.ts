@@ -29,6 +29,10 @@ export function describeAudit(e: AuditEventView): string {
     case 'member.joined': return `${who} joined as ${cap(d.role)}`
     case 'member.role_changed': return `${who} changed ${email} from ${cap(d.from)} to ${cap(d.to)}`
     case 'member.removed': return `${who} removed ${email} (${cap(d.role)})`
+    case 'member.left': return `${who} left the workspace`
+    case 'workspace.deleted': return `${who} deleted the workspace`
+    case 'workspace.restored': return `${who} restored the workspace`
+    case 'workspace.exported': return `${who} exported the workspace data`
     case 'invite.sent': return `${who} invited ${email} as ${cap(d.role)}`
     case 'invite.resent': return `${who} resent the invite to ${email}`
     case 'invite.revoked': return `${who} cancelled the invite to ${email}`

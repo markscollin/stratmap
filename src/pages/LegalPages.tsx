@@ -86,15 +86,22 @@ export function PrivacyPage() {
 
       <H2>4. Data retention</H2>
       <p>
-        We retain your data for as long as your account is active. You may request deletion of your account and
-        associated data by contacting us at [privacy@yourdomain].
+        We retain your data for as long as your account is active. A workspace owner can delete their workspace
+        at any time in Settings. A deleted workspace is hidden immediately and its subscription is cancelled; we keep
+        it for 30 days so the owner can restore it, and then permanently erase it, including its charts, roles, job
+        descriptions, members and activity log. Backups are overwritten on their normal schedule. Records we are
+        legally required to keep, such as invoices, are retained as the law requires. You can also delete your own
+        account in Settings: you leave every workspace, your sign-in account is deleted, and a workspace you own is
+        deleted with you under the same 30-day rule. The activity log records who changed members, sharing and
+        salary bands (never salary amounts) and is kept with the workspace it belongs to.
       </p>
 
       <H2>5. Your rights</H2>
       <p>
         Depending on your location (including the EU/UK under GDPR), you may have rights to access, correct,
-        export, or delete your personal data, and to object to or restrict certain processing. To exercise these
-        rights, contact [privacy@yourdomain].
+        export, or delete your personal data, and to object to or restrict certain processing. Workspace owners
+        and admins can export all workspace data (JSON and CSV) in Settings, and anyone can delete their account
+        there. For anything else, contact [privacy@yourdomain].
       </p>
 
       <H2>6. Cookies</H2>

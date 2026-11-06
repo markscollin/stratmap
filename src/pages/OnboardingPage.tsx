@@ -7,6 +7,7 @@ import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
 import { setSelectedWorkspaceId } from '../lib/workspaceSelection'
 import { api } from '../lib/apiClient'
+import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
 import type { Permission, CompanySize, WorkspaceRole } from '../types'
 import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
@@ -131,6 +132,9 @@ export function OnboardingPage() {
         }}>SM</div>
         <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px' }}>StratMap</span>
       </div>
+
+      {/* A workspace they deleted can be restored for 30 days (roadmap 4.2) */}
+      <DeletedWorkspaceNotice />
 
       {/* Step dots */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>

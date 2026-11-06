@@ -46,7 +46,7 @@ describe('GET /api/workspace', () => {
   it('returns 405 for unsupported methods', async () => {
     await seedWorkspace()
     const res = createRes()
-    await handler(createReq({ method: 'DELETE' }) as never, res as never)
+    await handler(createReq({ method: 'PATCH' }) as never, res as never)
     expect(res._status).toBe(405)
   })
 

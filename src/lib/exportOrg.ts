@@ -1,5 +1,5 @@
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus, EmploymentType } from '../types'
-import { toCsv, type CsvCell } from './csvSafe'
+import { toCsv, type CsvCell } from './csvText'
 
 // Roadmap 2.2: CSV export of a chart (and of the headcount plan, for finance).
 //
@@ -41,7 +41,30 @@ function isUnfilled(n: OrgNode): boolean {
   return n.name === n.title && (n.status === 'open' || n.status === 'planned' || n.status === 'backfill')
 }
 
-export function buildChartCsv({ nodes, edges, departments }: ChartExportInput): ChartExport {
+export function buildChartCsv(input: ChartExportInput): ChartExport {
+  const { rows, multiManager } = chartRows(input)
+  return { csv: toCsv([[...CHART_CSV_HEADERS], ...rows]), rows: rows.length, multiManager }
+}
+
+/**
+ * Every role of every chart in one file (workspace export, roadmap 4.2): the chart file's columns with the chart's name
+ * in front. Role numbers (ID, Reports to) are prefixed with the chart's position (1-3, 2-1...) so they stay unique, which
+ * also lets the importer read the whole file as one chart with every reporting line intact.
+ */
+export function buildWorkspaceRolesCsv(charts: (ChartExportInput & { name: string })[]): { csv: string; rows: number } {
+  const out: CsvCell[][] = [['Chart', ...CHART_CSV_HEADERS]]
+  charts.forEach((chart, i) => {
+    for (const row of chartRows(chart).rows) {
+      const cells = [...row]
+      cells[0] = `${i + 1}-${cells[0]}`
+      if (cells[4] !== '') cells[4] = `${i + 1}-${cells[4]}`
+      out.push([chart.name, ...cells])
+    }
+  })
+  return { csv: toCsv(out), rows: out.length - 1 }
+}
+
+function chartRows({ nodes, edges, departments }: ChartExportInput): { rows: CsvCell[][]; multiManager: number } {
   const byId = new Map(nodes.map(n => [n.id, n]))
   const deptById = new Map(departments.map(d => [d.id, d]))
 
@@ -77,7 +100,7 @@ export function buildChartCsv({ nodes, edges, departments }: ChartExportInput): 
   const rowId = new Map(emitted.map((e, i) => [e.id, String(i + 1)]))
   const multiManager = [...parents.values()].filter(p => p.length > 1).length
 
-  const rows: CsvCell[][] = [[...CHART_CSV_HEADERS]]
+  const rows: CsvCell[][] = []
   for (const { id, parent } of emitted) {
     const n = byId.get(id)!
     const dept = n.departmentId ? deptById.get(n.departmentId) : undefined
@@ -97,7 +120,7 @@ export function buildChartCsv({ nodes, edges, departments }: ChartExportInput): 
       dept?.colour ?? '',
     ])
   }
-  return { csv: toCsv(rows), rows: emitted.length, multiManager }
+  return { rows, multiManager }
 }
 
 // ─── Headcount plan ──────────────────────────────────────────────────────────

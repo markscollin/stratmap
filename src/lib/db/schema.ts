@@ -47,6 +47,11 @@ export const workspaces = pgTable('workspaces', {
   // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)
   trialPlan: planTierEnum('trial_plan'),
   trialEndsAt: timestamp('trial_ends_at'),
+  // Soft delete (roadmap 4.2): set when the owner deletes the workspace. It is hidden from every route
+  // at once (api/_lib/auth.ts, share links) and can be restored by the owner until WORKSPACE_RESTORE_DAYS
+  // have passed, when a daily job erases it for good (api/cron/purge-deleted.ts).
+  deletedAt: timestamp('deleted_at'),
+  deletedBy: text('deleted_by'),               // Clerk userId of the owner who deleted it
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

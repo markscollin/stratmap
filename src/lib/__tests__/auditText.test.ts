@@ -19,6 +19,13 @@ describe('describeAudit', () => {
     expect(describeAudit(ev('share.link_revoked', { chartName: 'Q3 plan' }))).toBe('Ada turned off the share link for "Q3 plan"')
   })
 
+  it('describes workspace lifecycle events', () => {
+    expect(describeAudit(ev('member.left', { role: 'editor' }))).toBe('Ada left the workspace')
+    expect(describeAudit(ev('workspace.deleted', {}))).toBe('Ada deleted the workspace')
+    expect(describeAudit(ev('workspace.restored', {}))).toBe('Ada restored the workspace')
+    expect(describeAudit(ev('workspace.exported', { format: 'csv' }))).toBe('Ada exported the workspace data')
+  })
+
   it('names the salary parts that changed, never a number', () => {
     const text = describeAudit(ev('salary.updated', { roleTitle: 'CTO', changed: 'salaryBandMin,salaryBandMax' }))
     expect(text).toBe('Ada changed the salary band (minimum, maximum) for CTO')

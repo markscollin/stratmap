@@ -326,6 +326,30 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
 - **Not logged yet:** workspace rename, chart delete, billing changes, anything in 4.2 (workspace/account deletion should log when it is built).
 - **Tests:** `api/__tests__/audit.test.ts`, `src/lib/__tests__/auditText.test.ts`, `src/features/audit/__tests__/ActivityTab.test.tsx`, `tests/e2e/audit.spec.ts`.
 
+## Data rights (roadmap 4.2, 2026-11-06)
+
+All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/data-rights.test.ts` (auth mocked) and `data-rights-auth.test.ts` (**real** `requireAuth`, which is what proves the hiding).
+- **Delete workspace = soft delete (owner-decided).** `DELETE /api/workspace {confirmName}` (owner only, name must match exactly) sets `workspaces.deletedAt/deletedBy` (migration 0008), cancels the Stripe
+  subscription **first** (if Stripe fails the call is a 502 and nothing is deleted, so a deleted workspace is never still billed), puts the plan on Free, drops pending invites, logs `workspace.deleted`
+  and emails every member (`sendWorkspaceDeleted`). `resolveWorkspace` in `api/_lib/auth.ts` joins on `deletedAt IS NULL`, so **every** route stops seeing it at once; the public share routes
+  (`api/share/[code].ts`, `api/share-page.ts`) check it too. A new route that reads workspaces without going through `requireAuth` must check `deletedAt` itself.
+- **Restore:** `POST /api/workspace/restore {workspaceId}` (`requireUser`; only the owner, within `RESTORE_DAYS` = 30, and refused with 409 `owns-another-workspace` if they own a live one: one owned workspace per user).
+  It comes back on Free (the subscription is gone). `GET /api/workspaces` returns `deleted: [{id,name,eraseOn}]` for the owner; `DeletedWorkspaceNotice` shows it on onboarding and in Settings → General.
+  Owners may create a new workspace straight after deleting (the create guard in `POST /api/workspace` ignores deleted ones).
+- **Purge:** `GET /api/cron/purge-deleted` (Vercel cron, daily 03:17 UTC, `vercel.json` "crons") needs `Authorization: Bearer $CRON_SECRET`; **without `CRON_SECRET` set it returns 503 and does nothing**. It deletes workspaces deleted more
+  than 30 days ago; every table cascades from `workspaces`, and a test proves no row is left. When you add a table with a `workspace_id`, give it `onDelete: 'cascade'` and add it to the purge test's `seedEverything`.
+- **Account deletion:** `DELETE /api/account {confirm:'DELETE'}` (`requireUser`). **Owner-decided: an owned workspace is deleted with the account** (soft delete, members emailed). Their memberships elsewhere are removed
+  (logged as `member.left`, with no personal data), their email is removed from every audit log row, pending invites to their email are deleted, then the Clerk user is deleted **last** (`deleteUserAccount` in
+  `api/_lib/identity.ts`; a failure is a 502 and a retry finishes the job). Known consequence: the owner can no longer sign in, so they cannot restore a workspace deleted this way; it is erased after 30 days.
+  Authored-content ids (`charts.ownerId`, `updatedBy`) are opaque ids and stay; PostHog and Stripe's own records (invoices) are not touched.
+- **Export:** `GET /api/workspace/export` (owner/admin, free, 10 per hour per workspace) is one JSON file (workspace, members, invites, departments, charts with roles/lines/JDs incl. salary bands, templates, headcount plans,
+  activity log; **never** Stripe ids, invite token hashes or share codes). `?format=csv` is every role of every chart in the importer's column layout plus a leading `Chart` column, with IDs prefixed by the chart's position so
+  they stay unique (`buildWorkspaceRolesCsv` in `src/lib/exportOrg.ts`). Each export is logged as `workspace.exported`.
+- **Member removal** was already immediate (membership is looked up on every request); `data-rights-auth.test.ts` now proves it.
+- **UI:** `DataRightsSection` (Settings → General): export buttons for admins, "Delete workspace" for the owner (type the name), "Delete my account" for everyone (type DELETE). `useSignOut` is the shared sign-out hook (TopNav uses it too).
+- **Owner action:** set `CRON_SECRET` in Vercel (any long random string) or the purge never runs and deleted workspaces are kept forever.
+- **Not built:** "leave this workspace" for a member who keeps their account; ownership transfer.
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically

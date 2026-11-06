@@ -8,6 +8,8 @@ import { api, ApiError } from '../lib/apiClient'
 import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
 import { useBillingStore } from '../store/billingStore'
 import { ActivityTab } from '../features/audit/ActivityTab'
+import { DataRightsSection } from '../features/dataRights/DataRightsSection'
+import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
 import { ManageBillingButton } from '../features/billing/ManageBillingButton'
 import type { Permission, PlanTier, SubscriptionInfo } from '../types'
 
@@ -131,6 +133,8 @@ function GeneralTab() {
           {saved ? <><Check size={14} /> Saved</> : saving ? 'Saving…' : 'Save changes'}
         </button>
       </div>
+      <div style={{ marginTop: 20 }}><DeletedWorkspaceNotice /></div>
+      <DataRightsSection />
     </div>
   )
 }

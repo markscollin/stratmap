@@ -4,7 +4,7 @@ import { db } from '../_lib/db'
 import { getEffectivePlan } from '../_lib/access'
 import { showsBranding } from '../../src/lib/plans'
 import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
-import { sharedLinks, charts, nodes, edges, departments } from '../../src/lib/db/schema'
+import { sharedLinks, charts, nodes, edges, departments, workspaces } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -39,6 +39,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // A link only works while the chart is set to Public. Same 404 as a missing
     // link so private charts are indistinguishable from non-existent ones.
     if (!chart || !chart.isPublic) return res.status(404).json({ error: 'Link not found or revoked' })
+    // Links of a deleted workspace stop working at once (roadmap 4.2); they work again if it is restored.
+    const [owner] = await db.select({ deletedAt: workspaces.deletedAt }).from(workspaces).where(eq(workspaces.id, chart.workspaceId)).limit(1)
+    if (!owner || owner.deletedAt) return res.status(404).json({ error: 'Link not found or revoked' })
 
     const [nodeList, edgeList, deptList] = await Promise.all([
       db.select().from(nodes).where(eq(nodes.chartId, chart.id)),

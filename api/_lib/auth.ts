@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { db } from './db'
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 
@@ -155,6 +155,8 @@ async function resolveWorkspace(req: VercelRequest, res: VercelResponse, userId:
   const [membership] = await db
     .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
     .from(workspaceMembers)
+    // A soft-deleted workspace (roadmap 4.2) does not exist for anyone until the owner restores it.
+    .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.deletedAt)))
     .where(requested
       ? and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.workspaceId, requested))
       : eq(workspaceMembers.userId, userId))

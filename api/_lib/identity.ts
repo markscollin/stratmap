@@ -36,3 +36,17 @@ export async function getUserIdentity(userId: string): Promise<UserIdentity> {
 
   return { emails, name, avatarUrl: user.imageUrl ?? null }
 }
+
+/** Deletes the person's sign-in account (roadmap 4.2). No-op for dev-bypass identities and when Clerk is not configured. */
+export async function deleteUserAccount(userId: string): Promise<void> {
+  if (userId.startsWith(DEV_PREFIX) || userId === DEV_USER_ID || !process.env.CLERK_SECRET_KEY) return
+  const { createClerkClient } = await import('@clerk/backend')
+  const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
+  try {
+    await clerk.users.deleteUser(userId)
+  } catch (err) {
+    // Already gone (a retry after a partial failure) counts as success.
+    if ((err as { status?: number }).status === 404) return
+    throw err
+  }
+}
