@@ -41,13 +41,17 @@ The first time the script sees a database that has tables but no migration histo
 **adopts** it:
 
 1. It checks that every table and column in `0000_baseline` exists.
-2. It records the baseline as applied, without running it.
-3. It applies `0001+` normally.
+2. It then checks each later migration in turn (`scripts/adopt.mjs`). A migration counts as
+   already applied when every table, column and index in its snapshot exists. `push` builds
+   the current `schema.ts`, so such a database is normally at the latest migration.
+3. It records those migrations as applied, without running them, and applies the rest.
 
-If the check fails, the deploy stops and lists what is missing.
+If the baseline check fails, the deploy stops and lists what is missing. If an index is
+missing but its columns exist, that migration runs again and fails (atomically, nothing
+changes) rather than guessing; fix the database by hand and redeploy.
 
-`0000_baseline` is the schema on `main` as of the Phase 0 merge. `0001` (Phase 0 tables)
-is written idempotently because some databases already received it via `push`.
+Before the first production deploy, look at the target database read-only (or on a Neon
+branch copy) to see which migrations it would adopt. Tests: `api/__tests__/migrate-adopt.test.ts`.
 
 ## Rules for writing migrations
 

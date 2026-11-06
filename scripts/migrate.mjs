@@ -18,17 +18,17 @@
 // script agree on what has been applied.
 //
 // Databases created with `drizzle-kit push` (before migrations existed) have no
-// bookkeeping rows. On first run the script "adopts" them: it checks that every
-// table and column of the baseline migration exists, records the baseline as
-// applied without running it, then applies the later migrations normally.
-// Those later migrations must be idempotent if push may already have applied
-// them (see drizzle/0001_phase0_usage_tables.sql).
+// bookkeeping rows. On first run the script "adopts" them (scripts/adopt.mjs): it
+// checks the baseline schema exists, then records the baseline AND every later
+// migration whose tables, columns and indexes are already present as applied
+// without running them, and applies only the rest.
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { neon } from '@neondatabase/serverless'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
+import { adoptionPoint, missingObjects } from './adopt.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MIGRATIONS_FOLDER = path.join(ROOT, 'drizzle')
@@ -50,32 +50,6 @@ function shouldRun() {
   }
   log(`VERCEL_ENV=${env ?? 'unset'}: skipping (deploy migrations run on production only)`)
   return false
-}
-
-/** Tables → columns declared by a migration snapshot (drizzle/meta/NNNN_snapshot.json). */
-function snapshotColumns(idx) {
-  const file = path.join(MIGRATIONS_FOLDER, 'meta', `${String(idx).padStart(4, '0')}_snapshot.json`)
-  const snapshot = JSON.parse(fs.readFileSync(file, 'utf8'))
-  return Object.values(snapshot.tables).map((t) => ({
-    table: t.name,
-    schema: t.schema || 'public',
-    columns: Object.keys(t.columns),
-  }))
-}
-
-/** Returns "table.column" strings the snapshot declares but the database lacks. */
-async function missingObjects(sql, idx) {
-  const rows = await sql`
-    SELECT table_schema, table_name, column_name FROM information_schema.columns
-    WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`
-  const have = new Set(rows.map((r) => `${r.table_schema}.${r.table_name}.${r.column_name}`))
-  const missing = []
-  for (const t of snapshotColumns(idx)) {
-    for (const c of t.columns) {
-      if (!have.has(`${t.schema}.${t.table}.${c}`)) missing.push(`${t.table}.${c}`)
-    }
-  }
-  return missing
 }
 
 /** Runs `statements` + the bookkeeping insert atomically, unless another deploy got there first. */
@@ -115,19 +89,21 @@ async function main() {
 
   let [last] = await sql.query(`SELECT created_at FROM ${TABLE} ORDER BY created_at DESC LIMIT 1`)
 
-  // Adopt a push-managed database: it has tables but no bookkeeping.
+  // Adopt a push-managed database: it has tables but no bookkeeping. Record every
+  // migration whose schema it already contains, so only the genuinely new ones run.
   if (!last) {
     const [{ exists }] = await sql`SELECT to_regclass('public.workspaces') IS NOT NULL AS exists`
     if (exists) {
-      const missing = await missingObjects(sql, 0)
-      if (missing.length) {
+      const { baselineMissing, level } = await adoptionPoint((q) => sql.query(q), MIGRATIONS_FOLDER, migrations.length)
+      if (baselineMissing.length) {
         throw new Error(
           `Database has tables but no migration history, and does not match the baseline (${tags[0]}).\n` +
-          `Missing: ${missing.join(', ')}\n` +
+          `Missing: ${baselineMissing.join(', ')}\n` +
           'Bring it to the baseline schema first, then redeploy.',
         )
       }
-      if (await applyAtomically(sql, migrations[0], [])) log(`adopted existing database at baseline ${tags[0]}`)
+      for (let i = 0; i <= level; i++) await applyAtomically(sql, migrations[i], [])
+      log(`adopted existing database: recorded ${tags.slice(0, level + 1).join(', ')} as already applied`)
       ;[last] = await sql.query(`SELECT created_at FROM ${TABLE} ORDER BY created_at DESC LIMIT 1`)
     }
   }
@@ -145,7 +121,7 @@ async function main() {
   }
 
   // Final safety net: the database must now contain everything the latest snapshot declares.
-  const missing = await missingObjects(sql, migrations.length - 1)
+  const missing = await missingObjects((q) => sql.query(q), MIGRATIONS_FOLDER, migrations.length - 1)
   if (missing.length) throw new Error(`Schema verification failed after migrating. Missing: ${missing.join(', ')}`)
   log(`verified against ${tags[tags.length - 1]}`)
 }
