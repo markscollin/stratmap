@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { db } from '../_lib/db'
+import { getEffectivePlan } from '../_lib/access'
+import { showsBranding } from '../../src/lib/plans'
 import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
 import { sharedLinks, charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
@@ -44,6 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       db.select().from(departments).where(eq(departments.chartId, chart.id)),
     ])
 
+    // Free workspaces' share pages carry the "Made with StratMap" mark (roadmap 2.6). Only this boolean
+    // is exposed, never the plan itself.
+    const plan = await getEffectivePlan(chart.workspaceId)
+    const branding = !plan || showsBranding(plan.tier)
+
     // Public snapshot: only the fields the read-only canvas needs.
     res.setHeader('Cache-Control', 'no-store')
     return res.json({
@@ -52,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       edges: edgeList.map(({ id, sourceId, targetId }) => ({ id, sourceId, targetId })),
       departments: deptList.map(({ id, name, colour }) => ({ id, name, colour })),
       exportedAt: chart.updatedAt,
+      branding,
     })
   } catch (err) {
     console.error('/api/share/[code]', err)
