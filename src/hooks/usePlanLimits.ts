@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useBillingStore } from '../store/billingStore'
-import { useChartStore } from '../store/chartStore'
+import { useChartStore, countOwnCharts } from '../store/chartStore'
 import type { PlanTier } from '../types'
 import { PAID_FEATURES, tierHasFeature, type PaidFeature } from '../lib/plans'
 
@@ -12,8 +12,8 @@ export function usePlanLimits() {
   // Counted from the real chart list; the server enforces the same limit.
   const isAtChartLimit = useCallback(() => {
     if (plan.maxCharts === -1) return false
-    return charts.length >= plan.maxCharts
-  }, [plan.maxCharts, charts.length])
+    return countOwnCharts(charts) >= plan.maxCharts
+  }, [plan.maxCharts, charts])
 
   /** True when a chart with `nodeCount` roles has no room for another. */
   const isAtNodeLimit = useCallback(

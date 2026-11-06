@@ -53,8 +53,12 @@ export const EdgeCreate = z.object({ sourceId: Id, targetId: Id })
 
 const MAX_TEMPLATE_NODES = 5000
 
+/** A sample chart is free and doesn't count toward the plan's chart limit, so it stays small (roadmap 2.7). */
+export const MAX_SAMPLE_NODES = 20
+
 export const ChartCreate = z.object({
   name: Name,
+  isSample: z.boolean().optional(),
   status: enumOf(chartStatusEnum).optional(),
   templateNodes: z.array(z.object({ ...nodeFields, id: Id })).max(MAX_TEMPLATE_NODES).default([]),
   templateEdges: z.array(z.object({ id: Id.optional(), sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2).default([]),
@@ -191,3 +195,6 @@ export const GrantTrial = z.object({
   planTier: z.enum(planTierEnum.enumValues).exclude(['free']),
   days: z.number().int().min(1).max(365).default(90),
 })
+
+/** Roadmap 2.7: an admin hides (or brings back) the getting-started checklist for the workspace. */
+export const OnboardingUpdate = z.object({ dismissed: z.boolean() })

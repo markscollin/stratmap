@@ -2,6 +2,12 @@ import { create } from 'zustand'
 import type { OrgChart, OrgNode, OrgEdge, ChartStatus, Department } from '../types'
 import { api, ApiError } from '../lib/apiClient'
 import { useToastStore } from './toastStore'
+import { buildChartTemplate } from '../lib/chartTemplates'
+
+/** Charts that count toward the plan's limit: everything except the sample (roadmap 2.7). */
+export const countOwnCharts = (charts: { isSample?: boolean }[]) => charts.filter(c => !c.isSample).length
+
+export const SAMPLE_CHART_NAME = 'Sample org chart'
 
 interface ChartStore {
   charts: OrgChart[]
@@ -9,7 +15,9 @@ interface ChartStore {
   loaded: boolean
 
   fetchCharts: () => Promise<void>
-  createChart: (name: string, nodes: OrgNode[], edges: OrgEdge[], departments: Department[]) => Promise<OrgChart | null>
+  createChart: (name: string, nodes: OrgNode[], edges: OrgEdge[], departments: Department[], opts?: { isSample?: boolean }) => Promise<OrgChart | null>
+  /** Adds the opt-in sample chart (free; at most one). */
+  createSampleChart: () => Promise<OrgChart | null>
   deleteChart: (id: string) => Promise<void>
   setActiveChart: (id: string | null) => void
   updateChartStatus: (id: string, status: ChartStatus) => void
@@ -35,6 +43,7 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         status: c.status as ChartStatus,
         version: Number(c.version ?? 1),
         isPublic: Boolean(c.isPublic ?? false),
+        isSample: Boolean(c.isSample ?? false),
         departments: [],
         nodes: [],
         edges: [],
@@ -54,13 +63,14 @@ export const useChartStore = create<ChartStore>((set, get) => ({
     }
   },
 
-  async createChart(name, nodes, edges, departments) {
+  async createChart(name, nodes, edges, departments, opts) {
     try {
       const raw = await api.post<Record<string, unknown>>('/api/charts', {
         name,
         templateNodes: nodes,
         templateEdges: edges,
         templateDepts: departments,
+        ...(opts?.isSample ? { isSample: true } : {}),
       })
       const chart: OrgChart = {
         id: String(raw.id),
@@ -68,6 +78,7 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         status: raw.status as ChartStatus,
         version: Number(raw.version ?? 1),
         isPublic: Boolean(raw.isPublic ?? false),
+        isSample: Boolean(raw.isSample ?? false),
         departments,
         nodes,
         edges,
@@ -82,13 +93,18 @@ export const useChartStore = create<ChartStore>((set, get) => ({
     } catch (err) {
       console.error('[chartStore] createChart failed:', err)
       // Surface server-side refusals (plan limit, permissions) to the user.
-      if (err instanceof ApiError && (err.status === 402 || err.status === 403)) {
+      if (err instanceof ApiError && (err.status === 402 || err.status === 403 || err.status === 409)) {
         useToastStore.getState().addToast(err.userMessage === 'forbidden'
           ? 'You do not have permission to create charts.'
           : err.userMessage, 'warning')
       }
       return null
     }
+  },
+
+  async createSampleChart() {
+    const { nodes, edges, departments } = buildChartTemplate('quickstart')
+    return get().createChart(SAMPLE_CHART_NAME, nodes, edges, departments, { isSample: true })
   },
 
   async deleteChart(id) {

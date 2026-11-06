@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const chartId = req.query.id as string
     const [chart] = await db
-      .select({ id: charts.id })
+      .select({ id: charts.id, isSample: charts.isSample })
       .from(charts)
       .where(and(eq(charts.id, chartId), eq(charts.workspaceId, auth.workspaceId)))
       .limit(1)
@@ -94,7 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
     for (const part of chunk(newEdges)) await db.insert(edges).values(part)
 
-    if (nodeCount < 10 && nodeCount + newNodes.length >= 10) {
+    if (!chart.isSample && nodeCount < 10 && nodeCount + newNodes.length >= 10) {
       await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier, via: 'import' } })
     }
 

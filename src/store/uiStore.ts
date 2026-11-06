@@ -5,6 +5,9 @@ interface UIStore {
   sidebarCollapsed: boolean
   activePanelNodeId: string | null
   spotlightOpen: boolean
+  /** Phones only: the slide-in navigation drawer (roadmap 2.8). */
+  mobileNavOpen: boolean
+  setMobileNavOpen: (open: boolean) => void
   toggleTheme: () => void
   toggleSidebar: () => void
   openPanel: (nodeId: string) => void
@@ -17,6 +20,9 @@ export const useUIStore = create<UIStore>((set, get) => ({
   sidebarCollapsed: false,
   activePanelNodeId: null,
   spotlightOpen: false,
+  mobileNavOpen: false,
+
+  setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
 
   toggleTheme: () => {
     const next = !get().isDark

@@ -9,6 +9,7 @@ vi.mock('../../features/canvas/OrgChart', () => ({
 }))
 
 import { SharePage } from '../SharePage'
+import { installMatchMedia, setScreen, removeMatchMedia } from '../../test/matchMedia'
 
 const base = { name: 'Q3 Plan', nodes: [], edges: [], departments: [] }
 
@@ -51,5 +52,39 @@ describe('SharePage branding (roadmap 2.6)', () => {
     mockShare({})
     renderShare()
     expect(await screen.findByTestId('share-branding')).toBeTruthy()
+  })
+})
+
+describe('SharePage on a phone (roadmap 2.8)', () => {
+  beforeEach(() => { installMatchMedia(); setScreen('phone') })
+  afterEach(removeMatchMedia)
+
+  it('puts the title above the canvas and the footer below it, so nothing floats over the chart', async () => {
+    mockShare({ branding: true })
+    renderShare()
+    const footer = await screen.findByTestId('share-footer')
+    expect(footer.style.position).not.toBe('absolute')
+    expect(screen.getByText('Q3 Plan')).toBeTruthy()
+    expect(screen.getByText('View only')).toBeTruthy()
+    expect(screen.getByTestId('canvas')).toBeTruthy()
+    // header, canvas, footer in that order
+    const root = footer.parentElement!
+    const kids = [...root.children]
+    expect(kids.indexOf(footer)).toBe(kids.length - 1)
+  })
+
+  it('keeps the paid/Free branding rule', async () => {
+    mockShare({ branding: false })
+    renderShare()
+    await screen.findByTestId('share-footer')
+    expect(screen.queryByTestId('share-branding')).toBeNull()
+    expect(screen.getByText('Privacy')).toBeTruthy()
+  })
+
+  it('on a desktop the footer floats over the canvas as before', async () => {
+    setScreen('desktop')
+    mockShare({ branding: true })
+    renderShare()
+    expect((await screen.findByTestId('share-footer')).style.position).toBe('absolute')
   })
 })

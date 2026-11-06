@@ -20,6 +20,8 @@ import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStor
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
 import { ImportDialog } from '../import/ImportDialog'
+import { EmptyCanvasCard } from '../onboarding/EmptyCanvasCard'
+import { pinchTransform, midpoint, distance, type Point, type ViewTransform } from './pinch'
 import { buildChartCsv } from '../../lib/exportOrg'
 import { downloadText, fileSlug } from '../../lib/csvSafe'
 
@@ -622,7 +624,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onAutoLayout,
         )}
       </> : <>
         <Divider />
-        <span style={{ fontSize: 11, color: 'var(--muted)', padding: '4px 10px', background: 'var(--nav-hover)', borderRadius: 6, fontWeight: 500 }}>
+        <span style={{ fontSize: 11, color: 'var(--muted)', padding: '4px 10px', background: 'var(--nav-hover)', borderRadius: 6, fontWeight: 500, whiteSpace: 'nowrap' }}>
           View only
         </span>
       </>}
@@ -775,10 +777,15 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Single vs double click disambiguation
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  // False until the ResizeObserver has reported the real size; before that vpSize is only a default guess.
+  const vpMeasured = useRef(false)
   useEffect(() => {
     if (!containerRef.current) return
     const obs = new ResizeObserver(entries => {
-      for (const e of entries) setVpSize({ w: e.contentRect.width, h: e.contentRect.height })
+      for (const e of entries) {
+        vpMeasured.current = true
+        setVpSize({ w: e.contentRect.width, h: e.contentRect.height })
+      }
     })
     obs.observe(containerRef.current)
     return () => obs.disconnect()
@@ -800,16 +807,16 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     setTransform({ x: tx, y: ty, scale })
   }, [vpSize, setTransform])
 
-  // Fit once when the real viewport size first arrives from ResizeObserver.
-  // After that, preserve the user's zoom — spurious ResizeObserver firings
-  // (e.g. from DOM changes after adding nodes) must not reset the view.
+  // Fit once when the real viewport size first arrives from ResizeObserver (not the 1100x600 default, which on a
+  // phone would centre the chart for a screen three times too wide). After that, preserve the user's zoom: spurious
+  // ResizeObserver firings (e.g. from DOM changes after adding nodes) must not reset the view.
   const initialFitDone = useRef(false)
   useEffect(() => {
-    if (!initialFitDone.current) {
+    if (!initialFitDone.current && vpMeasured.current) {
       initialFitDone.current = true
       fitToView()
     }
-  }, [vpSize.w]) // eslint-disable-line
+  }, [vpSize]) // eslint-disable-line
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
@@ -869,26 +876,68 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     return () => el.removeEventListener('wheel', onWheel)
   }, [applyZoom])
 
+  // ── Touch: pinch to zoom (roadmap 2.8) ────────────────────────────────────
+  // Pointers are tracked in the capture phase so a pinch works even when a finger lands on a node.
+  const pointersRef = useRef(new Map<number, Point>())
+  const pinchRef = useRef<{ start: ViewTransform; startMid: Point; startDist: number } | null>(null)
+  const transformRef = useRef(transform)
+  useEffect(() => { transformRef.current = transform }, [transform])
+
+  const localPoint = (e: React.PointerEvent): Point => {
+    const rect = containerRef.current!.getBoundingClientRect()
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  }
+  const firstTwo = () => [...pointersRef.current.values()].slice(0, 2) as [Point, Point]
+
+  const handlePointerDownCapture = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    pointersRef.current.set(e.pointerId, localPoint(e))
+    if (pointersRef.current.size === 2) {
+      const [a, b] = firstTwo()
+      pinchRef.current = { start: { ...transformRef.current }, startMid: midpoint(a, b), startDist: distance(a, b) }
+      // A second finger ends any drag or pan the first one started.
+      interactionRef.current = { mode: 'idle', nodeId: null, lastX: 0, lastY: 0, hasMoved: true, startX: 0, startY: 0 }
+    }
+  }
+  const handlePointerMoveCapture = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch' || !pointersRef.current.has(e.pointerId)) return
+    pointersRef.current.set(e.pointerId, localPoint(e))
+    const pinch = pinchRef.current
+    if (pinch && pointersRef.current.size >= 2) {
+      const [a, b] = firstTwo()
+      setTransform(pinchTransform(pinch.start, pinch.startMid, pinch.startDist, midpoint(a, b), distance(a, b)))
+    }
+  }
+  const handlePointerEndCapture = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    pointersRef.current.delete(e.pointerId)
+    if (pointersRef.current.size < 2) pinchRef.current = null
+  }
+
   // ── Pointer events ─────────────────────────────────────────────────────────
 
   const handleNodePointerDown = useCallback((e: React.PointerEvent, nodeId: string) => {
     if (e.button !== 0) return
     e.stopPropagation()
+    if (pinchRef.current) return
     if (readOnly || activeTool !== 'select') return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     interactionRef.current = { mode: 'dragging', nodeId, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, hasMoved: false }
   }, [activeTool, readOnly])
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || pinchRef.current) return
     if (connectingFrom) { setConnectingFrom(null); return }
-    if (activeTool === 'pan') {
+    // Dragging empty canvas pans with the Pan tool, and always on a touch screen or a view-only canvas
+    // (there is nothing to select-drag there, and a phone has no Pan key).
+    const dragPans = activeTool === 'pan' || (activeTool === 'select' && (readOnly || e.pointerType === 'touch'))
+    if (dragPans) {
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
       interactionRef.current = { mode: 'panning', nodeId: null, lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, hasMoved: false }
-    } else if (activeTool === 'select') {
-      setSelectedId(null); setSelectedEdgeId(null)
     }
-  }, [activeTool, connectingFrom, setConnectingFrom, setSelectedId, setSelectedEdgeId])
+    // A tap on empty canvas (no drag) deselects; see handlePointerUp for the pan case.
+    if (activeTool === 'select' && !dragPans) { setSelectedId(null); setSelectedEdgeId(null) }
+  }, [activeTool, readOnly, connectingFrom, setConnectingFrom, setSelectedId, setSelectedEdgeId])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const ia   = interactionRef.current
@@ -924,8 +973,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         )
       }
     }
+    if (ia.mode === 'panning' && !ia.hasMoved && activeTool === 'select') { setSelectedId(null); setSelectedEdgeId(null) }
     interactionRef.current = { mode: 'idle', nodeId: null, lastX: 0, lastY: 0, hasMoved: false, startX: 0, startY: 0 }
-  }, [commitDrag, chartId])
+  }, [commitDrag, chartId, activeTool, setSelectedId, setSelectedEdgeId])
 
   const handleNodeClick = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (interactionRef.current.hasMoved) return
@@ -1112,8 +1162,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       style={{
         position: 'relative', width: '100%', height: '100%', overflow: exportOverflow ? 'visible' : 'hidden',
         background: 'var(--bg)',
+        touchAction: 'none', // the canvas handles pan and pinch itself; the page must not scroll or zoom under it
         cursor: activeTool === 'pan' ? 'grab' : activeTool === 'zoom' ? 'zoom-in' : connectingFrom ? 'crosshair' : 'default',
       }}
+      onPointerDownCapture={handlePointerDownCapture}
+      onPointerMoveCapture={handlePointerMoveCapture}
+      onPointerUpCapture={handlePointerEndCapture}
+      onPointerCancelCapture={handlePointerEndCapture}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -1213,6 +1268,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         filterOpen={filterOpen} onFilterOpenChange={setFilterOpen}
         departments={departments} filters={activeFilters} onFiltersChange={setActiveFilters}
       />
+
+      {!readOnly && nodes.length === 0 && chartId && (
+        <EmptyCanvasCard onAdd={handleOpenAddModal} onImport={() => setIsImportOpen(true)} />
+      )}
 
       {isImportOpen && (
         <ImportDialog

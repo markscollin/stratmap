@@ -130,3 +130,48 @@ describe('ChartView — approval workflow on the Free plan', () => {
   })
 })
 
+
+describe('ChartView — sample chart and empty state (roadmap 2.7)', () => {
+  const renderAt = (permission: Permission, url = '/charts') => {
+    useUserStore.setState({ permission })
+    return render(<MemoryRouter initialEntries={[url]}><ChartView /></MemoryRouter>)
+  }
+
+  it('marks the sample chart with a badge', () => {
+    useChartStore.setState({ charts: [{ ...REVIEW_CHART, id: 's', name: 'Sample org chart', isSample: true }] })
+    renderAt('editor')
+    expect(screen.getByTestId('sample-badge').textContent).toBe('Sample')
+  })
+
+  it('does not count the sample in "n of 1 chart" on the Free plan', () => {
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.free)
+    useChartStore.setState({ charts: [{ ...REVIEW_CHART, id: 's', isSample: true }, { ...REVIEW_CHART, id: 'real' }] })
+    renderAt('editor')
+    expect(screen.getByText('1 of 1 chart')).toBeTruthy()
+  })
+
+  it('with no charts, offers create, import and a sample (editors only)', () => {
+    useChartStore.setState({ charts: [], loaded: true })
+    renderAt('editor')
+    expect(screen.getByRole('button', { name: 'Create your first chart' })).toBeTruthy()
+    expect(screen.getByTestId('empty-import-btn')).toBeTruthy()
+    expect(screen.getByTestId('try-sample-btn')).toBeTruthy()
+  })
+
+  it('offers no way to start for viewers', () => {
+    useChartStore.setState({ charts: [], loaded: true })
+    renderAt('viewer')
+    expect(screen.queryByTestId('try-sample-btn')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create your first chart' })).toBeNull()
+  })
+
+  it('/charts?import=1 opens the import dialog, /charts?new=1 the new-chart dialog', () => {
+    useChartStore.setState({ charts: [REVIEW_CHART], loaded: true })
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.growth)
+    const first = renderAt('editor', '/charts?import=1')
+    expect(screen.getByRole('dialog', { name: 'Import people' })).toBeTruthy()
+    first.unmount()
+    renderAt('editor', '/charts?new=1')
+    expect(screen.getByText('New org chart')).toBeTruthy()
+  })
+})
