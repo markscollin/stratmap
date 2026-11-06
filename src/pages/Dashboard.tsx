@@ -6,6 +6,8 @@ import { useHeadcountStore } from '../store/headcountStore'
 import { STATUS_META } from '../constants/statusMeta'
 import { api } from '../lib/apiClient'
 import type { ChartStatus } from '../types'
+import { OnboardingChecklist } from '../features/onboarding/OnboardingChecklist'
+import { DashboardEmpty } from '../features/onboarding/DashboardEmpty'
 
 interface DeptStat {
   id: string
@@ -31,7 +33,7 @@ interface WorkspaceStats {
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const { charts } = useChartStore()
+  const { charts, loaded } = useChartStore()
   const { plans, fetch: fetchPlans } = useHeadcountStore()
 
   const [stats, setStats] = useState<WorkspaceStats | null>(null)
@@ -78,6 +80,17 @@ export function Dashboard() {
 
   const isLoading = !stats
 
+  // No chart yet (roadmap 2.7): three ways to start instead of a wall of zeros.
+  if (loaded && charts.length === 0) {
+    return (
+      <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 20 }}>Welcome to StratMap</h1>
+        <OnboardingChecklist />
+        <DashboardEmpty />
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: '28px 32px', animation: 'fadeUp .3s ease-out' }}>
       {/* Header */}
@@ -87,6 +100,8 @@ export function Dashboard() {
         </h1>
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>A snapshot of your organisation as of today</p>
       </div>
+
+      <OnboardingChecklist />
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>

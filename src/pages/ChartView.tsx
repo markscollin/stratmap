@@ -1,10 +1,11 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
   Clock, ExternalLink, Copy, GitBranch, Trash2, Globe,
 } from 'lucide-react'
 import { useChartStore } from '../store'
+import { countOwnCharts } from '../store/chartStore'
 import { STATUS_META, STATUS_ACTIONS } from '../constants/statusMeta'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { VersionPill } from '../components/ui/VersionPill'
@@ -139,6 +140,9 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
         style={{ height: 108, background: 'var(--bg)', position: 'relative', borderBottom: '1px solid var(--border)', padding: 10, overflow: 'hidden' }}
       >
         <div style={{ position: 'absolute', inset: 14 }}><MiniChartThumb id={chart.id} /></div>
+        {chart.isSample && (
+          <span data-testid="sample-badge" style={{ position: 'absolute', top: 10, left: 10, zIndex: 1, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--purple)', background: 'var(--purple-bg)', border: '1px solid var(--purple)', borderRadius: 6, padding: '2px 7px' }}>Sample</span>
+        )}
         {chart.status === 'live' && (
           <div style={{ position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: '50%', background: '#10B981', animation: 'livePulse 2s ease-in-out infinite' }} />
         )}
@@ -363,18 +367,28 @@ function NewChartModal({ onClose, onCreate }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChartView() {
-  const { charts, loading, loaded, fetchCharts, createChart, updateChartStatus } = useChartStore()
+  const { charts, loading, loaded, fetchCharts, createChart, createSampleChart, updateChartStatus } = useChartStore()
+  const ownCount = countOwnCharts(charts)
+  const hasSample = charts.some(c => c.isSample)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Deep links from the empty Dashboard (roadmap 2.7): /charts?new=1 and /charts?import=1 open that dialog once.
+  const [deepLink] = useState<'new' | 'import' | null>(() =>
+    searchParams.get('import') === '1' ? 'import' : searchParams.get('new') === '1' ? 'new' : null)
   const navigate = useNavigate()
   const { canEdit, canAdmin } = usePermission()
   const { isAtChartLimit, currentTier } = usePlanLimits()
   const [search, setSearch]         = useState('')
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
-  const [showModal, setShowModal]   = useState(false)
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
-  const [showImport, setShowImport] = useState(false)
+  const wantsDialog = deepLink !== null && canEdit
+  const [showModal, setShowModal]   = useState(wantsDialog && deepLink === 'new' && !isAtChartLimit())
+  const [showUpgradeModal, setShowUpgradeModal] = useState(wantsDialog && isAtChartLimit())
+  const [showImport, setShowImport] = useState(wantsDialog && deepLink === 'import' && !isAtChartLimit())
 
   useEffect(() => { document.title = 'StratMap — Org Charts' }, [])
   useEffect(() => { if (!loaded) fetchCharts() }, [loaded, fetchCharts])
+
+  // The deep link has been read into the dialogs' initial state above; drop it from the URL so a reload doesn't reopen it.
+  useEffect(() => { if (deepLink) setSearchParams({}, { replace: true }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [focusSearch, setFocusSearch] = useState(false)
 
   const filtered = charts
@@ -422,7 +436,7 @@ export function ChartView() {
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>{loading ? 'Loading…' : `${charts.length} charts in your workspace`}</p>
             {currentTier === 'free' && (
               <p style={{ fontSize: 12, color: 'var(--dim)', background: 'var(--raised)', padding: '4px 10px', borderRadius: 6 }}>
-                {charts.length} of 1 chart
+                {ownCount} of 1 chart
               </p>
             )}
           </div>
@@ -483,10 +497,11 @@ export function ChartView() {
           <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
             {search ? `No charts matching "${search}"` : 'No charts yet'}
           </h3>
-          <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.7, maxWidth: 380, margin: '0 auto 24px' }}>
-            {search ? 'Try a different search or clear the filter.' : 'Create your first org chart.'}
+          <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.7, maxWidth: 420, margin: '0 auto 24px' }}>
+            {search ? 'Try a different search or clear the filter.' : 'Start from a template, import your people from a spreadsheet, or look around a sample chart first.'}
           </p>
           {!search && canEdit && (
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={() => {
                 if (isAtChartLimit()) {
@@ -499,6 +514,19 @@ export function ChartView() {
             >
               Create your first chart
             </button>
+            <button
+              data-testid="empty-import-btn"
+              onClick={() => setShowImport(true)}
+              style={{ padding: '10px 18px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 9, color: 'var(--text)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >Import people</button>
+            {!hasSample && (
+              <button
+                data-testid="try-sample-btn"
+                onClick={async () => { const c = await createSampleChart(); if (c) navigate(`/charts/${c.id}`) }}
+                style={{ padding: '10px 18px', background: 'transparent', border: '1px dashed var(--border-hover)', borderRadius: 9, color: 'var(--muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >Try a sample chart</button>
+            )}
+            </div>
           )}
         </div>
       ) : (

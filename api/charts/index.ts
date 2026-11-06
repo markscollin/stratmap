@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, desc, count, sql, getTableColumns } from 'drizzle-orm'
+import { eq, and, desc, count, sql, getTableColumns } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { track, hasAnalyticsConsent } from '../_lib/analytics'
 import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
-import { ChartCreate } from '../_lib/schemas'
+import { ChartCreate, MAX_SAMPLE_NODES } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { chunk } from '../_lib/chunk'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
@@ -37,17 +37,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(ChartCreate, req, res)
       if (!body) return
       const { name, status = 'draft', templateNodes, templateEdges, templateDepts } = body
+      const isSample = body.isSample === true
       if ((APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
         && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return
 
       // Plan limits: chart count, and node count of the seeded template.
       const plan = await getEffectivePlan(auth.workspaceId)
       if (!plan) return res.status(404).json({ error: 'Workspace not found' })
+      // Sample charts (roadmap 2.7) are free and don't count toward the chart limit, but there is at most
+      // one per workspace and it stays small, so it can't be used to get around the plan.
       const [{ value: chartCount }] = await db
         .select({ value: count() })
         .from(charts)
-        .where(eq(charts.workspaceId, auth.workspaceId))
-      if (!fitsLimit(plan.limits.maxCharts, chartCount)) {
+        .where(and(eq(charts.workspaceId, auth.workspaceId), eq(charts.isSample, false)))
+      if (isSample) {
+        if (templateNodes.length > MAX_SAMPLE_NODES) {
+          return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+        }
+        const [{ value: samples }] = await db
+          .select({ value: count() })
+          .from(charts)
+          .where(and(eq(charts.workspaceId, auth.workspaceId), eq(charts.isSample, true)))
+        if (samples > 0) {
+          return res.status(409).json({ error: 'sample-exists', message: 'This workspace already has a sample chart. Delete it to add a new one.' })
+        }
+      } else if (!fitsLimit(plan.limits.maxCharts, chartCount)) {
         return sendPlanLimit(res, 'charts', plan, plan.limits.maxCharts)
       }
       if (!fitsLimit(plan.limits.maxNodesPerChart, 0, templateNodes.length)) {
@@ -64,6 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           name,
           status,
           version: 1,
+          isSample,
           ownerId: auth.userId,
           creatorId: auth.userId,
         })
@@ -113,8 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
       for (const part of chunk(newEdges)) await db.insert(edges).values(part)
 
-      // Funnel: the workspace's first chart (the plan's chart count was 0 before this one).
-      if (chartCount === 0) {
+      // Funnel: the workspace's first real chart (no non-sample chart existed before this one).
+      if (!isSample && chartCount === 0) {
         await track('first_chart_created', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier } })
       }
 

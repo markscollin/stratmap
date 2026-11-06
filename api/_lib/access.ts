@@ -124,7 +124,9 @@ export interface ChartUsage {
 export async function getChartUsage(workspaceId: string, plan?: EffectivePlan | null): Promise<ChartUsage | null> {
   const p = plan ?? await getEffectivePlan(workspaceId)
   if (!p) return null
-  const [{ value }] = await db.select({ value: count() }).from(charts).where(eq(charts.workspaceId, workspaceId))
+  // Sample charts (roadmap 2.7) are free: they never count toward the limit.
+  const [{ value }] = await db.select({ value: count() }).from(charts)
+    .where(and(eq(charts.workspaceId, workspaceId), eq(charts.isSample, false)))
   const max = p.limits.maxCharts
   return { count: value, max, frozen: max !== -1 && value > max }
 }

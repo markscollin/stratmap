@@ -20,6 +20,7 @@ import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStor
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
 import { ImportDialog } from '../import/ImportDialog'
+import { EmptyCanvasCard } from '../onboarding/EmptyCanvasCard'
 import { buildChartCsv } from '../../lib/exportOrg'
 import { downloadText, fileSlug } from '../../lib/csvSafe'
 
@@ -1213,6 +1214,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         filterOpen={filterOpen} onFilterOpenChange={setFilterOpen}
         departments={departments} filters={activeFilters} onFiltersChange={setActiveFilters}
       />
+
+      {!readOnly && nodes.length === 0 && chartId && (
+        <EmptyCanvasCard onAdd={handleOpenAddModal} onImport={() => setIsImportOpen(true)} />
+      )}
 
       {isImportOpen && (
         <ImportDialog

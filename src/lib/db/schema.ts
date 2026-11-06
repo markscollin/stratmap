@@ -41,6 +41,8 @@ export const workspaces = pgTable('workspaces', {
   // End of the paid-through period; when cancelAtPeriodEnd, the plan ends here.
   planExpiresAt: timestamp('plan_expires_at'),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  // An admin dismissed the getting-started checklist for the whole workspace (roadmap 2.7).
+  onboardingDismissedAt: timestamp('onboarding_dismissed_at'),
   // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)
   trialPlan: planTierEnum('trial_plan'),
   trialEndsAt: timestamp('trial_ends_at'),
@@ -99,6 +101,7 @@ export const charts = pgTable('charts', {
   status: chartStatusEnum('status').notNull().default('draft'),
   version: integer('version').notNull().default(1),   // user-visible chart version (the v1 pill)
   revision: integer('revision').notNull().default(0), // bumped by every structural edit; optimistic concurrency (roadmap 2.4)
+  isSample: boolean('is_sample').notNull().default(false), // opt-in example chart: free, doesn't count toward the plan's chart limit (roadmap 2.7)
   isPublic: boolean('is_public').notNull().default(false),
   ownerId: text('owner_id').notNull(),         // Clerk userId
   creatorId: text('creator_id').notNull(),     // Clerk userId

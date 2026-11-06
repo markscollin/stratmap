@@ -43,6 +43,13 @@
       "when": 1793949150244,
       "tag": "0005_chart_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793953424044,
+      "tag": "0006_onboarding_samples",
+      "breakpoints": true
     }
   ]
 }

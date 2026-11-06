@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { useBillingStore } from '../store/billingStore'
-import { useChartStore } from '../store/chartStore'
+import { useChartStore, countOwnCharts } from '../store/chartStore'
 import { useUserStore } from '../store/userStore'
 
 export interface ChartLimit {
-  /** Charts in the workspace (once the list has loaded). */
+  /** Charts in the workspace that count toward the plan, i.e. all but the sample (once the list has loaded). */
   count: number
   /** The plan's chart limit, -1 for unlimited. */
   max: number
@@ -28,7 +28,8 @@ export function useChartLimit(): ChartLimit {
     if (hasWorkspace && !loaded && !loading) void fetchCharts()
   }, [hasWorkspace, loaded, loading, fetchCharts])
 
-  const count = charts.length
+  // The sample chart is free and never counts (roadmap 2.7).
+  const count = countOwnCharts(charts)
   const limited = max !== -1 && loaded
   return {
     count,

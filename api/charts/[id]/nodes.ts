@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const chartId = req.query.id as string
 
     const [chart] = await db
-      .select({ id: charts.id })
+      .select({ id: charts.id, isSample: charts.isSample })
       .from(charts)
       .where(and(eq(charts.id, chartId), eq(charts.workspaceId, auth.workspaceId)))
       .limit(1)
@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .returning()
 
       // Funnel: a chart reaches 10 roles through people adding them (not template seeding).
-      if (nodeCount < 10 && nodeCount + 1 >= 10) {
+      if (!chart.isSample && nodeCount < 10 && nodeCount + 1 >= 10) {
         await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier } })
       }
 

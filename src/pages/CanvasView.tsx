@@ -10,6 +10,7 @@ import { useChartLimit } from '../hooks/useChartLimit'
 import { api } from '../lib/apiClient'
 import { useChartConflict } from '../lib/chartRevision'
 import { ChartConflictBanner } from '../features/canvas/ChartConflictBanner'
+import { SampleChartBanner } from '../features/onboarding/SampleChartBanner'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
 interface FullChart {
@@ -17,6 +18,7 @@ interface FullChart {
   name: string
   status: string
   version: number
+  isSample?: boolean
   nodes: OrgNode[]
   edges: OrgEdge[]
   departments: Department[]
@@ -25,8 +27,8 @@ interface FullChart {
 export function CanvasView() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { charts } = useChartStore()
-  const { canEdit } = usePermission()
+  const { charts, deleteChart } = useChartStore()
+  const { canEdit, canAdmin } = usePermission()
   // Over the chart limit after a downgrade, every chart is view-only (roadmap 1.6).
   const { frozen } = useChartLimit()
   // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
@@ -89,6 +91,7 @@ export function CanvasView() {
   const status  = (chartMeta?.status ?? fullChart.status) as import('../types').ChartStatus
   const version = chartMeta?.version ?? fullChart.version
   const depts   = fullChart.departments
+  const isSample = chartMeta?.isSample ?? fullChart.isSample ?? false
 
   return (
     <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -108,6 +111,12 @@ export function CanvasView() {
       </div>
 
       <ChartConflictBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} />
+      {isSample && (
+        <SampleChartBanner
+          canDelete={canAdmin}
+          onDelete={async () => { await deleteChart(fullChart.id); navigate('/charts') }}
+        />
+      )}
 
       <OrgChart
         key={`${fullChart.id}:${canvasKey}`}

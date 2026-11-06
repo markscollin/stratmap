@@ -41,6 +41,8 @@ export interface OrgChart {
   status: ChartStatus
   version: number
   isPublic: boolean
+  /** An opt-in example chart: free, not counted toward the plan's chart limit (roadmap 2.7). */
+  isSample?: boolean
   departments: Department[]
   nodes: OrgNode[]
   edges: OrgEdge[]
