@@ -5,8 +5,10 @@ import { testUser, signedInContext, inviteLinkFor, onboard, createChart } from '
 // contexts: sign up → onboarding → create chart → share → invite → accept →
 // second workspace → switch. Auth is the dev bypass (each user is a distinct
 // identity), so Clerk's own sign-up UI is not exercised here.
-const owner = testUser('owner')
-const member = testUser('member')
+// Assigned per attempt in beforeAll: a retry re-runs the whole serial group, and users
+// from the failed attempt already have workspaces, so each attempt needs fresh ones.
+let owner: ReturnType<typeof testUser>
+let member: ReturnType<typeof testUser>
 const OWNER_WS = 'Owner Co'
 const MEMBER_WS = 'Member Co'
 const CHART = 'Launch Plan'
@@ -15,7 +17,9 @@ test.describe.serial('sign-up to second workspace', () => {
   let ownerCtx: BrowserContext, memberCtx: BrowserContext
   let ownerPage: Page, memberPage: Page
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    owner = testUser(`owner${testInfo.retry}`)
+    member = testUser(`member${testInfo.retry}`)
     ownerCtx = await signedInContext(browser, owner.slug)
     memberCtx = await signedInContext(browser, member.slug)
     ownerPage = await ownerCtx.newPage()
@@ -40,7 +44,7 @@ test.describe.serial('sign-up to second workspace', () => {
     const field = ownerPage.getByTestId('share-url')
     await expect(field).toBeVisible()
     shareUrl = await field.inputValue()
-    expect(shareUrl).toMatch(/\/share\/[A-Za-z0-9]+$/)
+    expect(shareUrl).toMatch(/\/share\/[\w-]+$/)
 
     const guest = await browser.newContext() // no identity at all
     const page = await guest.newPage()

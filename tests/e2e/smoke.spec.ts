@@ -3,12 +3,12 @@ import { testUser, signedInContext, onboard, createChart } from './helpers'
 
 // Page-level smoke tests. They run as their own user in a fresh Free workspace
 // with one chart, so they don't depend on whatever the shared dev workspace holds.
-const user = testUser('smoke')
 let ctx: BrowserContext
 let page: Page
 
-test.beforeAll(async ({ browser }) => {
-  ctx = await signedInContext(browser, user.slug)
+test.beforeAll(async ({ browser }, testInfo) => {
+  // Fresh user per attempt: a retry re-runs this, and onboarding only shows for a new user.
+  ctx = await signedInContext(browser, testUser(`smoke${testInfo.retry}`).slug)
   page = await ctx.newPage()
   await onboard(page, 'Smoke Co')
   await createChart(page, 'Smoke chart')
