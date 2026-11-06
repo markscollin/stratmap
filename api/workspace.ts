@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { requireAuth, requireUser } from './_lib/auth'
+import { track, hasAnalyticsConsent } from './_lib/analytics'
 import { requireRole, getPermission } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { WorkspaceCreate, WorkspaceUpdate } from './_lib/schemas'
@@ -82,6 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: body.userName ?? '',
         permission: 'owner',
       })
+
+      await track('workspace_created', { userId: user.userId, workspaceId, consent: hasAnalyticsConsent(req), props: { plan: 'free' } })
 
       return res.status(201).json(ws)
     }

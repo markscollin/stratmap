@@ -7,6 +7,7 @@ import { sendPaymentFailed } from '../_lib/email'
 import { getAppUrl } from '../_lib/url'
 import { invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
 import { stripeEvents, workspaces, workspaceMembers } from '../../src/lib/db/schema'
+import { track } from '../_lib/analytics'
 
 // Disable body parsing so we can verify the Stripe signature against raw bytes
 export const config = { api: { bodyParser: false } }
@@ -108,6 +109,11 @@ async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
       }
       const result = await syncSubscription(stripe, subscriptionId, { workspaceId })
       if (result) console.log(`[stripe] workspace ${result.workspaceId} subscribed → ${result.tier}`)
+      // Funnel: first paid plan. Only if the buyer accepted analytics when they started checkout.
+      const analyticsUser = session.metadata?.analyticsUser
+      if (result && analyticsUser && result.tier !== 'free') {
+        await track('upgraded', { userId: analyticsUser, workspaceId: result.workspaceId, consent: true, props: { plan: result.tier } })
+      }
       return
     }
 

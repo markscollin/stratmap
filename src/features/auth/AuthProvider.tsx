@@ -163,7 +163,8 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
         forgetInviteToken()
       }
 
-      // Genuinely new user → onboarding.
+      // Genuinely new user → onboarding. Tell analytics once (server checks consent; best effort).
+      void api.post('/api/analytics/signed-up', {}).catch(() => {})
       setWorkspace(null)
       setResolved()
     }

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, count } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
+import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
 import { parseBody } from '../../_lib/validate'
 import { NodeCreate, NodePositions } from '../../_lib/schemas'
@@ -47,6 +48,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert(nodes)
         .values({ ...body, id: body.id ?? crypto.randomUUID(), chartId })
         .returning()
+
+      // Funnel: a chart reaches 10 roles through people adding them (not template seeding).
+      if (nodeCount < 10 && nodeCount + 1 >= 10) {
+        await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier } })
+      }
 
       return res.status(201).json(node)
     }

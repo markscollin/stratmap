@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, desc } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
+import { track, hasAnalyticsConsent } from '../_lib/analytics'
 import { requireRole, ROLE_RANK, getEffectivePlan, sendPlanLimit, getSeatUsage } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { InviteCreate } from '../_lib/schemas'
@@ -75,6 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .returning()
       created.push(toInviteView(row))
       await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email, token })
+    }
+
+    if (created.length) {
+      await track('invite_sent', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { count: created.length, plan: plan.tier } })
     }
 
     return res.status(201).json({ invites: created })

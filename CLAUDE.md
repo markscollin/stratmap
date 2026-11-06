@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**318 frontend + 424 backend = 742 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**321 frontend + 440 backend = 761 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -201,6 +201,22 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   and `ChartConflictBanner` shows "changed elsewhere, last edit not saved" with Reload; `CanvasView` goes read-only until the reload succeeds.
   Auto-reload-and-replay was rejected for now (belongs with real-time collaboration).
 - **Tests:** `api/__tests__/revision.test.ts`, `src/lib/__tests__/chartRevision.test.ts`, `ChartConflictBanner.test.tsx`, `tests/e2e/conflict.spec.ts`.
+
+## Product analytics (roadmap 2.3, 2026-11-06)
+
+- **Owner-decided:** server-side only (no analytics script ever loads in the browser); only for people who clicked **Accept all** in the
+  cookie banner; opaque ids only (user id, workspace id as a PostHog group, plan tier, counts; never email, names, chart/role names or salary).
+- **Consent plumbing:** `src/lib/consent.ts` reads the banner's choice; `apiClient` adds `X-Analytics-Consent: 1` to every request only after
+  "Accept all". The server checks it per request (`hasAnalyticsConsent(req)` in `api/_lib/analytics.ts`). Choosing "Necessary only" later stops it at once.
+- **`track(event, {userId, workspaceId, consent, props})`** posts to `${POSTHOG_HOST ?? https://eu.i.posthog.com}/capture/` with plain `fetch` (no SDK), 1.5 s
+  timeout, never throws, no-op without `POSTHOG_KEY`. Each milestone has a deterministic event uuid (`eventUuid`), so PostHog dedups repeats.
+- **Funnel events (the 7):** `signed_up` (browser calls `POST /api/analytics/signed-up` the first time a signed-in person has no workspace; Clerk owns
+  sign-up so this is the earliest the server can see them), `workspace_created` (`POST /api/workspace`), `first_chart_created` (chart count was 0),
+  `ten_roles_reached` (a role add or an import takes a chart from <10 to ≥10; template seeding does not count), `invite_sent`, `share_enabled`
+  (a share link is created), `upgraded` (Stripe webhook; checkout stores `analyticsUser` in session metadata only with consent, since the webhook has no browser).
+- **Env (server, no `VITE_`):** `POSTHOG_KEY` (project API key), optional `POSTHOG_HOST` (US: `https://us.i.posthog.com`). Build the funnel in PostHog on the 7 events in order.
+- **Legal:** the `/privacy` cookies section describes this; it still needs the lawyer review.
+- **Tests:** `api/__tests__/analytics.test.ts`, `src/lib/__tests__/consent.test.ts`.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 
