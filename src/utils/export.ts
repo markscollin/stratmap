@@ -35,7 +35,7 @@ export function drawWatermark(canvas: HTMLCanvasElement): void {
   const margin = Math.round(fontSize * 1.1)
 
   ctx.save()
-  ctx.font = `600 ${fontSize}px 'DM Sans', system-ui, sans-serif`
+  ctx.font = `600 ${fontSize}px 'DM Sans Variable', system-ui, sans-serif`
   const textW = ctx.measureText(WATERMARK_TEXT).width
   const w = Math.ceil(textW + padX * 2)
   const h = Math.ceil(fontSize + padY * 2)

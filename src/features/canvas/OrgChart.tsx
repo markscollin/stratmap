@@ -118,7 +118,7 @@ function EdgePath({
           />
           <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="central"
             fontSize={13} fill="var(--danger)"
-            style={{ pointerEvents: 'none', fontFamily: 'DM Sans, sans-serif', fontWeight: 700 }}
+            style={{ pointerEvents: 'none', fontFamily: "'DM Sans Variable', sans-serif", fontWeight: 700 }}
           >×</text>
         </g>
       )}

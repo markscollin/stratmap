@@ -229,6 +229,11 @@ export function AIJDDraft({
               />
             </div>
 
+            <p data-testid="ai-disclosure" style={{ margin: '0 0 12px', fontSize: 11, lineHeight: 1.5, color: 'var(--dim)' }}>
+              The role title, department, tone and your notes are sent to Anthropic to write the draft.
+              Nothing else is sent: no names, emails or salaries. Please don&apos;t put personal data in the notes.
+            </p>
+
             {isGenerating && streamText && (
               <div style={{
                 marginBottom: 10, padding: '8px 10px',

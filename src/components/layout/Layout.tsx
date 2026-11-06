@@ -39,7 +39,7 @@ export function Layout({ children }: { children?: ReactNode } = {}) {
       overflow: 'hidden',
       background: 'var(--bg)',
       color: 'var(--text)',
-      fontFamily: "'DM Sans', sans-serif",
+      fontFamily: "'DM Sans Variable', sans-serif",
     }}>
       {!isPhone && <Sidebar />}
       {drawerOpen && (

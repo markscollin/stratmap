@@ -17,9 +17,10 @@ const streamMock = {
   finalMessage: async () => ({}),
 }
 
+const streamCalls: Array<{ system: string; messages: { content: string }[] }> = []
 vi.mock('@anthropic-ai/sdk', () => ({
   default: class {
-    messages = { stream: () => streamMock }
+    messages = { stream: (args: never) => { streamCalls.push(args); return streamMock } }
   },
 }))
 
@@ -38,6 +39,7 @@ beforeEach(async () => {
   await seedWorkspace()
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
   delete process.env.ANTHROPIC_API_KEY
+  streamCalls.length = 0
 })
 
 afterEach(() => {
@@ -99,5 +101,28 @@ describe('POST /api/ai/draft', () => {
     await handler(createReq({ method: 'POST', body: draftBody }) as never, res as never)
     expect(res._status).not.toBe(403)
     expect(res._written).toContain('RESPONSIBILITIES:')
+  })
+
+  // Roadmap 4.3: the in-product disclosure promises that only the role, department, tone and the
+  // user's own notes are sent to Anthropic. Anything else in the request must never reach the prompt.
+  it('sends only title, department, tone and notes to Anthropic', async () => {
+    await setTier('starter')
+    process.env.ANTHROPIC_API_KEY = 'sk-test'
+    const res = createRes()
+    await handler(createReq({
+      method: 'POST',
+      body: {
+        ...draftBody, notes: 'Remote-first',
+        personName: 'Jane Doe', email: 'jane@example.com', salary: 123456, managerId: 'n-1',
+      },
+    }) as never, res as never)
+    expect(streamCalls).toHaveLength(1)
+    const sent = JSON.stringify(streamCalls[0])
+    expect(sent).toContain('Staff Engineer')
+    expect(sent).toContain('Engineering')
+    expect(sent).toContain('Remote-first')
+    for (const leaked of ['Jane Doe', 'jane@example.com', '123456', 'n-1', TEST_USER_ID, TEST_WS_ID]) {
+      expect(sent).not.toContain(leaked)
+    }
   })
 })
