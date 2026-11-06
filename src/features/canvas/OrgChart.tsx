@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe } from 'lucide-react'
+import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
 import { useChartStore } from '../../store/chartStore'
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
@@ -18,6 +18,7 @@ import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
+import { ImportDialog } from '../import/ImportDialog'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -547,9 +548,9 @@ function FilterBtn({
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
+function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
-  onAddNode: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
+  onAddNode: () => void; onImport: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
   onExport: (format: 'png' | 'pdf') => void
@@ -595,6 +596,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onAutoLayout, onUndo, o
           onClick={onAutoLayout}
         />
       </>}
+      {!readOnly && <ToolBtn Icon={Upload} label="Import people (CSV or Excel)" active={false} onClick={onImport} />}
       <ExportBtn onExport={onExport} />
       {/* Share settings are an editor action (enforced by the API too) */}
       {!readOnly && <ShareSettingsBtn chartId={chartId} isPublic={isPublic} />}
@@ -680,7 +682,7 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, onImported }: {
   chartId?: string
   chartName?: string
   initialNodes?: OrgNode[]
@@ -688,6 +690,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   departments?: Department[]
   readOnly?: boolean
   isPublic?: boolean
+  /** Called after people were imported into this chart, so the page can reload it. */
+  onImported?: () => void
 }) {
   const {
     nodes, edges, transform, setTransform,
@@ -723,6 +727,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const addNodePosRef = useRef({ x: 400, y: 200 })
@@ -1178,6 +1183,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       <Toolbar
         activeTool={activeTool} setActiveTool={setActiveTool}
         onAddNode={handleOpenAddModal}
+        onImport={() => setIsImportOpen(true)}
         onAutoLayout={handleAutoLayout}
         onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         readOnly={readOnly}
@@ -1190,6 +1196,14 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         filterOpen={filterOpen} onFilterOpenChange={setFilterOpen}
         departments={departments} filters={activeFilters} onFiltersChange={setActiveFilters}
       />
+
+      {isImportOpen && (
+        <ImportDialog
+          onClose={() => setIsImportOpen(false)}
+          chart={{ id: chartId, name: chartName, nodes, departments }}
+          onImported={onImported}
+        />
+      )}
 
       {/* Over the node limit after a downgrade (roadmap 1.6): edit and remove, but don't add */}
       {!readOnly && plan.maxNodesPerChart !== -1 && nodes.length > plan.maxNodesPerChart && (

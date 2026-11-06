@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**212 frontend + 394 backend = 606 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+**264 frontend + 407 backend = 671 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -155,6 +155,24 @@ Nothing is ever deleted. Tests: `api/__tests__/over-limit.test.ts`, `src/feature
 
 `src/data/mock*` is for tests and dev only. Nothing in `src/pages` or `src/features` may import it.
 New-chart content comes from `src/lib/chartTemplates.ts`.
+
+## Import people (roadmap 2.1, 2026-11-06)
+
+- **Flow:** `src/features/import/ImportDialog.tsx` — file → map columns → review (dry run) → import. Opened from the Charts page
+  (always a new chart) and the canvas toolbar (add to this chart, or a new chart). Parsing is client-side
+  (`src/lib/readSheetFile.ts`: papaparse for CSV, `read-excel-file` for `.xlsx`, loaded on demand). All rules live in the
+  pure `src/lib/importOrg.ts` (`guessMapping`, `buildImportPlan`, `buildTemplateCsv`), which is what the tests cover.
+- **Rules (owner-decided):** a row needs a name *or* a title; a blank name is an open role (`name = title`, status `open`).
+  "Reports to" resolves by **ID column, then email, then full name** (open roles can't be found by name). Errors block the
+  whole import: unknown/ambiguous manager, duplicate ID, self-report, loop, plan limit. Warnings don't (missing title, odd date,
+  unknown role type, over-long text is shortened). Free to use; plan chart/role limits apply, all or nothing.
+- **API:** `POST /api/charts/:id/import` `{ nodes, edges, departments }` (editor, `requireChartsEditable`, node limit; reuses
+  same-named departments, remaps ids, drops references outside the payload). A new chart goes through `POST /api/charts`.
+  Inserts are chunked (`api/_lib/chunk.ts`) because one statement can't bind more than ~65k parameters.
+- **Canvas:** `CanvasView` reloads the chart after an append import; the canvas `key` changes only then, once the *new* data has arrived
+  (changing it earlier remounts with stale nodes).
+- **Tests:** `src/lib/__tests__/importOrg.test.ts`, `readSheetFile.test.ts` (real `.xlsx` fixture), `ImportDialog.test.tsx`,
+  `api/__tests__/import.test.ts`, `tests/e2e/import.spec.ts`.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 
@@ -467,13 +485,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 212 tests
+npm run test:run       # 264 tests
 
 # Run backend API tests
-npm run test:api       # 394 tests (PGlite, no network)
+npm run test:api       # 407 tests (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 606 tests total
+npm run test:all       # 671 tests total
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live

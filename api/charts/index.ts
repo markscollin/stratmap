@@ -5,6 +5,7 @@ import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit } from '..
 import { parseBody } from '../_lib/validate'
 import { ChartCreate } from '../_lib/schemas'
 import { db } from '../_lib/db'
+import { chunk } from '../_lib/chunk'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 import { fitsLimit, APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 
@@ -97,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           departmentId: n.departmentId ? (deptIdMap.get(n.departmentId) ?? null) : null,
           managerId: n.managerId ? (nodeIdMap.get(n.managerId) ?? null) : null,
         }))
-        await db.insert(nodes).values(newNodes)
+        for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
       }
 
       // Edges may only connect nodes that were seeded into this chart.
@@ -109,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sourceId: nodeIdMap.get(e.sourceId)!,
           targetId: nodeIdMap.get(e.targetId)!,
         }))
-      if (newEdges.length) await db.insert(edges).values(newEdges)
+      for (const part of chunk(newEdges)) await db.insert(edges).values(part)
 
       return res.status(201).json(chart)
     }
