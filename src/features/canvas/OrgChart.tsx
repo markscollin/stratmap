@@ -12,6 +12,7 @@ import { NodeChip } from '../nodes/NodeChip'
 import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
 import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
+import { commentDeepLink } from '../comments/deepLink'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 import { PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
@@ -716,7 +717,11 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged }: {
+  /** Open comment threads per role (roadmap 5). Only passed where the viewer is signed in; a public share page has no comments. */
+  commentCounts?: Record<string, number>
+  /** Called after a comment changed, so the page can refetch `commentCounts`. */
+  onCommentsChanged?: () => void
   chartId?: string
   chartName?: string
   initialNodes?: OrgNode[]
@@ -729,6 +734,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   /** Called after people were imported into this chart, so the page can reload it. */
   onImported?: () => void
 }) {
+  // A link from a comment email opens the chart with that role and its comments showing (read once, on mount).
+  const [deepLink] = useState(() => commentDeepLink(typeof window === 'undefined' ? '' : window.location.search, initialNodes.map(n => n.id)))
+
   const {
     nodes, edges, transform, setTransform,
     selectedId, setSelectedId,
@@ -740,7 +748,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     addEdge, removeEdge,
     applyLayout,
     undo, redo, canUndo, canRedo,
-  } = useCanvasState(initialNodes, initialEdges)
+  } = useCanvasState(initialNodes, initialEdges, deepLink.roleId)
 
   const addToast = useToastStore(s => s.addToast)
 
@@ -1294,7 +1302,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           return chips
             ? <NodeChip key={node.id} {...state} colour={deptColourMap[node.departmentId] ?? '#94A3B8'}
                 onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick} />
-            : <NodeCard key={node.id} {...state} departments={wsDepts}
+            : <NodeCard key={node.id} {...state} departments={wsDepts} commentCount={commentCounts?.[node.id] ?? 0}
                 onPointerDown={(e: React.PointerEvent) => handleNodePointerDown(e, node.id)}
                 onClick={(e: React.MouseEvent) => handleNodeClick(e, node.id)}
                 onDoubleClick={(e: React.MouseEvent) => handleNodeDoubleClick(e, node.id)} />
@@ -1399,6 +1407,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           allNodes={nodes}
           onClose={() => setSelectedId(null)}
           onEditNode={node => setEditingNodeId(node.id)}
+          chartId={commentCounts ? chartId : undefined}
+          initialTab={deepLink.tab}
+          commentCount={selectedNode ? commentCounts?.[selectedNode.id] ?? 0 : 0}
+          onCommentsChanged={onCommentsChanged}
         />
       </div>
 

@@ -24,11 +24,11 @@ function hasPath(edges: OrgEdge[], from: string, to: string): boolean {
   return false
 }
 
-export function useCanvasState(initialNodes: OrgNode[] = [], initialEdges: OrgEdge[] = []) {
+export function useCanvasState(initialNodes: OrgNode[] = [], initialEdges: OrgEdge[] = [], initialSelectedId: string | null = null) {
   const [nodes,     setNodes]     = useState<OrgNode[]>(initialNodes)
   const [edges,     setEdges]     = useState<OrgEdge[]>(initialEdges)
   const [transform, setTransform] = useState<Transform>(INITIAL_TRANSFORM)
-  const [selectedId,     setSelectedId]     = useState<string | null>(null)
+  const [selectedId,     setSelectedId]     = useState<string | null>(initialSelectedId)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null)
   const [activeTool,     setActiveTool]     = useState<ActiveTool>('select')

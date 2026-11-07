@@ -164,7 +164,7 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 
 ### Phase 5: Post-launch growth (not blockers)
 
-- Real-time collaboration (Liveblocks/PartyKit), presence cursors, comments for the `commenter` role
+- Real-time collaboration (Liveblocks/PartyKit), presence cursors. Comments for the `commenter` role: **Done 2026-11-07** (threads on roles, @mentions, resolve, email on mention/reply)
 - Chart version history and scenario comparison ("Plan A vs Plan B")
 - Headcount cost modelling (salary band × headcount plan → budget by quarter) **Done 2026-11-06** (salary range per plan, budget by quarter, admin only)
 - HRIS sync (BambooHR, Rippling, HiBob, Workday) for the Enterprise tier

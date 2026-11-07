@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { User, Briefcase, Clock, RefreshCw } from 'lucide-react'
+import { User, Briefcase, Clock, RefreshCw, MessageSquare } from 'lucide-react'
 import type { OrgNode, RoleType } from '../../types'
 import { NODE_W, NODE_H } from './nodeSize'
 
@@ -57,10 +57,13 @@ export function NodeCard({
   isConnectTarget,
   dimmed,
   departments = [],
+  commentCount = 0,
   onPointerDown,
   onClick,
   onDoubleClick,
 }: {
+  /** Open comment threads on this role (roadmap 5). */
+  commentCount?: number
   node: OrgNode
   selected: boolean
   connecting: boolean
@@ -121,6 +124,13 @@ export function NodeCard({
     >
       {/* Dept accent bar */}
       <div style={{ width: 3, background: deptColour, flexShrink: 0 }} />
+
+      {commentCount > 0 && (
+        <div data-export-ignore data-testid="comment-badge" title={`${commentCount} open comment thread${commentCount === 1 ? '' : 's'}`}
+          style={{ position: 'absolute', right: 6, bottom: 5, display: 'flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: 'var(--brand)', background: 'var(--brand-bg)', border: '1px solid var(--brand)' }}>
+          <MessageSquare size={9} /> {commentCount}
+        </div>
+      )}
 
       {/* Avatar */}
       <div style={{

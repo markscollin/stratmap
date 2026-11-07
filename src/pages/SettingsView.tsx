@@ -544,42 +544,77 @@ function BillingTabContent() {
   )
 }
 
+function Switch({ on, onClick, label, disabled }: { on: boolean; onClick: () => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={onClick}
+      style={{
+        width: 42, height: 24, borderRadius: 12, flexShrink: 0,
+        background: on ? 'var(--brand)' : 'var(--input-bg)',
+        border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
+        cursor: disabled ? 'default' : 'pointer', position: 'relative', transition: 'all .2s', opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 3, left: on ? 21 : 3, width: 16, height: 16, borderRadius: '50%',
+        background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+      }} />
+    </button>
+  )
+}
+
 function NotificationsTab() {
-  const [notifs, setNotifs] = useState({ approvals: true, jd: true, comments: false, invites: true })
+  // Only the comment switch is wired up (roadmap 5): it is saved on the server per person. The other three are not
+  // connected to any email yet and only change on this screen.
+  const [notifs, setNotifs] = useState({ approvals: true, jd: true, invites: true })
   type NotifKey = keyof typeof notifs
   const items: { id: NotifKey; label: string; desc: string }[] = [
     { id: 'approvals', label: 'Approval requests',   desc: 'When someone requests your approval' },
     { id: 'jd',        label: 'JD status changes',   desc: 'When a job description moves through the workflow' },
-    { id: 'comments',  label: 'New comments',         desc: 'When someone @mentions you' },
     { id: 'invites',   label: 'Team invitations',     desc: 'When someone joins your workspace' },
   ]
+  const [commentEmails, setCommentEmails] = useState<boolean | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api.get<{ comments: boolean }>('/api/notifications')
+      .then(r => { if (alive) setCommentEmails(r.comments) })
+      .catch(() => { if (alive) setError('Could not load your email settings.') })
+    return () => { alive = false }
+  }, [])
+
+  async function toggleComments() {
+    if (commentEmails === null) return
+    const next = !commentEmails
+    setCommentEmails(next)
+    setError(null)
+    try { await api.put('/api/notifications', { comments: next }) }
+    catch { setCommentEmails(!next); setError('Could not save that. Please try again.') }
+  }
+
+  const row = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, marginBottom: 18, borderBottom: '1px solid var(--border)' } as const
   return (
     <div style={{ maxWidth: 500 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 22 }}>Email notifications</h3>
+
+        <div style={row}>
+          <div style={{ flex: 1, paddingRight: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 3 }}>New comments</p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>When someone @mentions you or replies to your comment on a role</p>
+          </div>
+          <Switch on={commentEmails ?? true} disabled={commentEmails === null} label="New comments" onClick={() => void toggleComments()} />
+        </div>
+        {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '-8px 0 14px' }}>{error}</p>}
+
         {items.map(({ id, label, desc }) => (
-          <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, marginBottom: 18, borderBottom: '1px solid var(--border)' }}>
+          <div key={id} style={row}>
             <div style={{ flex: 1, paddingRight: 20 }}>
               <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 3 }}>{label}</p>
               <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{desc}</p>
             </div>
-            <button
-              onClick={() => setNotifs(n => ({ ...n, [id]: !n[id] }))}
-              style={{
-                width: 42, height: 24, borderRadius: 12, flexShrink: 0,
-                background: notifs[id] ? 'var(--brand)' : 'var(--input-bg)',
-                border: `1px solid ${notifs[id] ? 'var(--brand)' : 'var(--border)'}`,
-                cursor: 'pointer', position: 'relative', transition: 'all .2s',
-              }}
-            >
-              <div style={{
-                position: 'absolute', top: 3,
-                left: notifs[id] ? 21 : 3,
-                width: 16, height: 16, borderRadius: '50%',
-                background: '#fff', transition: 'left .2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-              }} />
-            </button>
+            <Switch on={notifs[id]} label={label} onClick={() => setNotifs(n => ({ ...n, [id]: !n[id] }))} />
           </div>
         ))}
       </div>

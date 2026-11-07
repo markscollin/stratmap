@@ -365,6 +365,28 @@ Salary range per planned hire → budget by quarter. Part of Growth-plan headcou
   The existing headcount CSV does **not** include salaries.
 - **Tests:** `src/lib/__tests__/headcountBudget.test.ts`, `api/__tests__/headcount-salary.test.ts`, `src/pages/__tests__/HeadcountBudget.test.tsx`, `tests/e2e/headcount-budget.spec.ts` (includes an invited editor who never receives the fields).
 
+## Comments on roles (roadmap 5, 2026-11-07)
+
+Discussion threads on a role (a node), in a **Comments** tab of the role's side panel. Owner decisions are below; tests are `api/__tests__/comments.test.ts` (44), `src/lib/__tests__/comments.test.ts`, `src/features/comments/__tests__/`,
+`src/features/panel/__tests__/JDPanelComments.test.tsx`, `src/pages/__tests__/SettingsNotifications.test.tsx` and `tests/e2e/comments.spec.ts` (owner + commenter + viewer, with the real emails).
+- **Free on every plan** (no `PAID_FEATURES` entry). This is what the `commenter` role finally does: **commenter and above can write; every member (viewers too) can read.** (The Phase 0 note "viewer/commenter = read-only" no longer holds for comments only.)
+- **Tables (migration 0010):** `role_comments` (workspace, chart and role all cascade, so comments go with them; `parent_id` self-references; `mentions text[]` of member ids; `deleted_at`, `resolved_at/by`) and `user_notification_prefs`
+  (per person, not per workspace: `comment_emails`, default on, no row = default).
+- **API:** `GET /api/charts/:id/comments?nodeId=` (a role's comments, oldest first) and `?counts=1` (open threads per role for the canvas badges); `POST` `{nodeId, body, parentId?, mentions?}` (rate limited, 30/min/user);
+  `PUT /…/comments/:commentId` `{body}` (**author only**: not even an owner can rewrite someone's words) **or** `{resolved}` (any commenter+, top-level only); `DELETE` (author always, even if later moved to read-only; owner/admin any).
+  `GET`/`PUT /api/notifications` `{comments: boolean}` for the email switch.
+- **Threads:** one level of replies (a reply to a reply is a 400). Only top-level comments resolve; a reply to a resolved thread **reopens** it. Deleting a comment that has replies keeps a **"deleted" shell** (text really cleared); when its last
+  reply goes the shell goes too; otherwise the row is removed. Max 2000 characters. Comments are discussion, not content: they **never bump `charts.revision`** and still work on a chart that is view-only because of the plan.
+- **Mentions:** the client sends member ids it picked from the `@` list (`src/lib/comments.ts`: `activeMentionQuery`, `mentionIds`); the server **keeps only real members of the workspace**, never the author, once each. A name typed without picking is not a mention.
+- **Email (owner-decided: mentions and replies):** `notifyAboutComment()` in `api/_lib/comments.ts` emails whoever is @mentioned and the author of the comment replied to; never the author, never a non-member, never someone who switched it off in
+  Settings → Notifications, and **once per person** (a mention wins over a reply). An edit emails only people *newly* mentioned. Best-effort: a failed email never fails the comment. The comment text is HTML-escaped. The link is
+  `/charts/<id>?role=<nodeId>&tab=comments`; `OrgChart` reads it once on mount (`src/features/comments/deepLink.ts`), selects the role and opens the tab.
+- **UI:** `CommentsTab` (compose with `@` picker, reply, resolve/reopen, edit, delete with a confirm, resolved threads folded away). A failed post/reply/edit **keeps the text**. A small count badge on the role card (`NodeCard commentCount`, left out of
+  PNG exports via `data-export-ignore`) comes from `CanvasView`, which refetches it when a comment changes. The panel is now 380px (was 320) so four tabs fit. Public share pages have no comments (no `commentCounts`, so no tab).
+- **Settings → Notifications:** only **New comments** is real now (saved per person). The other three switches (approvals, JD status, invitations) are still pictures that send no email; remove or wire them before advertising them.
+- **Data rights:** the workspace export includes `comments`; deleting an account removes the person's `user_notification_prefs` row but their comments stay with the workspace under an opaque id (the UI shows "A former member"); the purge test covers `role_comments`.
+- **Not built:** comments on a whole chart, attachments, reactions, an in-app inbox/notification bell, per-chart mute, and comment emails for chart-level discussion.
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
