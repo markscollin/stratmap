@@ -6,7 +6,7 @@ import { logAudit } from './audit'
 import { sendWorkspaceDeleted } from './email'
 import { deleteUserAccount } from './identity'
 import { reportError } from './sentry'
-import { auditLog, pendingInvites, workspaceMembers, workspaces } from '../../src/lib/db/schema'
+import { auditLog, pendingInvites, userNotificationPrefs, workspaceMembers, workspaces } from '../../src/lib/db/schema'
 
 // Data rights (roadmap 4.2): deleting a workspace, restoring it, erasing it for good, and deleting an account.
 //
@@ -142,6 +142,10 @@ export async function deleteAccount(userId: string): Promise<AccountDeletion> {
   await db.update(pendingInvites).set({ invitedBy: null }).where(eq(pendingInvites.invitedBy, userId))
   await db.update(auditLog).set({ details: sql`${auditLog.details} - 'email'` })
     .where(and(eq(auditLog.targetType, 'member'), eq(auditLog.targetId, userId)))
+
+  // The person's own email settings go with them. (Comments they wrote stay with the workspace like other content,
+  // under an opaque id; the UI shows "A former member".)
+  await db.delete(userNotificationPrefs).where(eq(userNotificationPrefs.userId, userId))
 
   try {
     await deleteUserAccount(userId)

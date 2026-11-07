@@ -136,3 +136,30 @@ export async function sendWorkspaceDeleted(opts: {
        <p style="font-size:14px;line-height:1.6">The workspace and everything in it will be permanently erased on <strong>${date}</strong>. If you need anything from it, ask the owner, who can still restore it until then.</p>`
   return sendEmail({ to: opts.to, subject, html: shell(`${ws} was deleted`, body) })
 }
+
+/** Tells a member about a comment that mentions them or replies to theirs (roadmap 5). Comment text is escaped. */
+export async function sendCommentNotification(opts: {
+  to: string
+  reason: 'mention' | 'reply'
+  authorName: string
+  workspaceName: string
+  chartName: string
+  roleTitle: string
+  body: string
+  url: string
+}): Promise<SendResult> {
+  const author = escapeHtml(opts.authorName)
+  const where = `${escapeHtml(opts.roleTitle)} in ${escapeHtml(opts.chartName)}`
+  const what = opts.reason === 'mention' ? 'mentioned you in a comment' : 'replied to your comment'
+  const subject = `${opts.authorName} ${what} on ${opts.roleTitle}`.replace(/[\r\n]+/g, ' ')
+  const html = shell(
+    `${author} ${what}`,
+    `<p style="font-size:13px;color:#64748b;margin:0 0 12px">${where} · ${escapeHtml(opts.workspaceName)}</p>
+     <blockquote style="margin:0 0 20px;padding:12px 14px;background:#f1f5f9;border-radius:8px;font-size:14px;line-height:1.6;white-space:pre-wrap">${escapeHtml(opts.body)}</blockquote>
+     <p style="margin:24px 0">
+       <a href="${escapeHtml(opts.url)}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Open the discussion</a>
+     </p>
+     <p style="font-size:12px;color:#94a3b8">You can turn these emails off in StratMap under Settings, Notifications.</p>`,
+  )
+  return sendEmail({ to: opts.to, subject, html })
+}

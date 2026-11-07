@@ -12,8 +12,9 @@ import { JDEditor } from '../jd/JDEditor'
 import { AIJDDraft } from '../jd/AIJDDraft'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { LockedFeatureCard, PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
+import { CommentsTab } from '../comments/CommentsTab'
 
-type PanelTab = 'overview' | 'responsibilities' | 'requirements'
+type PanelTab = 'overview' | 'responsibilities' | 'requirements' | 'comments'
 
 const STATUS_COLOUR: Record<RoleStatus, string> = {
   draft:       'var(--muted)',
@@ -31,13 +32,21 @@ const STATUS_LABEL: Record<RoleStatus, string> = {
   hired:       'Hired',
 }
 
-export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
+export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, initialTab, commentCount = 0, onCommentsChanged }: {
   node: OrgNode | null
   allNodes?: OrgNode[]
   onClose: () => void
   onEditNode?: (node: OrgNode) => void
+  /** The chart this role is on. The Comments tab only exists when it is known (roadmap 5). */
+  chartId?: string
+  /** Open on this tab (a comment email links straight to the discussion). */
+  initialTab?: 'comments'
+  /** Open comment threads on this role, shown on the tab. */
+  commentCount?: number
+  /** Called after a comment was added, resolved, edited or deleted, so the canvas badges can refresh. */
+  onCommentsChanged?: () => void
 }) {
-  const [tab,              setTab]              = useState<PanelTab>('overview')
+  const [tab,              setTab]              = useState<PanelTab>(initialTab ?? 'overview')
   const [draftVersion,     setDraftVersion]     = useState(0)
   const [showTemplatePick, setShowTemplatePick] = useState(false)
 
@@ -89,7 +98,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
       onClick={e => e.stopPropagation()}
       style={{
         position: 'absolute', top: 0, right: 0, bottom: 0,
-        width: 320,
+        width: 'min(380px, 100vw)',
         background: 'var(--surface)',
         borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column',
@@ -161,16 +170,16 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginLeft: -20, paddingLeft: 20, marginRight: -20 }}>
-              {(['overview', 'responsibilities', 'requirements'] as PanelTab[]).map(t => (
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginLeft: -20, paddingLeft: 20, marginRight: -20, overflowX: 'auto' }}>
+              {(['overview', 'responsibilities', 'requirements', ...(chartId ? ['comments'] : [])] as PanelTab[]).map(t => (
                 <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); setShowTemplatePick(false) }} style={{
-                  padding: '8px 14px', background: 'transparent', border: 'none',
+                  padding: '8px 11px', background: 'transparent', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
                   borderBottom: `2px solid ${tab === t ? 'var(--brand)' : 'transparent'}`,
                   color: tab === t ? 'var(--brand)' : 'var(--muted)',
                   fontSize: 12, fontWeight: tab === t ? 600 : 400,
                   cursor: 'pointer', marginBottom: -1, transition: 'all .15s',
                 }}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t.charAt(0).toUpperCase() + t.slice(1)}{t === 'comments' && commentCount > 0 ? ` (${commentCount})` : ''}
                 </button>
               ))}
             </div>
@@ -178,6 +187,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode }: {
 
           {/* Tab content */}
           <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }} onWheel={e => e.stopPropagation()}>
+            {tab === 'comments' && chartId && <CommentsTab key={node.id} chartId={chartId} nodeId={node.id} onChanged={onCommentsChanged} />}
+
             {tab === 'overview' && <OverviewTab node={node} dept={dept} allNodes={allNodes} jd={jd} canAdmin={canAdmin && !jdLocked} onUpdateJD={updateJD} />}
 
             {(tab === 'responsibilities' || tab === 'requirements') && jd && jdLocked && (

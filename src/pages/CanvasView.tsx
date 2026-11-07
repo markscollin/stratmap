@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useChartStore } from '../store'
@@ -65,6 +65,16 @@ export function CanvasView() {
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [id, reloadKey])
+
+  // Open comment threads per role, for the badges on the canvas (roadmap 5). Held here so a chart reload keeps them.
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
+  const refreshCommentCounts = useCallback(() => {
+    if (!id) return
+    api.get<{ counts: Record<string, number> }>(`/api/charts/${id}/comments?counts=1`)
+      .then(r => setCommentCounts(r.counts))
+      .catch(() => { /* badges are optional: stay quiet if they can't load */ })
+  }, [id])
+  useEffect(() => { refreshCommentCounts() }, [refreshCommentCounts])
 
   useEffect(() => {
     const name = fullChart?.name ?? chartMeta?.name
@@ -152,6 +162,8 @@ export function CanvasView() {
         departments={depts}
         readOnly={!canEdit || frozen || conflicted || isPhone}
         isPublic={chartMeta?.isPublic ?? false}
+        commentCounts={commentCounts}
+        onCommentsChanged={refreshCommentCounts}
       />
       </div>
     </div>
