@@ -17,6 +17,7 @@ import workspaceHandler from '../workspace'
 import workspacesHandler from '../workspaces'
 import chartsHandler from '../charts/index'
 import memberHandler from '../workspace/members/[userId]'
+import leaveHandler from '../workspace/leave'
 import { setupSchema, cleanDb, testDb } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes, type MockRes } from './helpers/res'
@@ -115,5 +116,43 @@ describe('removing a member', () => {
     expect((await call(chartsHandler, { method: 'POST', as: 'ed', ws: 'ws-a', body: { name: 'x' } }))._status).toBe(403)
     // ...while their other workspace is untouched.
     expect((await call(workspaceHandler, { method: 'GET', as: 'ed', ws: 'ws-b' }))._status).toBe(200)
+  })
+})
+
+describe('leaving a workspace', () => {
+  it('a member leaves, loses access at once, and keeps their other workspace; the workspace logs it without personal data', async () => {
+    expect((await call(workspaceHandler, { method: 'GET', as: 'ed', ws: 'ws-a' }))._status).toBe(200)
+    const res = await call(leaveHandler, { method: 'POST', as: 'ed', ws: 'ws-a' })
+    expect(res._status).toBe(204)
+
+    const after = await call(workspaceHandler, { method: 'GET', as: 'ed', ws: 'ws-a' })
+    expect([after._status, (after._body as { error: string }).error]).toEqual([403, 'not-a-member'])
+    expect((await call(workspaceHandler, { method: 'GET', as: 'ed', ws: 'ws-b' }))._status).toBe(200)
+
+    const events = await testDb.select().from(schema.auditLog).where(eq(schema.auditLog.workspaceId, 'ws-a'))
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ action: 'member.left', actorUserId: 'dev-ed', targetId: 'dev-ed', details: { role: 'editor' } })
+    expect(JSON.stringify(events)).not.toContain('ed@e2e.test')
+    // the other members are untouched
+    expect((await call(workspaceHandler, { method: 'GET', as: 'olive', ws: 'ws-a' }))._status).toBe(200)
+  })
+
+  it('the owner cannot leave; they delete the workspace instead', async () => {
+    const res = await call(leaveHandler, { method: 'POST', as: 'olive', ws: 'ws-a' })
+    expect(res._status).toBe(403)
+    expect(res._body).toMatchObject({ error: 'owner-cannot-leave' })
+    expect(await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, 'dev-olive'))).toHaveLength(1)
+  })
+
+  it('every non-owner role can leave, and only POST is accepted', async () => {
+    await testDb.update(schema.workspaceMembers).set({ permission: 'viewer' }).where(eq(schema.workspaceMembers.id, 'm2'))
+    expect((await call(leaveHandler, { method: 'GET', as: 'ed', ws: 'ws-a' }))._status).toBe(405)
+    expect((await call(leaveHandler, { method: 'POST', as: 'ed', ws: 'ws-a' }))._status).toBe(204)
+  })
+
+  it('someone who is not a member cannot "leave" a workspace they were never in', async () => {
+    const res = await call(leaveHandler, { method: 'POST', as: 'bo', ws: 'ws-a' })
+    expect(res._status).toBe(403)
+    expect(await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.workspaceId, 'ws-a'))).toHaveLength(2)
   })
 })

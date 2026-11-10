@@ -24,7 +24,7 @@ export function DataRightsSection() {
   const signOut = useSignOut()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [open, setOpen] = useState<'workspace' | 'account' | null>(null)
+  const [open, setOpen] = useState<'workspace' | 'account' | 'leave' | null>(null)
   const [typed, setTyped] = useState('')
 
   const fail = (err: unknown, fallback: string) => setError(err instanceof ApiError ? err.userMessage : fallback)
@@ -55,7 +55,16 @@ export function DataRightsSection() {
     } catch (err) { fail(err, 'Could not delete the account'); setBusy(null) }
   }
 
-  const toggle = (which: 'workspace' | 'account') => { setOpen(o => (o === which ? null : which)); setTyped(''); setError(null) }
+  async function leaveWorkspace() {
+    setBusy('leave'); setError(null)
+    try {
+      await api.post('/api/workspace/leave', {})
+      setSelectedWorkspaceId(null)
+      window.location.assign('/dashboard')   // another workspace if there is one, otherwise onboarding
+    } catch (err) { fail(err, 'Could not leave the workspace'); setBusy(null) }
+  }
+
+  const toggle = (which: 'workspace' | 'account' | 'leave') => { setOpen(o => (o === which ? null : which)); setTyped(''); setError(null) }
 
   return (
     <div style={{ maxWidth: 500 }}>
@@ -91,6 +100,25 @@ export function DataRightsSection() {
                   </button>
                   <button style={ghostBtn} onClick={() => toggle('workspace')}>Cancel</button>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isOwner && workspace && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={small}>
+              <strong>Leave this workspace.</strong> You lose access to it and to everything in it. Your account and your other workspaces are not affected.
+              What you wrote here (comments, for example) stays with the workspace. An admin can invite you back.
+            </p>
+            {open !== 'leave' ? (
+              <button style={dangerBtn(true)} onClick={() => toggle('leave')}>Leave workspace…</button>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={dangerBtn(busy === null)} disabled={busy !== null} onClick={() => void leaveWorkspace()}>
+                  {busy === 'leave' ? 'Leaving…' : `Leave ${workspace.name}`}
+                </button>
+                <button style={ghostBtn} onClick={() => toggle('leave')}>Cancel</button>
               </div>
             )}
           </div>

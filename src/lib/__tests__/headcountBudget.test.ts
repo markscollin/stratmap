@@ -84,6 +84,31 @@ describe('buildBudget: scope', () => {
   })
 })
 
+describe('buildBudget: carrying earlier years over (opt-in)', () => {
+  const plans = [plan('old', '2025-Q3', 120_000, 120_000), plan('now', '2026-Q3', 120_000, 120_000), plan('later', '2027-Q1', 120_000, 120_000), plan('oldfree', '2025-Q1', null, null)]
+  it('is off by default: earlier and later years are ignored, exactly as before', () => {
+    const b = buildBudget(plans, 2026)
+    expect(b.counted).toBe(1)
+    expect(b.currencies[0].year.expected).toBe(60_000)             // the 2026-Q3 hire: Q3 + Q4
+    expect(b.uncosted).toEqual([])
+  })
+  it('on: an earlier hire costs a full year, a this-year hire is unchanged, later years still never count', () => {
+    const b = buildBudget(plans, 2026, { carryOver: true })
+    expect(b.counted).toBe(2)
+    expect(b.currencies[0].quarters.map(q => q.expected)).toEqual([30_000, 30_000, 60_000, 60_000])   // old: 30k each quarter; now: Q3, Q4
+    expect(b.currencies[0].year.expected).toBe(180_000)
+    expect(b.currencies[0].annualised.expected).toBe(240_000)
+    expect(b.currencies[0].hires).toBe(2)
+  })
+  it('on: an earlier hire with no salary is listed as no cost yet, like any other', () => {
+    expect(buildBudget(plans, 2026, { carryOver: true }).uncosted.map(p => p.id)).toEqual(['oldfree'])
+  })
+  it('on, for 2027: both earlier hires are a full year and the 2027-Q1 hire is a full year too', () => {
+    const b = buildBudget(plans, 2027, { carryOver: true })
+    expect(b.currencies[0].year.expected).toBe(360_000)
+  })
+})
+
 describe('formatting and CSV', () => {
   it('formats whole units with a currency code', () => {
     expect(formatMoney(1234567.4, 'USD')).toBe('USD 1,234,567')

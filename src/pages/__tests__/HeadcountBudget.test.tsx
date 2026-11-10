@@ -95,6 +95,33 @@ describe('Headcount budget (roadmap 5)', () => {
   })
 })
 
+describe('Headcount budget across years', () => {
+  const earlier = (id: string) => ({ ...plan(id, 'Earlier hire', 'Q1', USD), targetQuarter: `${YEAR - 1}-Q1` })
+
+  it('earlier years are left out until you ask for them, then count as a full year each', async () => {
+    setup('admin', [plan('a', 'Data Engineer', 'Q2', USD), earlier('e')])
+    expect(await screen.findByTestId('budget-USD-year')).toHaveTextContent('USD 90,000')
+    fireEvent.click(screen.getByLabelText(/Include hires from earlier years/))
+    await waitFor(() => expect(screen.getByTestId('budget-USD-year')).toHaveTextContent('USD 210,000'))   // 90k + a full 120k
+    fireEvent.click(screen.getByLabelText(/Include hires from earlier years/))
+    await waitFor(() => expect(screen.getByTestId('budget-USD-year')).toHaveTextContent('USD 90,000'))
+  })
+
+  it('shows the budget for a year that only has earlier hires, once they are included', async () => {
+    setup('admin', [earlier('e')])
+    expect(await screen.findByLabelText(/Include hires from earlier years/)).toBeInTheDocument()
+    expect(screen.queryByTestId('budget-USD')).toBeNull()
+    fireEvent.click(screen.getByLabelText(/Include hires from earlier years/))
+    await waitFor(() => expect(screen.getByTestId('budget-USD-year')).toHaveTextContent('USD 120,000'))
+  })
+
+  it('offers no toggle when there are no earlier hires', async () => {
+    setup('admin', [plan('a', 'Data Engineer', 'Q2', USD)])
+    await screen.findByTestId('headcount-budget')
+    expect(screen.queryByLabelText(/Include hires from earlier years/)).toBeNull()
+  })
+})
+
 describe('Hire form: salary fields', () => {
   const openForm = async () => { fireEvent.click((await screen.findAllByRole('button', { name: /Add hire/ }))[0]) }
   // The form's own submit button shares its name with the header and column "Add hire" buttons, so look inside the form.
