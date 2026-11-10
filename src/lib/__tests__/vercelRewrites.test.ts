@@ -34,3 +34,28 @@ describe('vercel.json rewrites', () => {
     expect(fs.readFileSync('src/main.tsx', 'utf8')).not.toContain('spa-redirect')
   })
 })
+
+// Embeds (Phase 5): /embed/* is the ONLY place a page may be framed by another site.
+describe('vercel.json framing headers', () => {
+  const headers = (JSON.parse(fs.readFileSync('vercel.json', 'utf8')) as { headers: { source: string; headers: { key: string; value: string }[] }[] }).headers
+  // "/(<regex>)" is one group; "/embed/(.*)" is a literal prefix plus a group.
+  const matches = (source: string, p: string) => new RegExp(`^${source.replace(/\((.*?)\)$/, '($1)')}$`).test(p)
+  const forPath = (p: string) => headers.filter(h => matches(h.source, p))
+  const value = (p: string, key: string) => forPath(p).flatMap(h => h.headers).find(h => h.key === key)?.value
+
+  it.each(['/dashboard', '/share/abc', '/charts/1', '/api/workspace', '/', '/embedded', '/embedx/abc'])(
+    '%s still cannot be framed', (p) => {
+      expect(value(p, 'X-Frame-Options')).toBe('DENY')
+      expect(value(p, 'Content-Security-Policy-Report-Only')).toContain("frame-ancestors 'none'")
+    })
+
+  it.each(['/embed/abc123', '/embed/x'])('%s may be framed by any site, and is kept out of search', (p) => {
+    expect(value(p, 'X-Frame-Options')).toBeUndefined()
+    expect(value(p, 'Content-Security-Policy-Report-Only')).toContain('frame-ancestors *')
+    expect(value(p, 'Content-Security-Policy-Report-Only')).not.toContain("frame-ancestors 'none'")
+    expect(value(p, 'X-Robots-Tag')).toBe('noindex')
+    expect(value(p, 'X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('the app shell serves /embed/:code', () => expect(spaRegex.test('/embed/abc123')).toBe(true))
+})

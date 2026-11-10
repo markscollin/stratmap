@@ -286,6 +286,16 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
   const isPlanGated = false // Starter+ gate — wire to billing store when ready
 
   const shareUrl = code ? `${window.location.origin}/share/${code}` : null
+  const embedCode = code
+    ? `<iframe src="${window.location.origin}/embed/${code}" title="Org chart" width="100%" height="600" style="border:0" loading="lazy"></iframe>`
+    : null
+  const [embedCopied, setEmbedCopied] = useState(false)
+  const copyEmbed = async () => {
+    if (!embedCode) return
+    await navigator.clipboard.writeText(embedCode)
+    setEmbedCopied(true)
+    setTimeout(() => setEmbedCopied(false), 2000)
+  }
 
   const fetchOrCreateCode = async () => {
     if (code) return code
@@ -453,6 +463,15 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
                 <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
                   This is a live link — viewers always see the latest version.
                 </p>
+                {embedCode && (
+                  <button
+                    onClick={copyEmbed}
+                    data-testid="copy-embed"
+                    style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {embedCopied ? <><Check size={11} /> Embed code copied</> : <><Copy size={11} /> Copy embed code</>}
+                  </button>
+                )}
               </div>
             )}
           </div>

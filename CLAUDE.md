@@ -391,6 +391,30 @@ Discussion threads on a role (a node), in a **Comments** tab of the role's side 
 - **Data rights:** the workspace export includes `comments`; deleting an account removes the person's `user_notification_prefs` row but their comments stay with the workspace under an opaque id (the UI shows "A former member"); the purge test covers `role_comments`.
 - **Not built:** comments on a whole chart, attachments, reactions, an in-app inbox/notification bell, per-chart mute, and comment emails for chart-level discussion.
 
+## Small follow-ups (2026-11-10)
+
+- **Leave a workspace:** `POST /api/workspace/leave` (any non-owner member; owner gets `403 owner-cannot-leave`; logs `member.left` with the role only). UI: Settings → General → "Leave workspace…" (`DataRightsSection`). Ownership transfer is still not built.
+- **Budget across years:** `buildBudget(plans, year, { carryOver })`. A checkbox in `BudgetPanel` ("Include hires from earlier years (a full year each)") counts hires targeted in earlier years as a full year. Off by default (the original owner rule).
+- **Notifications tab:** only the real "New comments" switch remains; the three fake switches were removed.
+
+## Version history and scenarios (Phase 5, 2026-11-10)
+
+Growth feature (`'version-history'` in `PAID_FEATURES`). Tests: `api/__tests__/snapshots.test.ts`, `src/lib/__tests__/snapshotDiff.test.ts`, `src/features/history/__tests__/HistoryPanel.test.tsx`, `src/features/canvas/__tests__/OrgChartReadOnly.test.tsx`, `tests/e2e/history.spec.ts`.
+- **Table `chart_snapshots`** (migration 0011, cascades with workspace and chart): `name`, `kind` (`manual`|`auto`), `created_by`, `node_count`, `edge_count`, `data` jsonb (`SnapshotData`: roles, reporting lines, departments only; **never comments or job descriptions**, so a restore cannot lose a discussion or a JD).
+- **API:** `GET/POST /api/charts/:id/snapshots` (list has no data; POST = editor + feature, rate limited 20/min, max 50 manual → `409 snapshot-limit`), `GET/DELETE .../snapshots/:snapshotId` (delete = author or admin; **deleting needs no feature**, so a downgraded workspace can tidy up and can still read), `POST .../restore` and `POST .../branch` (editor + feature + `requireChartsEditable`; node-limit and, for branch, chart-limit checks → 402).
+- **Restore** is a diff, not a wipe: roles in the version are upserted (same id keeps its comments and JD), roles not in it are deleted, lines and departments are replaced, all in one atomic batch (`runAtomically` in `api/_lib/atomic.ts` uses `db.batch` on Neon, `transaction` on PGlite). It first takes an **automatic** version ("Before restoring “name”", the newest 20 are kept), so a restore is always undoable by restoring that. It claims the chart revision (a stale `X-Chart-Revision` is a 409 `chart-changed`) and logs `chart.restored`.
+- **Branch** (scenario): creates a new chart (fresh ids) from a version, default name `<chart> (<version>)`; logs `chart.branched`. Compare in the UI is a pure `diffSnapshots` (added, removed, changed fields, headcount by department) between two versions or a version and today.
+- **UI:** History button in the canvas toolbar (`HistoryPanel`). Viewers can open it and compare but not save/restore (server agrees). Non-Growth workspaces see `LockedFeatureCard`.
+- **Bug fixed on the way:** on a read-only canvas the pan handler captured the pointer on mouse-down and swallowed clicks on toolbar buttons (viewers could not open Export or History). `handleCanvasPointerDown` now ignores presses on buttons, links, inputs, dialogs, `[data-export-ignore]` and `[data-canvas-overlay]`.
+- **Not built:** automatic versions on a schedule, version-to-version merge, per-role history, restoring comments/JDs.
+
+## Embeds (Phase 5, 2026-11-10)
+
+- **`/embed/:code`** (`src/pages/EmbedPage.tsx`, public route) shows a shared chart read-only, with no toolbar. It uses the same public share code, so turning sharing off or revoking the link empties every embed ("This chart is no longer shared"). Short codes only (never legacy URL tokens). The "Made with StratMap" pill shows on Free only, like share pages.
+- **Framing:** `vercel.json` now has two header blocks. Everything except `/embed/*` keeps `X-Frame-Options: DENY` and `frame-ancestors 'none'` (source `/((?!embed/).*)`); `/embed/*` drops X-Frame-Options, uses `frame-ancestors *` and adds `X-Robots-Tag: noindex`. `src/lib/__tests__/vercelRewrites.test.ts` checks both sides. **Not verifiable locally** (headers only run on Vercel): after deploy, embed a chart in a Notion page and check `/share/x` still refuses to be framed.
+- **UI:** Share settings has "Copy embed code" (an `<iframe>` snippet) once a chart is public.
+- **Not built:** Slack integration (needs a Slack app), per-embed settings (theme, hide names).
+
 ## Migrations (roadmap 3.2, 2026-11-05)
 
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
