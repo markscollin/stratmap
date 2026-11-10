@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload } from 'lucide-react'
+import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload, History } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
 import { showsBranding } from '../../lib/plans'
 import { useChartStore } from '../../store/chartStore'
@@ -13,6 +13,7 @@ import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips,
 import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
 import { commentDeepLink } from '../comments/deepLink'
+import { HistoryPanel } from '../history/HistoryPanel'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 import { PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
@@ -583,9 +584,9 @@ function FilterBtn({
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
-function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
+function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onHistory, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
-  onAddNode: () => void; onImport: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
+  onAddNode: () => void; onImport: () => void; onHistory?: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
   nodeCount: number; maxNodesPerChart: number; currentTier: string
   onExport: (format: 'png' | 'pdf' | 'csv') => void
@@ -633,6 +634,7 @@ function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onAutoLayout,
       </>}
       {!readOnly && <ToolBtn Icon={Upload} label="Import people (CSV or Excel)" active={false} onClick={onImport} />}
       <ExportBtn onExport={onExport} />
+      {onHistory && <ToolBtn Icon={History} label="Version history" active={false} onClick={onHistory} />}
       {/* Share settings are an editor action (enforced by the API too) */}
       {!readOnly && <ShareSettingsBtn chartId={chartId} isPublic={isPublic} />}
       {!readOnly ? <>
@@ -717,7 +719,9 @@ const zoomBtnStyle: React.CSSProperties = {
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged, onVersionRestored }: {
+  /** Version history (roadmap 5): shown only where the viewer is signed in. Called after a version was restored, so the page reloads the chart. */
+  onVersionRestored?: () => void
   /** Open comment threads per role (roadmap 5). Only passed where the viewer is signed in; a public share page has no comments. */
   commentCounts?: Record<string, number>
   /** Called after a comment changed, so the page can refetch `commentCounts`. */
@@ -772,6 +776,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const addNodePosRef = useRef({ x: 400, y: 200 })
@@ -966,6 +971,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0 || pinchRef.current) return
+    // A press that starts on the toolbar, a panel, a dialog or any control is theirs, not a pan: capturing the pointer for a
+    // pan would swallow the click, so on a view-only canvas the toolbar buttons (filter, export, history) stopped working.
+    if ((e.target as Element).closest('button, a, input, select, textarea, [role="dialog"], [data-export-ignore], [data-canvas-overlay]')) return
     if (connectingFrom) { setConnectingFrom(null); return }
     // Dragging empty canvas pans with the Pan tool, and always on a touch screen or a view-only canvas
     // (there is nothing to select-drag there, and a phone has no Pan key).
@@ -1313,6 +1321,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         activeTool={activeTool} setActiveTool={setActiveTool}
         onAddNode={handleOpenAddModal}
         onImport={() => setIsImportOpen(true)}
+        onHistory={onVersionRestored ? () => setIsHistoryOpen(true) : undefined}
         onAutoLayout={handleAutoLayout}
         onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
         readOnly={readOnly}
@@ -1328,6 +1337,10 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
       {!readOnly && nodes.length === 0 && chartId && (
         <EmptyCanvasCard onAdd={handleOpenAddModal} onImport={() => setIsImportOpen(true)} />
+      )}
+
+      {isHistoryOpen && chartId && onVersionRestored && (
+        <HistoryPanel chartId={chartId} chartName={chartName} onClose={() => setIsHistoryOpen(false)} onRestored={onVersionRestored} />
       )}
 
       {isImportOpen && (

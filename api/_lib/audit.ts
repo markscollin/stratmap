@@ -27,6 +27,8 @@ export type AuditAction =
   | 'workspace.deleted'
   | 'workspace.restored'
   | 'workspace.exported'
+  | 'chart.restored'
+  | 'chart.branched'
 
 export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace' | 'headcount'
 export type AuditDetails = Record<string, string | number | boolean | null>

@@ -188,6 +188,10 @@ export const CommentUpdate = z.object({
 }).refine(v => (v.body === undefined) !== (v.resolved === undefined), { message: 'send either body or resolved' })
 export const NotificationPrefsUpdate = z.object({ comments: z.boolean() })
 
+// Chart version history (roadmap 5).
+export const SnapshotCreate = z.object({ name: z.string().trim().min(1).max(100) })
+export const SnapshotBranch = z.object({ name: z.string().trim().min(1).max(100).optional() })
+
 // Data rights (roadmap 4.2). The owner must type the workspace's name; the server compares it with the real name.
 export const WorkspaceDelete = z.object({ confirmName: z.string().trim().min(1).max(100) })
 export const WorkspaceRestore = z.object({ workspaceId: Id })

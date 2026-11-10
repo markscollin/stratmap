@@ -313,3 +313,33 @@ export const userNotificationPrefs = pgTable('user_notification_prefs', {
   commentEmails: boolean('comment_emails').notNull().default(true),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
+
+// ─── Chart version history (roadmap 5) ──────────────────────────────────────
+// A saved version of a chart's structure: its roles, reporting lines and departments (NOT job-description text or
+// salary bands, so history never exposes pay). Used to compare two versions, restore one, or branch a scenario into
+// a new chart. `kind` 'auto' = taken by the app (before a restore), pruned oldest-first; 'manual' = saved by a person.
+// Goes with its chart and workspace (cascade).
+export interface SnapshotData {
+  nodes: {
+    id: string; name: string; title: string; departmentId: string | null; managerId: string | null
+    status: 'active' | 'open' | 'planned' | 'backfill'
+    employmentType: 'full-time' | 'part-time' | 'contractor' | 'advisor'
+    roleType: 'existing' | 'new-headcount' | 'backfill' | 'contractor' | 'tbd' | null
+    avatarUrl: string | null; location: string | null; startDate: string | null; x: number; y: number; isNew: boolean | null
+  }[]
+  edges: { id: string; sourceId: string; targetId: string }[]
+  departments: { id: string; name: string; colour: string; workspaceDepartmentId: string | null }[]
+}
+
+export const chartSnapshots = pgTable('chart_snapshots', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  kind: text('kind').notNull().default('manual'),   // 'manual' | 'auto'
+  createdBy: text('created_by').notNull(),          // Clerk userId
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  nodeCount: integer('node_count').notNull().default(0),
+  edgeCount: integer('edge_count').notNull().default(0),
+  data: jsonb('data').$type<SnapshotData>().notNull(),
+}, (t) => [index('chart_snapshots_chart_idx').on(t.chartId, t.createdAt)])
