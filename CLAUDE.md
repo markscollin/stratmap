@@ -49,16 +49,20 @@ content reviewed by a lawyer.
 
 **e2e (roadmap 3.3, 2026-11-06):** `npm run test:e2e` runs Playwright against `scripts/e2e-server.mjs`
 (Vite in dev-bypass mode plus every `api/**/*.ts` mounted; no Clerk/Stripe/AI/email keys). It uses
-`E2E_DATABASE_URL`, else `DATABASE_URL` — a throwaway Neon branch only. In the cloud sandbox run
-`NODE_USE_ENV_PROXY=1 PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` (the pre-installed
-Chromium is a different build from the one Playwright 1.60 expects; elsewhere `npx playwright install chromium`).
+`E2E_DATABASE_URL`, else `DATABASE_URL`.
+- **Preferred: no database account at all.** `npm run test:e2e:local` (optionally `-- tests/e2e/x.spec.ts`) starts `scripts/neon-http-emulator.mjs`, a PGlite (in-process Postgres) server that speaks Neon's
+  HTTP protocol with the real migrations applied, points the app and the test helpers at it (`NEON_HTTP_ENDPOINT`, ignored on production deploys) and removes `DATABASE_URL` from the child's environment so a real database
+  can never be reached. **CI does the same**, so the `e2e` job needs **no secret** and never touches a shared database. The emulator is proved against the real Neon driver and the app's Drizzle code by
+  `api/__tests__/neon-emulator.test.ts`. In the cloud sandbox add `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium` (the pre-installed Chromium is a different build from the one Playwright 1.60 expects; elsewhere
+  `npx playwright install chromium`). Running against a real Neon branch still works: set `E2E_DATABASE_URL` (and run `npm run db:migrate` against it first), but prefer the emulator.
 - **Multi-identity dev bypass:** `X-Dev-User: true` is still `u-dev`/`ws-dev`. Any other slug (`alice`) is user
   `dev-alice`, email `alice@e2e.test`, with no workspace until onboarding. Client: `localStorage['stratmap_dev_user']`
   (`src/lib/devIdentity.ts`); a named identity goes through the same `UserSync` flow as Clerk users. Refused on
   preview/production like the rest of the bypass.
 - Invite mail is appended to `E2E_EMAIL_OUTBOX` (JSON lines) when `RESEND_API_KEY` is unset. Tests use
   `testUser()` (unique per run) and `global-teardown.ts` deletes the run's workspaces.
-- CI job `e2e` needs the `E2E_DATABASE_URL` secret and skips without it. Not covered: Clerk sign-up UI, Stripe checkout.
+- CI job `e2e` runs against the local emulator (no secret; it used to need `E2E_DATABASE_URL`, whose password Neon started rejecting on 2026-11-07). Not covered: Clerk sign-up UI, Stripe checkout.
+- **The emulator is a test tool, not a database server:** one connection, requests run one at a time, no authentication, 127.0.0.1 only, in-memory. It returns values as raw Postgres text exactly like Neon, so keep new SQL ordinary Postgres; if a query behaves differently on real Neon, add a case to `neon-emulator.test.ts`.
 
 **Done:** Stripe webhook idempotency (`stripe_events`), shipped with the billing life-cycle (see below).
 
@@ -364,6 +368,28 @@ Salary range per planned hire → budget by quarter. Part of Growth-plan headcou
 - **UI:** `BudgetPanel` (`src/features/headcount/`) above the board for admins, with a "Budget CSV" (`buildBudgetCsv`); salary fields in `HireForm` for admins only (the last currency is remembered in localStorage); the range on each card.
   The existing headcount CSV does **not** include salaries.
 - **Tests:** `src/lib/__tests__/headcountBudget.test.ts`, `api/__tests__/headcount-salary.test.ts`, `src/pages/__tests__/HeadcountBudget.test.tsx`, `tests/e2e/headcount-budget.spec.ts` (includes an invited editor who never receives the fields).
+
+## Comments on roles (roadmap 5, 2026-11-07)
+
+Discussion threads on a role (a node), in a **Comments** tab of the role's side panel. Owner decisions are below; tests are `api/__tests__/comments.test.ts` (44), `src/lib/__tests__/comments.test.ts`, `src/features/comments/__tests__/`,
+`src/features/panel/__tests__/JDPanelComments.test.tsx`, `src/pages/__tests__/SettingsNotifications.test.tsx` and `tests/e2e/comments.spec.ts` (owner + commenter + viewer, with the real emails).
+- **Free on every plan** (no `PAID_FEATURES` entry). This is what the `commenter` role finally does: **commenter and above can write; every member (viewers too) can read.** (The Phase 0 note "viewer/commenter = read-only" no longer holds for comments only.)
+- **Tables (migration 0010):** `role_comments` (workspace, chart and role all cascade, so comments go with them; `parent_id` self-references; `mentions text[]` of member ids; `deleted_at`, `resolved_at/by`) and `user_notification_prefs`
+  (per person, not per workspace: `comment_emails`, default on, no row = default).
+- **API:** `GET /api/charts/:id/comments?nodeId=` (a role's comments, oldest first) and `?counts=1` (open threads per role for the canvas badges); `POST` `{nodeId, body, parentId?, mentions?}` (rate limited, 30/min/user);
+  `PUT /…/comments/:commentId` `{body}` (**author only**: not even an owner can rewrite someone's words) **or** `{resolved}` (any commenter+, top-level only); `DELETE` (author always, even if later moved to read-only; owner/admin any).
+  `GET`/`PUT /api/notifications` `{comments: boolean}` for the email switch.
+- **Threads:** one level of replies (a reply to a reply is a 400). Only top-level comments resolve; a reply to a resolved thread **reopens** it. Deleting a comment that has replies keeps a **"deleted" shell** (text really cleared); when its last
+  reply goes the shell goes too; otherwise the row is removed. Max 2000 characters. Comments are discussion, not content: they **never bump `charts.revision`** and still work on a chart that is view-only because of the plan.
+- **Mentions:** the client sends member ids it picked from the `@` list (`src/lib/comments.ts`: `activeMentionQuery`, `mentionIds`); the server **keeps only real members of the workspace**, never the author, once each. A name typed without picking is not a mention.
+- **Email (owner-decided: mentions and replies):** `notifyAboutComment()` in `api/_lib/comments.ts` emails whoever is @mentioned and the author of the comment replied to; never the author, never a non-member, never someone who switched it off in
+  Settings → Notifications, and **once per person** (a mention wins over a reply). An edit emails only people *newly* mentioned. Best-effort: a failed email never fails the comment. The comment text is HTML-escaped. The link is
+  `/charts/<id>?role=<nodeId>&tab=comments`; `OrgChart` reads it once on mount (`src/features/comments/deepLink.ts`), selects the role and opens the tab.
+- **UI:** `CommentsTab` (compose with `@` picker, reply, resolve/reopen, edit, delete with a confirm, resolved threads folded away). A failed post/reply/edit **keeps the text**. A small count badge on the role card (`NodeCard commentCount`, left out of
+  PNG exports via `data-export-ignore`) comes from `CanvasView`, which refetches it when a comment changes. The panel is now 380px (was 320) so four tabs fit. Public share pages have no comments (no `commentCounts`, so no tab).
+- **Settings → Notifications:** only **New comments** is real now (saved per person). The other three switches (approvals, JD status, invitations) are still pictures that send no email; remove or wire them before advertising them.
+- **Data rights:** the workspace export includes `comments`; deleting an account removes the person's `user_notification_prefs` row but their comments stay with the workspace under an opaque id (the UI shows "A former member"); the purge test covers `role_comments`.
+- **Not built:** comments on a whole chart, attachments, reactions, an in-app inbox/notification bell, per-chart mute, and comment emails for chart-level discussion.
 
 ## Migrations (roadmap 3.2, 2026-11-05)
 

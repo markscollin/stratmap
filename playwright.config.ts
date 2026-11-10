@@ -3,7 +3,8 @@ import path from 'node:path'
 
 // Roadmap 3.3. `scripts/e2e-server.mjs` serves the app in dev-bypass mode with the
 // API mounted from api/ — no Vercel login and no Clerk key. It talks to the database
-// in E2E_DATABASE_URL (else DATABASE_URL): use a throwaway Neon branch, never production.
+// in E2E_DATABASE_URL (else DATABASE_URL). Use `npm run test:e2e:local` to run against an in-memory emulator with
+// no account at all (CI does too); a real Neon database must be a throwaway branch, never production.
 try { process.loadEnvFile('.env.local') } catch { /* CI has no env file */ }
 
 // Same values for the main process, the workers and the server (children inherit env).

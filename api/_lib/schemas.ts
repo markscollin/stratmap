@@ -171,6 +171,23 @@ export const WorkspaceCreate = z.object({
 
 export const WorkspaceUpdate = z.object({ name: z.string().trim().min(1).max(100) })
 
+// Role comments (roadmap 5). `mentions` are member ids picked in the UI; the server keeps only real members.
+export const COMMENT_MAX_LENGTH = 2000
+const CommentBody = z.string().trim().min(1).max(COMMENT_MAX_LENGTH)
+export const CommentCreate = z.object({
+  nodeId: Id,
+  body: CommentBody,
+  parentId: Id.optional(),
+  mentions: z.array(Id).max(20).optional(),
+})
+// Either edit the text or resolve/reopen a thread, never both at once.
+export const CommentUpdate = z.object({
+  body: CommentBody.optional(),
+  resolved: z.boolean().optional(),
+  mentions: z.array(Id).max(20).optional(),
+}).refine(v => (v.body === undefined) !== (v.resolved === undefined), { message: 'send either body or resolved' })
+export const NotificationPrefsUpdate = z.object({ comments: z.boolean() })
+
 // Data rights (roadmap 4.2). The owner must type the workspace's name; the server compares it with the real name.
 export const WorkspaceDelete = z.object({ confirmName: z.string().trim().min(1).max(100) })
 export const WorkspaceRestore = z.object({ workspaceId: Id })

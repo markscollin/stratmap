@@ -45,54 +45,47 @@ jobs:
         run: npm run build
 
   # End-to-end journey in a real browser (roadmap 3.3). Runs the app in dev-bypass mode
-  # (scripts/e2e-server.mjs) against a throwaway Neon branch, so it needs the repository
-  # secret E2E_DATABASE_URL. Without it (e.g. PRs from forks) the job passes and skips.
+  # (scripts/e2e-server.mjs) against a throwaway, in-memory Postgres (PGlite) served through
+  # scripts/neon-http-emulator.mjs, which speaks Neon's HTTP protocol. So it needs NO database
+  # account and NO repository secret, never touches a shared database, and runs for fork PRs too.
+  # The emulator applies the real migrations in ./drizzle when it starts.
   # Deliberately a separate job from `check`: add it to branch protection once it is stable.
   e2e:
     # Pinned: Playwright's browser install doesn't support the newest ubuntu-latest image yet.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+      # Only a label: the host is the machine itself and the emulator ignores the credentials.
+      E2E_DATABASE_URL: postgres://e2e:e2e@127.0.0.1/e2e
+      NEON_HTTP_ENDPOINT: http://127.0.0.1:4444/sql
     steps:
-      - name: Check for the e2e database secret
-        id: gate
-        run: |
-          if [ -z "$E2E_DATABASE_URL" ]; then
-            echo "::notice::E2E_DATABASE_URL is not set - skipping e2e."
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.gate.outputs.run
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.run
         with:
           node-version: 22
           cache: npm
-      - if: steps.gate.outputs.run
-        run: npm ci
+      - run: npm ci
       - name: Install Chromium
-        if: steps.gate.outputs.run
         run: npx playwright install --with-deps chromium
 
-      # Additive migrations onto the throwaway branch (see docs/MIGRATIONS.md).
-      - name: Migrate the e2e database
-        if: steps.gate.outputs.run
-        run: npm run db:migrate
-        env:
-          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+      - name: Start the local e2e database
+        run: |
+          node scripts/neon-http-emulator.mjs --port 4444 > emulator.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4444/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4444/health || { echo "::error::the local e2e database did not start"; cat emulator.log; exit 1; }
 
       - name: Playwright
-        if: steps.gate.outputs.run
         run: npm run test:e2e
 
       - uses: actions/upload-artifact@v4
-        if: failure() && steps.gate.outputs.run
+        if: failure()
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
+            emulator.log
           retention-days: 7

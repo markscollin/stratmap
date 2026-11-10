@@ -11,6 +11,7 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -281,3 +282,34 @@ export const auditLog = pgTable('audit_log', {
   details: jsonb('details').$type<Record<string, string | number | boolean | null>>().notNull().default({}),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('audit_log_workspace_created_idx').on(t.workspaceId, t.createdAt)])
+
+// ─── Role comments (roadmap 5) ───────────────────────────────────────────────
+// Discussion threads on a role (a node on a chart). A top-level comment may have replies one level deep; only top-level
+// comments can be resolved. Commenters and above can write (api/charts/[id]/comments). Deleting a comment that has replies
+// keeps a "deleted" shell (body cleared, deletedAt set) so the thread survives; otherwise the row is removed. Comments go
+// with their role, chart and workspace (cascade).
+export const roleComments = pgTable('role_comments', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
+  nodeId: text('node_id').notNull().references(() => nodes.id, { onDelete: 'cascade' }),
+  parentId: text('parent_id').references((): AnyPgColumn => roleComments.id, { onDelete: 'cascade' }),
+  authorId: text('author_id').notNull(),          // Clerk userId
+  body: text('body').notNull(),
+  mentions: text('mentions').array().notNull().default([]),   // userIds of workspace members, checked by the server
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  editedAt: timestamp('edited_at'),
+  deletedAt: timestamp('deleted_at'),
+  resolvedAt: timestamp('resolved_at'),            // top-level comments only
+  resolvedBy: text('resolved_by'),
+}, (t) => [
+  index('role_comments_chart_node_idx').on(t.chartId, t.nodeId),
+  index('role_comments_workspace_idx').on(t.workspaceId),
+])
+
+// Per-person email settings (not per workspace: it is about the person's inbox). A missing row means the defaults.
+export const userNotificationPrefs = pgTable('user_notification_prefs', {
+  userId: text('user_id').primaryKey(),            // Clerk userId
+  commentEmails: boolean('comment_emails').notNull().default(true),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})

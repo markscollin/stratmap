@@ -4,7 +4,8 @@
 //   - the Vite frontend in dev-bypass mode (placeholder Clerk key),
 //   - every api/**/*.ts handler mounted at its file path (`[id]` → req.query.id),
 //   - no Clerk/Stripe/Anthropic/Resend keys, so a test can never bill or email anyone.
-// Database: E2E_DATABASE_URL, else DATABASE_URL. Use a throwaway Neon branch.
+// Database: E2E_DATABASE_URL, else DATABASE_URL. Normally the local emulator (npm run test:e2e:local sets NEON_HTTP_ENDPOINT);
+// if you point it at a real Neon database it must be a throwaway branch, never production.
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,7 +18,7 @@ try { process.loadEnvFile('.env.local') } catch { /* no local env file (CI) */ }
 const port = Number(process.env.E2E_PORT ?? 3000)
 const dbUrl = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
 if (!dbUrl) {
-  console.error('e2e: set E2E_DATABASE_URL (or DATABASE_URL) to a throwaway Neon branch.')
+  console.error('e2e: run `npm run test:e2e:local` (no database needed), or set E2E_DATABASE_URL to a throwaway Neon branch.')
   process.exit(1)
 }
 

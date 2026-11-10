@@ -7,7 +7,7 @@ import { logAudit } from '../_lib/audit'
 import { db } from '../_lib/db'
 import {
   auditLog, charts, departments, edges, headcountPlans, jobDescriptions, nodes, pendingInvites,
-  roleTemplates, workspaceDepartments, workspaceMembers, workspaces,
+  roleComments, roleTemplates, workspaceDepartments, workspaceMembers, workspaces,
 } from '../../src/lib/db/schema'
 import { buildWorkspaceRolesCsv } from '../../src/lib/exportOrg'
 import type { OrgNode } from '../../src/types'
@@ -75,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).end(csv)
     }
 
+    const comments = await db.select().from(roleComments).where(eq(roleComments.workspaceId, wsId))
     const events = await db.select().from(auditLog).where(eq(auditLog.workspaceId, wsId))
       .orderBy(desc(auditLog.createdAt)).limit(AUDIT_ROWS)
 
@@ -94,6 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })),
       roleTemplates: templates.map(({ workspaceId: _w, ...t }) => t),
       headcountPlans: plans.map(({ workspaceId: _w, ...p }) => p),
+      comments: comments.map(({ workspaceId: _w, ...c }) => c),
       activityLog: events.map(({ workspaceId: _w, ...e }) => e),
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8')

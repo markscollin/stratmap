@@ -26,9 +26,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { neon } from '@neondatabase/serverless'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import { readMigrationFiles } from 'drizzle-orm/migrator'
 import { adoptionPoint, missingObjects } from './adopt.mjs'
+
+// Test tooling only (see scripts/neon-http-emulator.mjs); never on a production deploy.
+if (process.env.NEON_HTTP_ENDPOINT && process.env.VERCEL_ENV !== 'production') neonConfig.fetchEndpoint = process.env.NEON_HTTP_ENDPOINT
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MIGRATIONS_FOLDER = path.join(ROOT, 'drizzle')
