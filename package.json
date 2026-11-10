@@ -18,7 +18,8 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:local": "node scripts/e2e-local.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

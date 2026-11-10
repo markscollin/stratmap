@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { neon } from '@neondatabase/serverless'
+import { e2eSql } from './neon'
 import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test'
 
 export const RUN = process.env.E2E_RUN_ID ?? 'local'
@@ -64,6 +64,6 @@ export async function setPlanFor(slug: string, tier: 'free' | 'starter' | 'growt
   const url = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
   if (!url) throw new Error('No database URL for setPlanFor')
   if (!slug.startsWith(`e2e${RUN}-`)) throw new Error(`Refusing to change the plan of a user outside this run: ${slug}`)
-  const rows = await neon(url)`UPDATE workspaces SET plan_tier = ${tier} WHERE owner_id = ${`dev-${slug}`} RETURNING id`
+  const rows = await e2eSql(url)`UPDATE workspaces SET plan_tier = ${tier} WHERE owner_id = ${`dev-${slug}`} RETURNING id`
   if (rows.length !== 1) throw new Error(`Expected one workspace for ${slug}, changed ${rows.length}`)
 }

@@ -49,16 +49,20 @@ content reviewed by a lawyer.
 
 **e2e (roadmap 3.3, 2026-11-06):** `npm run test:e2e` runs Playwright against `scripts/e2e-server.mjs`
 (Vite in dev-bypass mode plus every `api/**/*.ts` mounted; no Clerk/Stripe/AI/email keys). It uses
-`E2E_DATABASE_URL`, else `DATABASE_URL` — a throwaway Neon branch only. In the cloud sandbox run
-`NODE_USE_ENV_PROXY=1 PW_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` (the pre-installed
-Chromium is a different build from the one Playwright 1.60 expects; elsewhere `npx playwright install chromium`).
+`E2E_DATABASE_URL`, else `DATABASE_URL`.
+- **Preferred: no database account at all.** `npm run test:e2e:local` (optionally `-- tests/e2e/x.spec.ts`) starts `scripts/neon-http-emulator.mjs`, a PGlite (in-process Postgres) server that speaks Neon's
+  HTTP protocol with the real migrations applied, points the app and the test helpers at it (`NEON_HTTP_ENDPOINT`, ignored on production deploys) and removes `DATABASE_URL` from the child's environment so a real database
+  can never be reached. **CI does the same**, so the `e2e` job needs **no secret** and never touches a shared database. The emulator is proved against the real Neon driver and the app's Drizzle code by
+  `api/__tests__/neon-emulator.test.ts`. In the cloud sandbox add `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium` (the pre-installed Chromium is a different build from the one Playwright 1.60 expects; elsewhere
+  `npx playwright install chromium`). Running against a real Neon branch still works: set `E2E_DATABASE_URL` (and run `npm run db:migrate` against it first), but prefer the emulator.
 - **Multi-identity dev bypass:** `X-Dev-User: true` is still `u-dev`/`ws-dev`. Any other slug (`alice`) is user
   `dev-alice`, email `alice@e2e.test`, with no workspace until onboarding. Client: `localStorage['stratmap_dev_user']`
   (`src/lib/devIdentity.ts`); a named identity goes through the same `UserSync` flow as Clerk users. Refused on
   preview/production like the rest of the bypass.
 - Invite mail is appended to `E2E_EMAIL_OUTBOX` (JSON lines) when `RESEND_API_KEY` is unset. Tests use
   `testUser()` (unique per run) and `global-teardown.ts` deletes the run's workspaces.
-- CI job `e2e` needs the `E2E_DATABASE_URL` secret and skips without it. Not covered: Clerk sign-up UI, Stripe checkout.
+- CI job `e2e` runs against the local emulator (no secret; it used to need `E2E_DATABASE_URL`, whose password Neon started rejecting on 2026-11-07). Not covered: Clerk sign-up UI, Stripe checkout.
+- **The emulator is a test tool, not a database server:** one connection, requests run one at a time, no authentication, 127.0.0.1 only, in-memory. It returns values as raw Postgres text exactly like Neon, so keep new SQL ordinary Postgres; if a query behaves differently on real Neon, add a case to `neon-emulator.test.ts`.
 
 **Done:** Stripe webhook idempotency (`stripe_events`), shipped with the billing life-cycle (see below).
 
