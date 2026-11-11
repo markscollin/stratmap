@@ -30,6 +30,7 @@ export async function setupSchema() {
 
 export async function cleanDb() {
   await testDb.delete(schema.auditLog)
+  await testDb.delete(schema.chartSnapshots)
   await testDb.delete(schema.roleComments)
   await testDb.delete(schema.userNotificationPrefs)
   await testDb.delete(schema.stripeEvents)

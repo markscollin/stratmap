@@ -18,6 +18,7 @@ import { PricingRoute }    from './pages/PricingPage'
 import { BillingSuccessPage } from './pages/BillingSuccessPage'
 import { SharePage } from './pages/SharePage'
 import { InvitePage } from './pages/InvitePage'
+import { EmbedPage } from './pages/EmbedPage'
 
 export default function App() {
   return (
@@ -26,6 +27,8 @@ export default function App() {
         <Routes>
           {/* Public share view — no auth, no layout */}
           <Route path="/share/:token" element={<SharePage />} />
+          {/* Embeddable read-only chart: the one page allowed inside an iframe (vercel.json) */}
+          <Route path="/embed/:code" element={<EmbedPage />} />
 
           {/* Public marketing + legal pages — no auth, no layout */}
           <Route path="/"        element={<LandingPage />} />

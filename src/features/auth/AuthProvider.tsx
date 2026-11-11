@@ -69,7 +69,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/privacy')
+  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/embed/') || pathname.startsWith('/privacy')
     || pathname.startsWith('/terms') || pathname.startsWith('/invite/')
   // Open to everyone (roadmap 2.5) but signed-in people still get their workspace and plan loaded.
   const isOptionalAuthPage = pathname === '/pricing'

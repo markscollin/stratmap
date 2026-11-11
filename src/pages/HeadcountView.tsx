@@ -670,13 +670,16 @@ export function HeadcountView() {
   }, []) // eslint-disable-line
 
   // Filter to current year + selected charts
-  const filteredPlans = useMemo(() => {
-    return plans.filter(p => {
-      if (!p.targetQuarter.startsWith(String(year))) return false
-      if (chartFilter.size > 0 && p.chartId && !chartFilter.has(p.chartId)) return false
-      return true
-    })
-  }, [plans, year, chartFilter])
+  // The chart filter applies to everything; the year only narrows the board. The budget gets all years (so it can carry
+  // earlier hires over when asked) and picks the year itself.
+  const chartFiltered = useMemo(
+    () => plans.filter(p => !(chartFilter.size > 0 && p.chartId && !chartFilter.has(p.chartId))),
+    [plans, chartFilter],
+  )
+  const filteredPlans = useMemo(
+    () => chartFiltered.filter(p => p.targetQuarter.startsWith(String(year))),
+    [chartFiltered, year],
+  )
 
   const plansByQuarter = useMemo(() => {
     const map: Record<string, HeadcountPlan[]> = {}
@@ -843,7 +846,7 @@ export function HeadcountView() {
       )}
 
       {/* Budget by quarter: owners and admins only (the server never sends salaries to anyone else) */}
-      {canAdmin && <BudgetPanel plans={filteredPlans} year={year} />}
+      {canAdmin && <BudgetPanel plans={chartFiltered} year={year} />}
 
       {/* Kanban */}
       {loading && plans.length === 0 ? (

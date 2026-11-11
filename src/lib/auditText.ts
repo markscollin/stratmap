@@ -33,6 +33,8 @@ export function describeAudit(e: AuditEventView): string {
     case 'member.left': return `${who} left the workspace`
     case 'workspace.deleted': return `${who} deleted the workspace`
     case 'workspace.restored': return `${who} restored the workspace`
+    case 'chart.restored': return `${who} restored ${chart} to the version ${str(d.versionName, 'an earlier version')}`
+    case 'chart.branched': return `${who} created ${chart} from the version ${str(d.versionName, 'a saved version')}`
     case 'workspace.exported': return `${who} exported the workspace data`
     case 'invite.sent': return `${who} invited ${email} as ${cap(d.role)}`
     case 'invite.resent': return `${who} resent the invite to ${email}`

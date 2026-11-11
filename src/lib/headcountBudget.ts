@@ -7,8 +7,9 @@ import { toCsv, type CsvCell } from './csvText'
 //  - A hire starts at the START of its target quarter: it costs a quarter of the yearly pay in that quarter and in every
 //    later quarter of the same year (target 2026-Q2 -> Q2, Q3, Q4 = 3/4 of a year). The full year is also shown as a run-rate.
 //  - Totals are per currency, never converted. A hire with no salary is left out of the totals and counted as "no cost yet".
-//  - Planned, approved and filled hires all count. The budget covers hires TARGETED in the chosen year; hires from earlier
-//    years are not carried over.
+//  - Planned, approved and filled hires all count. By default the budget covers hires TARGETED in the chosen year.
+//    With `carryOver` on, a hire targeted in an EARLIER year also counts, as a full year (it is on payroll from January):
+//    this is what next year's budget needs. Hires targeted in later years never count.
 //  - Expected = the middle of the range. If only one bound is set, both are that value.
 
 export interface BudgetPlan {
@@ -61,14 +62,20 @@ export function annualCost(plan: BudgetPlan): { currency: string; money: Money }
   return { currency, money: { low, expected: (low + high) / 2, high } }
 }
 
-export function buildBudget(plans: BudgetPlan[], year: number): Budget {
+export function buildBudget(plans: BudgetPlan[], year: number, options: { carryOver?: boolean } = {}): Budget {
   const byCurrency = new Map<string, CurrencyBudget>()
   const uncosted: BudgetPlan[] = []
   let counted = 0
 
   for (const plan of plans) {
-    const q = parseQuarter(plan.targetQuarter)
-    if (!q || q.year !== year) continue
+    const target = parseQuarter(plan.targetQuarter)
+    if (!target) continue
+    // The quarter the hire starts costing in THIS year: its own for this year's hires, January for carried-over ones.
+    const startQuarter = target.year === year ? target.quarter
+      : options.carryOver && target.year < year ? 1
+      : null
+    if (startQuarter === null) continue
+    const q = { quarter: startQuarter }
     const cost = annualCost(plan)
     if (!cost) { uncosted.push(plan); continue }
 

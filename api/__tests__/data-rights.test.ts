@@ -218,6 +218,7 @@ describe('the daily purge', () => {
     await testDb.insert(schema.roleTemplates).values({ id: `t-${wsId}`, workspaceId: wsId, title: 'T', department: 'Eng', createdBy: 'o', updatedBy: 'o' })
     await testDb.insert(schema.headcountPlans).values({ id: `h-${wsId}`, workspaceId: wsId, title: 'Hire', roleType: 'new-headcount', targetQuarter: '2026-Q2', createdBy: 'o' })
     await testDb.insert(schema.sharedLinks).values({ id: `s-${wsId}`, chartId: chart, createdBy: 'o' })
+    await testDb.insert(schema.chartSnapshots).values({ id: `v-${wsId}`, workspaceId: wsId, chartId: chart, name: 'v1', createdBy: 'o', nodeCount: 2, edgeCount: 1, data: { nodes: [], edges: [], departments: [] } })
     await testDb.insert(schema.roleComments).values({ id: `c-${wsId}`, workspaceId: wsId, chartId: chart, nodeId: `n1-${wsId}`, authorId: 'o', body: 'Discuss' })
     await testDb.insert(schema.aiUsage).values({ workspaceId: wsId, period: '2026-11', count: 1 })
     await testDb.insert(schema.auditLog).values({ id: `a-${wsId}`, workspaceId: wsId, actorUserId: 'o', action: 'member.removed', targetType: 'member', details: { email: 'gone@co.com' } })
@@ -232,7 +233,7 @@ describe('the daily purge', () => {
       charts: await q('charts', 'id', chart), depts: await q('departments', 'chart_id', chart), nodes: await q('nodes', 'chart_id', chart),
       edges: await q('edges', 'chart_id', chart), jds: await q('job_descriptions', 'chart_id', chart),
       templates: await q('role_templates', 'workspace_id', wsId), plans: await q('headcount_plans', 'workspace_id', wsId), links: await q('shared_links', 'chart_id', chart),
-      usage: await q('ai_usage', 'workspace_id', wsId), comments: await q('role_comments', 'workspace_id', wsId), audit: await q('audit_log', 'workspace_id', wsId),
+      usage: await q('ai_usage', 'workspace_id', wsId), comments: await q('role_comments', 'workspace_id', wsId), versions: await q('chart_snapshots', 'workspace_id', wsId), audit: await q('audit_log', 'workspace_id', wsId),
     }
   }
 

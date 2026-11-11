@@ -107,6 +107,36 @@ describe('Settings → data rights (roadmap 4.2)', () => {
   })
 })
 
+describe('Leave this workspace (roadmap 5)', () => {
+  it.each(['admin', 'editor', 'commenter', 'viewer'] as const)('%s can leave, after confirming', async (role) => {
+    setup(role)
+    expect(screen.getByText(/Leave this workspace\./)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /leave workspace…/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.post).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /leave workspace…/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Leave Acme Inc$/ }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/workspace/leave', {}))
+    expect(setSelectedWorkspaceId).toHaveBeenCalledWith(null)
+    expect(assign).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('the owner is not offered it (they delete the workspace instead)', () => {
+    setup('owner')
+    expect(screen.queryByText(/Leave this workspace\./)).toBeNull()
+    expect(screen.queryByRole('button', { name: /leave workspace…/i })).toBeNull()
+  })
+
+  it('shows the server message and stays put if leaving fails', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new ApiError(500, { error: 'x', message: 'Try again later.' }))
+    setup('editor')
+    fireEvent.click(screen.getByRole('button', { name: /leave workspace…/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^Leave Acme Inc$/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Try again later.')
+    expect(assign).not.toHaveBeenCalled()
+  })
+})
+
 describe('DeletedWorkspaceNotice', () => {
   const ERASE = new Date(Date.now() + 20 * 86_400_000).toISOString()
 

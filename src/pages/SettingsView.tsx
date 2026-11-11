@@ -564,15 +564,9 @@ function Switch({ on, onClick, label, disabled }: { on: boolean; onClick: () => 
 }
 
 function NotificationsTab() {
-  // Only the comment switch is wired up (roadmap 5): it is saved on the server per person. The other three are not
-  // connected to any email yet and only change on this screen.
-  const [notifs, setNotifs] = useState({ approvals: true, jd: true, invites: true })
-  type NotifKey = keyof typeof notifs
-  const items: { id: NotifKey; label: string; desc: string }[] = [
-    { id: 'approvals', label: 'Approval requests',   desc: 'When someone requests your approval' },
-    { id: 'jd',        label: 'JD status changes',   desc: 'When a job description moves through the workflow' },
-    { id: 'invites',   label: 'Team invitations',     desc: 'When someone joins your workspace' },
-  ]
+  // Only emails that exist are listed (roadmap 1.7: advertise only what works). Today that is comment emails
+  // (roadmap 5), saved per person on the server. Approval, JD-status and invitation emails are not built, so there is
+  // no switch for them; add one here when one of them is.
   const [commentEmails, setCommentEmails] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -593,30 +587,19 @@ function NotificationsTab() {
     catch { setCommentEmails(!next); setError('Could not save that. Please try again.') }
   }
 
-  const row = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, marginBottom: 18, borderBottom: '1px solid var(--border)' } as const
   return (
     <div style={{ maxWidth: 500 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 22 }}>Email notifications</h3>
 
-        <div style={row}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, paddingRight: 20 }}>
             <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 3 }}>New comments</p>
             <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>When someone @mentions you or replies to your comment on a role</p>
           </div>
           <Switch on={commentEmails ?? true} disabled={commentEmails === null} label="New comments" onClick={() => void toggleComments()} />
         </div>
-        {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '-8px 0 14px' }}>{error}</p>}
-
-        {items.map(({ id, label, desc }) => (
-          <div key={id} style={row}>
-            <div style={{ flex: 1, paddingRight: 20 }}>
-              <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 3 }}>{label}</p>
-              <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{desc}</p>
-            </div>
-            <Switch on={notifs[id]} label={label} onClick={() => setNotifs(n => ({ ...n, [id]: !n[id] }))} />
-          </div>
-        ))}
+        {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '12px 0 0' }}>{error}</p>}
       </div>
     </div>
   )

@@ -6,7 +6,7 @@ import { enforceRateLimit } from '../_lib/rateLimit'
 import { logAudit } from '../_lib/audit'
 import { db } from '../_lib/db'
 import {
-  auditLog, charts, departments, edges, headcountPlans, jobDescriptions, nodes, pendingInvites,
+  auditLog, chartSnapshots, charts, departments, edges, headcountPlans, jobDescriptions, nodes, pendingInvites,
   roleComments, roleTemplates, workspaceDepartments, workspaceMembers, workspaces,
 } from '../../src/lib/db/schema'
 import { buildWorkspaceRolesCsv } from '../../src/lib/exportOrg'
@@ -76,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const comments = await db.select().from(roleComments).where(eq(roleComments.workspaceId, wsId))
+    const snapshots = await db.select().from(chartSnapshots).where(eq(chartSnapshots.workspaceId, wsId))
     const events = await db.select().from(auditLog).where(eq(auditLog.workspaceId, wsId))
       .orderBy(desc(auditLog.createdAt)).limit(AUDIT_ROWS)
 
@@ -96,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       roleTemplates: templates.map(({ workspaceId: _w, ...t }) => t),
       headcountPlans: plans.map(({ workspaceId: _w, ...p }) => p),
       comments: comments.map(({ workspaceId: _w, ...c }) => c),
+      chartVersions: snapshots.map(({ workspaceId: _w, ...v }) => v),
       activityLog: events.map(({ workspaceId: _w, ...e }) => e),
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8')

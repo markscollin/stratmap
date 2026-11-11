@@ -59,9 +59,11 @@ describe('Settings → Notifications → New comments (roadmap 5)', () => {
     expect(sw).toBeDisabled()
   })
 
-  it('the other switches are not connected to the server', async () => {
+  it('lists only emails that exist: no switches for approvals, JD status or invitations', async () => {
     await open()
-    fireEvent.click(screen.getByRole('switch', { name: 'Approval requests' }))
-    expect(api.put).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
+    for (const gone of ['Approval requests', 'JD status changes', 'Team invitations']) {
+      expect(screen.queryByText(gone)).toBeNull()
+    }
   })
 })

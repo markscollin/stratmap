@@ -164,6 +164,7 @@ export function CanvasView() {
         isPublic={chartMeta?.isPublic ?? false}
         commentCounts={commentCounts}
         onCommentsChanged={refreshCommentCounts}
+        onVersionRestored={() => setReloadKey(k => k + 1)}
       />
       </div>
     </div>

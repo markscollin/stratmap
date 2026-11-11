@@ -165,11 +165,11 @@ Each item lists **what to do** and **done when**. Effort: **S** ≤ ½ day, **M*
 ### Phase 5: Post-launch growth (not blockers)
 
 - Real-time collaboration (Liveblocks/PartyKit), presence cursors. Comments for the `commenter` role: **Done 2026-11-07** (threads on roles, @mentions, resolve, email on mention/reply)
-- Chart version history and scenario comparison ("Plan A vs Plan B")
+- Chart version history and scenario comparison ("Plan A vs Plan B"): **Done 2026-11-10** (Growth; named versions, compare, restore, branch a scenario into a new chart; see CLAUDE.md)
 - Headcount cost modelling (salary band × headcount plan → budget by quarter) **Done 2026-11-06** (salary range per plan, budget by quarter, admin only)
 - HRIS sync (BambooHR, Rippling, HiBob, Workday) for the Enterprise tier
 - SSO/SAML + SCIM (WorkOS), audit log export, SOC 2 Type I prep
-- Embeds (Notion/Confluence) and Slack integration for share links
+- Embeds (Notion/Confluence): **Done 2026-11-10** (`/embed/:code`, copy-snippet in Share settings). Slack integration for share links: not built (needs a Slack app)
 
 ---
 
