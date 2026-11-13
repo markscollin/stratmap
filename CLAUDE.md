@@ -73,9 +73,16 @@ content reviewed by a lawyer.
 **Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
-- **Known broken until fixed (do not rely on them):** canvas saves fail silently (R-01), undo/redo is local-only (R-02), a reporting line
-  drawn in the current session cannot be deleted until reload (R-03), "Duplicate chart" makes an empty chart (R-10).
-- Real test counts at the review: **614 frontend + 638 API**, all passing (the counts elsewhere in this file are older).
+- **Known broken until fixed (do not rely on them):** undo/redo is local-only (R-02), "Duplicate chart" makes an empty chart (R-10).
+- Real test counts: **643 frontend + 646 API** after R-01/R-03 (614 + 638 at the review); e2e 74 passing before, plus `canvas-saves.spec.ts`. The counts elsewhere in this file are older.
+
+### Canvas persistence (R-01 + R-03, 2026-11-13)
+- **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
+  Writes to one chart run one at a time in the order made. The first failure **stops the queue**; `useCanvasSave().failure` says what and why, `CanvasView` makes the canvas read-only and `SaveErrorBanner` offers **Retry**
+  (only for offline, 5xx, 429, 408) and **Reload** (discards the unsaved change; an exact rollback because nothing after the failure was sent). A 409 `chart-changed` only stops the queue (the conflict banner explains). `beforeunload` warns while writes are pending.
+- **Ids are made on the client** (`newId('n'|'e')` = prefix + `crypto.randomUUID()`), and `addEdge` returns the edge so the same id is saved. The server accepts an optional `id` on `POST /edges`; the same edge sent again returns 200 (a retry
+  after a lost reply is safe, no revision bump), an id used by anything else is `409 id-taken`. `POST /nodes` with an existing id in the same chart also returns 200; in another chart `409 id-taken`.
+- `useCanvasState` keeps `nodesRef`/`edgesRef` updated synchronously; `undo()`/`redo()` return `{from, to}` (or null) so the caller can save the difference (R-02, not yet wired).
 
 ## Phase 0 security pass (2026-11-05)
 

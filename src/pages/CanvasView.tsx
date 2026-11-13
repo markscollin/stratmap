@@ -11,6 +11,8 @@ import { useIsPhone } from '../hooks/useMediaQuery'
 import { api } from '../lib/apiClient'
 import { useChartConflict } from '../lib/chartRevision'
 import { ChartConflictBanner } from '../features/canvas/ChartConflictBanner'
+import { SaveErrorBanner } from '../features/canvas/SaveErrorBanner'
+import { useCanvasSave, discardUnsaved } from '../features/canvas/canvasSync'
 import { SampleChartBanner } from '../features/onboarding/SampleChartBanner'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
@@ -36,6 +38,9 @@ export function CanvasView() {
   const isPhone = useIsPhone()
   // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
   const conflicted = useChartConflict(s => s.chartId) === id
+  // A change could not be saved (launch review R-01): read-only until retried or reloaded, so nobody edits a chart that is not being saved.
+  const saveFailed = useCanvasSave(s => s.failure?.chartId === id)
+  const unsavedCount = useCanvasSave(s => s.pending)
 
   // Metadata from the store (name, status, version for the header)
   const chartMeta = charts.find(c => c.id === id)
@@ -61,10 +66,20 @@ export function CanvasView() {
         setFullChart(chart)
         if (reloadKey > 0) setCanvasKey(k => k + 1)
         useChartConflict.getState().clear()
+        // A deliberate reload throws away what could not be saved (the Reload button); a first load must not drop writes still on their way.
+        if (reloadKey > 0) discardUnsaved(id)
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [id, reloadKey])
+
+  // Closing the tab with changes still on their way to the server would lose them silently.
+  useEffect(() => {
+    if (unsavedCount === 0) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [unsavedCount])
 
   // Open comment threads per role, for the badges on the canvas (roadmap 5). Held here so a chart reload keeps them.
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
@@ -143,6 +158,7 @@ export function CanvasView() {
       )}
 
       <ChartConflictBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} flow={isPhone} />
+      <SaveErrorBanner chartId={fullChart.id} onReload={() => setReloadKey(k => k + 1)} flow={isPhone} />
       {isSample && (
         <SampleChartBanner
           flow={isPhone}
@@ -160,7 +176,7 @@ export function CanvasView() {
         initialNodes={fullChart.nodes}
         initialEdges={fullChart.edges}
         departments={depts}
-        readOnly={!canEdit || frozen || conflicted || isPhone}
+        readOnly={!canEdit || frozen || conflicted || saveFailed || isPhone}
         isPublic={chartMeta?.isPublic ?? false}
         commentCounts={commentCounts}
         onCommentsChanged={refreshCommentCounts}

@@ -276,3 +276,55 @@ describe('undo / redo', () => {
     expect(result.current.canRedo).toBe(false)
   })
 })
+
+// ─── Ids and what undo/redo report (launch review R-03, R-02) ─────────────────
+
+describe('client-made ids', () => {
+  it('addEdge returns the line it drew, with a unique id the caller can save under', () => {
+    const { result } = renderHook(() => useCanvasState([withId('a'), withId('b'), withId('c')]))
+    let e1: OrgEdge | null = null, e2: OrgEdge | null = null
+    act(() => { e1 = result.current.addEdge('a', 'b'); e2 = result.current.addEdge('a', 'c') })
+    expect(e1!.id).toMatch(/^e-[0-9a-f-]{36}$/)
+    expect(e1!.id).not.toBe(e2!.id)
+    expect(result.current.edges.map(e => e.id)).toEqual([e1!.id, e2!.id]) // the saved id IS the one on screen
+  })
+
+  it('addEdge returns null for a refused line (self, duplicate, loop)', () => {
+    const { result } = renderHook(() => useCanvasState([withId('a'), withId('b')], [edge('e1', 'a', 'b')]))
+    let out: (OrgEdge | null)[] = []
+    act(() => { out = [result.current.addEdge('a', 'a'), result.current.addEdge('a', 'b'), result.current.addEdge('b', 'a')] })
+    expect(out).toEqual([null, null, null])
+    expect(result.current.edges).toHaveLength(1)
+  })
+
+  it('removing a line and drawing another in the same step sees the updated lines (change who a role reports to)', () => {
+    const { result } = renderHook(() => useCanvasState([withId('a'), withId('b'), withId('c')], [edge('e1', 'a', 'c')]))
+    let created: OrgEdge | null = null
+    act(() => { result.current.removeEdge('e1'); created = result.current.addEdge('b', 'c') })
+    expect(result.current.edges).toEqual([created])
+  })
+
+  it('role ids are unique even when two roles are added in the same millisecond', () => {
+    const { result } = renderHook(() => useCanvasState())
+    act(() => { result.current.addNode(nodeData()); result.current.addNode(nodeData()) })
+    expect(new Set(result.current.nodes.map(n => n.id)).size).toBe(2)
+  })
+})
+
+describe('undo and redo report what changed on screen', () => {
+  it('undo returns the canvas before and after, so the caller can save the difference', () => {
+    const { result } = renderHook(() => useCanvasState([withId('a')]))
+    act(() => { result.current.addNode(nodeData({ name: 'B' })) })
+    let step: ReturnType<typeof result.current.undo> = null
+    act(() => { step = result.current.undo() })
+    expect(step!.from.nodes).toHaveLength(2)
+    expect(step!.to.nodes.map(n => n.id)).toEqual(['a'])
+  })
+
+  it('returns null when there is nothing to undo or redo', () => {
+    const { result } = renderHook(() => useCanvasState([withId('a')]))
+    let u: unknown = 'x', r: unknown = 'x'
+    act(() => { u = result.current.undo(); r = result.current.redo() })
+    expect(u).toBeNull(); expect(r).toBeNull()
+  })
+})

@@ -7,6 +7,7 @@ import { useChartStore } from '../../store/chartStore'
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import { useCanvasState } from './useCanvasState'
+import { saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine, saveLineDelete, savePositions } from './canvasSync'
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeChip } from '../nodes/NodeChip'
 import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
@@ -761,7 +762,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   const [deepLink] = useState(() => commentDeepLink(typeof window === 'undefined' ? '' : window.location.search, initialNodes.map(n => n.id)))
 
   const {
-    nodes, edges, transform, setTransform,
+    nodes, edges, getEdges, transform, setTransform,
     selectedId, setSelectedId,
     selectedEdgeId, setSelectedEdgeId,
     connectingFrom, setConnectingFrom,
@@ -891,10 +892,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         if (mod &&  e.shiftKey && e.key === 'z') { e.preventDefault(); redo() }
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) {
           removeEdge(selectedEdgeId)
-          if (chartId) {
-            api.delete(`/api/charts/${chartId}/edges/${selectedEdgeId}`)
-              .catch(err => console.error('[canvas] removeEdge failed:', err))
-          }
+          saveLineDelete(chartId, selectedEdgeId)
         }
         if (e.key === 'c' && !mod) setActiveTool('connect')
       }
@@ -1034,11 +1032,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       commitDrag(nodesRef.current)
       if (chartId) {
         const moved = movedPositions(nodesRef.current, syncedPositions.current)
-        if (moved.length) {
-          api.put(`/api/charts/${chartId}/nodes`, moved)
-            .then(() => moved.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
-            .catch(err => console.error('[canvas] position sync failed:', err))
-        }
+        savePositions(chartId, moved, "Couldn't save the new position",
+          () => moved.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
       }
     }
     if (ia.mode === 'panning' && !ia.hasMoved && activeTool === 'select') { setSelectedId(null); setSelectedEdgeId(null) }
@@ -1053,11 +1048,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       if (!connectingFrom) {
         setConnectingFrom(nodeId)
       } else if (connectingFrom !== nodeId) {
-        addEdge(connectingFrom, nodeId)
-        if (chartId) {
-          api.post(`/api/charts/${chartId}/edges`, { sourceId: connectingFrom, targetId: nodeId })
-            .catch(err => console.error('[canvas] addEdge failed:', err))
-        }
+        const line = addEdge(connectingFrom, nodeId)
+        if (line) saveNewLine(chartId, line)
         setConnectingFrom(null)
         setActiveTool('select')
       }
@@ -1069,7 +1061,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       setSelectedId(prev => prev === nodeId ? null : nodeId)
       setSelectedEdgeId(null)
     }, 220)
-  }, [activeTool, connectingFrom, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
+  }, [activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
 
   const handleNodeDoubleClick = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (interactionRef.current.hasMoved || readOnly) return
@@ -1100,53 +1092,35 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
     const pos = addNodePosRef.current
-    const newId = addNode({ ...data, x: pos.x, y: pos.y })
-    if (reportsToId && newId) addEdge(reportsToId, newId)
-    if (chartId && newId) {
-      // The edge is created after the node: the API rejects edges whose endpoints
-      // are not (yet) nodes in this chart.
-      api.post(`/api/charts/${chartId}/nodes`, { ...data, id: newId, x: pos.x, y: pos.y })
-        .then(() => reportsToId
-          ? api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: newId })
-              .catch(err => console.error('[canvas] addEdge (reports-to) failed:', err))
-          : undefined)
-        .catch(err => console.error('[canvas] addNode failed:', err))
-    }
+    const newRoleId = addNode({ ...data, x: pos.x, y: pos.y })
+    const line = reportsToId && newRoleId ? addEdge(reportsToId, newRoleId) : null
+    // The role is saved before the line that points at it: the queue keeps the order.
+    saveNewRole(chartId, { ...data, id: newRoleId, x: pos.x, y: pos.y })
+    if (line) saveNewLine(chartId, line)
     setIsAddModalOpen(false)
   }, [addNode, addEdge, chartId])
 
   const handleUpdateSubmit = useCallback((nodeId: string, updates: Partial<import('../../types').OrgNode>, reportsToId: string) => {
     updateNode(nodeId, updates)
-    const oldEdge = edges.find(e => e.targetId === nodeId)
+    const oldEdge = getEdges().find(e => e.targetId === nodeId)
     const oldManagerId = oldEdge?.sourceId ?? ''
+    let newLine: OrgEdge | null = null
     if (oldManagerId !== reportsToId) {
       if (oldEdge) removeEdge(oldEdge.id)
-      if (reportsToId) addEdge(reportsToId, nodeId)
+      if (reportsToId) newLine = addEdge(reportsToId, nodeId)
     }
-    if (chartId) {
-      api.put(`/api/charts/${chartId}/nodes/${nodeId}`, updates)
-        .catch(err => console.error('[canvas] updateNode failed:', err))
-      if (oldManagerId !== reportsToId) {
-        if (oldEdge) {
-          api.delete(`/api/charts/${chartId}/edges/${oldEdge.id}`)
-            .catch(err => console.error('[canvas] removeEdge (update) failed:', err))
-        }
-        if (reportsToId) {
-          api.post(`/api/charts/${chartId}/edges`, { sourceId: reportsToId, targetId: nodeId })
-            .catch(err => console.error('[canvas] addEdge (update) failed:', err))
-        }
-      }
+    saveRoleEdit(chartId, nodeId, updates)
+    if (oldManagerId !== reportsToId) {
+      if (oldEdge) saveLineDelete(chartId, oldEdge.id)
+      if (newLine) saveNewLine(chartId, newLine)
     }
     setEditingNodeId(null)
-  }, [updateNode, deleteNode, edges, removeEdge, addEdge, chartId]) // eslint-disable-line
+  }, [updateNode, removeEdge, addEdge, getEdges, chartId])
 
   const handleDeleteNode = useCallback((nodeId: string) => {
     deleteNode(nodeId)
     setEditingNodeId(null)
-    if (chartId) {
-      api.delete(`/api/charts/${chartId}/nodes/${nodeId}`)
-        .catch(err => console.error('[canvas] deleteNode failed:', err))
-    }
+    saveRoleDelete(chartId, nodeId)
   }, [deleteNode, chartId])
 
   const handleAutoLayout = useCallback(() => {
@@ -1158,16 +1132,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     applyLayout(positions)
     setTimeout(fitToView, 50)
     addToast('Layout applied', 'success')
-    if (chartId) {
-      const posArr = nodesRef.current.map(n => {
-        const p = positions.get(n.id)
-        return { id: n.id, x: p?.x ?? n.x, y: p?.y ?? n.y }
-      })
-      api.put(`/api/charts/${chartId}/nodes`, posArr)
-        .then(() => posArr.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
-        .catch(err => console.error('[canvas] layout sync failed:', err))
-    }
-  }, [upgradeRequired, edges, applyLayout, fitToView, addToast])
+    const posArr = nodesRef.current.map(n => {
+      const p = positions.get(n.id)
+      return { id: n.id, x: p?.x ?? n.x, y: p?.y ?? n.y }
+    })
+    savePositions(chartId, posArr, "Couldn't save the new layout",
+      () => posArr.forEach(p => syncedPositions.current.set(p.id, { x: p.x, y: p.y })))
+  }, [upgradeRequired, edges, applyLayout, fitToView, addToast, chartId])
 
   const [isExporting,    setIsExporting]    = useState(false)
   const [exportOverflow, setExportOverflow] = useState(false)

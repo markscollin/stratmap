@@ -73,7 +73,7 @@ R-35 becomes much smaller if the persistence layer from R-01 is built first.
 ## P0: launch blockers
 
 ### R-01 Canvas writes fail silently
-- [ ] Open
+- [x] Done 2026-11-13: `canvasSync.ts` queue + `SaveErrorBanner`; failure stops the queue, read-only until Retry/Reload; 402/403/404 show a message and offer Reload only. Rollback is by Reload (exact, since nothing after the failure is sent), not per-change inverses. Tests: `canvasSync.test.ts`, `SaveErrorBanner.test.tsx`, `tests/e2e/canvas-saves.spec.ts`.
 
 **Problem.** Every canvas write is `api.x(...).catch(err => console.error(...))`. When a save fails (offline,
 500, 429, 403, 402), the change stays on screen with no message and is gone on reload. Only a 409
@@ -118,7 +118,7 @@ the role only. Owner should choose; (b) is the smaller change.
 the old value. An e2e test covers all three.
 
 ### R-03 Reporting lines made this session cannot be deleted
-- [ ] Open
+- [x] Done 2026-11-13: client `crypto.randomUUID()` ids saved as given (`EdgeCreate.id`); same-id retry returns 200, other-chart id 409 `id-taken`. Role ids switched from `n-<timestamp>` to UUIDs too (part of R-31). Tests: `api/__tests__/edges.test.ts`, `nodes.test.ts`, e2e re-parent.
 
 **Problem.** The client invents the edge id (`e-<source>-<target>-<timestamp>`); the server ignores it and
 stores its own UUID; the client throws the response away. Any later delete of that line (Delete key, or changing
