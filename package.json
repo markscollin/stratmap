@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "check:legal": "LEGAL_GATE=1 vitest run src/pages/__tests__/LegalLaunchGate.test.tsx",
     "test:api": "vitest run --config vitest.api.config.ts",
     "test:all": "vitest run && vitest run --config vitest.api.config.ts",
     "test:live": "vitest run --config vitest.live.config.ts",

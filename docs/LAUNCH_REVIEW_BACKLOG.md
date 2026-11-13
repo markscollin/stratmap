@@ -141,7 +141,7 @@ POST returns.)
 re-parents it to B, reloads, and finds exactly one incoming line.
 
 ### R-04 Legal pages are unfilled templates
-- [ ] Open
+- [ ] Code done 2026-11-13; **blocked on the owner's facts**. The owner fills in `src/lib/legalDetails.ts` (company name, address, privacy and legal emails, governing law, refund policy, last-updated date). While any field is empty the pages keep their `[placeholders]` and the "Template notice" banner; when all are filled both disappear by themselves. `npm run check:legal` fails until then (add it to CI once filled). Also done: the sub-processor list now names all eight (Clerk, Neon, Vercel, Stripe, Resend, Anthropic, Sentry, PostHog) with what each receives, and a test checks it against `package.json`; the 3-day copy of a deleted role is in the retention text; governing-law and refund wording added to the Terms; `lastUpdated` bumped. Still needed: a lawyer's review (O-05). Tests: `src/pages/__tests__/LegalPages.test.tsx`, `LegalLaunchGate.test.tsx`.
 
 **Problem.** `/privacy` and `/terms` show a "Template notice … not legal advice" banner and bracketed
 placeholders. Anyone about to pay sees this.

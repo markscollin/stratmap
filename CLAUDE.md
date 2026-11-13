@@ -31,8 +31,7 @@ Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
   envs, never on `preview` or `production` (`api/_lib/auth.ts`).
 - **Plan tiers centralized** — `PLAN_BY_TIER` + `ENTERPRISE_PLAN` exported from
   `billingStore`; `usePlanLimits` treats `-1` as unlimited.
-- **Legal + consent** — `/privacy`, `/terms` (`LegalPages.tsx`, template content,
-  needs lawyer review) + app-wide `CookieConsent` banner.
+- **Legal + consent** — `/privacy`, `/terms` (`LegalPages.tsx`, template content, needs lawyer review; the owner's facts live in `src/lib/legalDetails.ts`: while any is empty the pages show placeholders and the template banner, `npm run check:legal` fails until all are filled; `SUB_PROCESSORS` (`src/lib/subProcessors.ts`) is checked against `package.json` by a test, update it when an integration is added) + app-wide `CookieConsent` banner.
 - **Sentry** — `@sentry/react` init in `main.tsx` (`VITE_SENTRY_DSN`) + ErrorBoundary;
   `api/_lib/sentry.ts` `reportError` wired into checkout/webhook/ai-draft/invites.
 - **Email (Resend)** — `api/_lib/email.ts` (graceful no-key fallback) + real
@@ -74,7 +73,7 @@ content reviewed by a lawyer.
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Known broken until fixed (do not rely on them):** "Duplicate chart" makes an empty chart (R-10).
-- Real test counts: **658 frontend + 665 API**, 82 e2e, after R-01/R-02/R-03 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
+- Real test counts: **679 frontend (+2 skipped launch-gate) + 691 API**, 82 e2e, after the P0 band R-01 to R-06 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.

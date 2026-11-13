@@ -1,7 +1,15 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { LEGAL, missingLegalDetails, type LegalDetails } from '../lib/legalDetails'
+import { SUB_PROCESSORS } from '../lib/subProcessors'
 
-const LAST_UPDATED = '23 May 2026'
+/** The owner's value, or the old bracketed placeholder while it is still missing (R-04). */
+function fact(field: keyof LegalDetails, placeholder: string): string {
+  return LEGAL[field].trim() || `[${placeholder}]`
+}
+const company = () => fact('companyName', 'Company Legal Name')
+const privacyEmail = () => fact('privacyEmail', 'privacy@yourdomain')
+const legalEmail = () => fact('legalEmail', 'legal@yourdomain')
 
 function LegalShell({ title, children }: { title: string; children: ReactNode }) {
   useEffect(() => { document.title = `${title} — StratMap` }, [title])
@@ -14,8 +22,9 @@ function LegalShell({ title, children }: { title: string; children: ReactNode })
         </Link>
 
         <h1 style={{ fontSize: 32, fontWeight: 800, margin: '28px 0 6px' }}>{title}</h1>
-        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Last updated: {LAST_UPDATED}</p>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24 }}>Last updated: {LEGAL.lastUpdated}</p>
 
+        {missingLegalDetails().length > 0 && (
         <div style={{
           background: 'var(--warn-bg, rgba(245,158,11,.12))',
           border: '1px solid var(--warn, #f59e0b)',
@@ -25,6 +34,7 @@ function LegalShell({ title, children }: { title: string; children: ReactNode })
           <strong>Template notice:</strong> This document is a starting template and is not legal advice.
           Have it reviewed and adapted by a qualified lawyer before relying on it for a commercial launch.
         </div>
+        )}
 
         <div style={{ fontSize: 15, lineHeight: 1.75, color: 'var(--text)' }}>{children}</div>
 
@@ -56,7 +66,7 @@ export function PrivacyPage() {
   return (
     <LegalShell title="Privacy Policy">
       <p>
-        This Privacy Policy explains how [Company Legal Name] (“StratMap”, “we”, “us”) collects, uses, and
+        This Privacy Policy explains how {company()} (“StratMap”, “we”, “us”) collects, uses, and
         protects your information when you use our org-charting and people-planning service (the “Service”).
       </p>
 
@@ -79,10 +89,14 @@ export function PrivacyPage() {
 
       <H2>3. Sub-processors</H2>
       <p>
-        We rely on third-party providers to operate the Service, including Clerk (authentication), Stripe
-        (payments), Neon (database hosting), Vercel (application hosting), Resend (transactional email), and
-        Anthropic (AI drafting). Each processes data only as needed to provide their function.
+        We rely on the following third-party providers to operate the Service. Each processes data only as needed
+        for its function:
       </p>
+      <ul style={{ paddingLeft: 22, margin: '0 0 12px' }}>
+        {SUB_PROCESSORS.map(p => (
+          <li key={p.name}><strong>{p.name}</strong> ({p.purpose}): {p.data}</li>
+        ))}
+      </ul>
 
       <H2>4. Data retention</H2>
       <p>
@@ -92,7 +106,8 @@ export function PrivacyPage() {
         descriptions, members and activity log. Backups are overwritten on their normal schedule. Records we are
         legally required to keep, such as invoices, are retained as the law requires. You can also delete your own
         account in Settings: you leave every workspace, your sign-in account is deleted, and a workspace you own is
-        deleted with you under the same 30-day rule. The activity log records who changed members, sharing and
+        deleted with you under the same 30-day rule. When you delete a single role, we keep a copy of it, its comments and
+        its reporting lines for 3 days so that Undo can bring it back, and then erase it. The activity log records who changed members, sharing and
         salary bands (never salary amounts) and is kept with the workspace it belongs to.
       </p>
 
@@ -101,7 +116,7 @@ export function PrivacyPage() {
         Depending on your location (including the EU/UK under GDPR), you may have rights to access, correct,
         export, or delete your personal data, and to object to or restrict certain processing. Workspace owners
         and admins can export all workspace data (JSON and CSV) in Settings, and anyone can delete their account
-        there. For anything else, contact [privacy@yourdomain].
+        there. For anything else, contact {privacyEmail()}.
       </p>
 
       <H2>6. Cookies</H2>
@@ -117,7 +132,10 @@ export function PrivacyPage() {
       </p>
 
       <H2>7. Contact</H2>
-      <p>Questions about this policy: [privacy@yourdomain].</p>
+      <p>
+        Questions about this policy: {privacyEmail()}.<br />
+        {company()}, {fact('address', 'Company address')}.
+      </p>
     </LegalShell>
   )
 }
@@ -127,7 +145,7 @@ export function TermsPage() {
     <LegalShell title="Terms of Service">
       <p>
         These Terms of Service (“Terms”) govern your access to and use of StratMap (the “Service”) provided by
-        [Company Legal Name]. By using the Service, you agree to these Terms.
+        {company()}. By using the Service, you agree to these Terms.
       </p>
 
       <H2>1. Accounts</H2>
@@ -139,7 +157,7 @@ export function TermsPage() {
       <H2>2. Subscriptions and billing</H2>
       <p>
         Paid plans are billed in advance on a recurring basis through Stripe. Fees are non-refundable except where
-        required by law. You may cancel at any time; access continues until the end of the current billing period.
+        required by law. {fact('refundPolicy', 'Refund policy')} You may cancel at any time; access continues until the end of the current billing period.
       </p>
 
       <H2>3. Acceptable use</H2>
@@ -162,7 +180,7 @@ export function TermsPage() {
 
       <H2>6. Limitation of liability</H2>
       <p>
-        To the maximum extent permitted by law, [Company Legal Name] will not be liable for any indirect,
+        To the maximum extent permitted by law, {company()} will not be liable for any indirect,
         incidental, or consequential damages arising from your use of the Service.
       </p>
 
@@ -172,8 +190,14 @@ export function TermsPage() {
         by email. Continued use after changes take effect constitutes acceptance.
       </p>
 
-      <H2>8. Contact</H2>
-      <p>Questions about these Terms: [legal@yourdomain].</p>
+      <H2>8. Governing law</H2>
+      <p>These Terms are governed by the laws of {fact('governingLaw', 'Governing law and courts')}.</p>
+
+      <H2>9. Contact</H2>
+      <p>
+        Questions about these Terms: {legalEmail()}.<br />
+        {company()}, {fact('address', 'Company address')}.
+      </p>
     </LegalShell>
   )
 }
