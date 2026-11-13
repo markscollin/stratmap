@@ -49,7 +49,8 @@ export const NodeUpdate = z.object(nodeFields).partial()
 
 export const NodePositions = z.array(z.object({ id: Id, x: Coord, y: Coord })).max(5000)
 
-export const EdgeCreate = z.object({ sourceId: Id, targetId: Id })
+/** `id` is optional: the canvas supplies one so a line drawn this session can be deleted before any reload (R-03). */
+export const EdgeCreate = z.object({ id: Id.optional(), sourceId: Id, targetId: Id })
 
 const MAX_TEMPLATE_NODES = 5000
 

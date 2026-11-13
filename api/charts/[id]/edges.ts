@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(await requireChartsEditable(auth.workspaceId, res))) return
       const body = parseBody(EdgeCreate, req, res)
       if (!body) return
-      const { sourceId, targetId } = body
+      const { id: clientId, sourceId, targetId } = body
       if (sourceId === targetId) return res.status(400).json({ error: 'A role cannot report to itself' })
 
       // Both ends must be nodes in this chart (prevents cross-chart/workspace links).
@@ -38,11 +38,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(and(eq(nodes.chartId, chartId), inArray(nodes.id, [sourceId, targetId])))
       if (endpoints.length !== 2) return res.status(400).json({ error: 'sourceId and targetId must be nodes in this chart' })
 
+      // A client-supplied id makes a retry safe: the same edge sent again (the first reply was lost) is
+      // returned as it is, without a second revision bump. An id used by anything else is a clean 409.
+      const sameEdge = (e: { chartId: string; sourceId: string; targetId: string }) =>
+        e.chartId === chartId && e.sourceId === sourceId && e.targetId === targetId
+      if (clientId) {
+        const [existing] = await db.select().from(edges).where(eq(edges.id, clientId)).limit(1)
+        if (existing) {
+          return sameEdge(existing) ? res.status(200).json(existing) : res.status(409).json({ error: 'id-taken' })
+        }
+      }
+
       if ((await claimRevision(req, res, chartId)) === null) return
       const [edge] = await db
         .insert(edges)
-        .values({ id: crypto.randomUUID(), chartId, sourceId, targetId })
+        .values({ id: clientId ?? crypto.randomUUID(), chartId, sourceId, targetId })
+        .onConflictDoNothing({ target: edges.id })
         .returning()
+      // Lost a race for the same id between the check and the insert.
+      if (!edge) return res.status(409).json({ error: 'id-taken' })
 
       return res.status(201).json(edge)
     }

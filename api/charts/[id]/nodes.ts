@@ -31,6 +31,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(NodeCreate, req, res)
       if (!body) return
 
+      // A retry of a create whose reply was lost (the canvas offers Retry after a failed save): the role
+      // with this id is already here, so return it instead of failing on the primary key (R-01).
+      if (body.id) {
+        const [existing] = await db.select().from(nodes).where(eq(nodes.id, body.id)).limit(1)
+        if (existing) return existing.chartId === chartId ? res.status(200).json(existing) : res.status(409).json({ error: 'id-taken' })
+      }
+
       const plan = await getEffectivePlan(auth.workspaceId)
       if (!plan) return res.status(404).json({ error: 'Workspace not found' })
       const [{ value: nodeCount }] = await db

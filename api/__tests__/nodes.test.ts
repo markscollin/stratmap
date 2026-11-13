@@ -30,6 +30,33 @@ beforeEach(async () => {
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
 })
 
+describe('POST /api/charts/[id]/nodes retry safety (R-01)', () => {
+  const post = (body: unknown) => {
+    const res = createRes()
+    return handler(createReq({ method: 'POST', query: { id: TEST_CHART_ID }, body }) as never, res as never).then(() => res)
+  }
+
+  it('returns the existing role when the same create is sent again, without a second row', async () => {
+    const first = await post({ id: 'n-retry', name: 'Alice', title: 'CEO', x: 1, y: 2 })
+    expect(first._status).toBe(201)
+    const [before] = await testDb.select({ r: schema.charts.revision }).from(schema.charts)
+    const again = await post({ id: 'n-retry', name: 'Alice', title: 'CEO', x: 1, y: 2 })
+    expect(again._status).toBe(200)
+    expect((await testDb.select().from(schema.nodes)).filter(n => n.id === 'n-retry')).toHaveLength(1)
+    const [after] = await testDb.select({ r: schema.charts.revision }).from(schema.charts)
+    expect(after.r).toBe(before.r)
+  })
+
+  it('answers 409 id-taken, not 500, when the id belongs to a role in another chart', async () => {
+    await testDb.update(schema.workspaces).set({ planTier: 'growth' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    await testDb.insert(schema.charts).values({ id: 'chart-2', workspaceId: TEST_WS_ID, name: 'Other', ownerId: TEST_USER_ID, creatorId: TEST_USER_ID, version: 1 })
+    await testDb.insert(schema.nodes).values({ id: 'n-elsewhere', chartId: 'chart-2', name: 'X', title: 'Y', x: 0, y: 0 })
+    const res = await post({ id: 'n-elsewhere', name: 'Alice', title: 'CEO', x: 1, y: 2 })
+    expect(res._status).toBe(409)
+    expect(JSON.stringify(res._body)).not.toContain('chart-2')
+  })
+})
+
 describe('POST /api/charts/[id]/nodes', () => {
   it('adds a node and returns 201', async () => {
     const res = createRes()
