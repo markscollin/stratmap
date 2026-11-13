@@ -73,8 +73,8 @@ content reviewed by a lawyer.
 **Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
-- **Known broken until fixed (do not rely on them):** undo/redo is local-only (R-02), "Duplicate chart" makes an empty chart (R-10).
-- Real test counts: **643 frontend + 646 API** after R-01/R-03 (614 + 638 at the review); e2e 74 passing before, plus `canvas-saves.spec.ts`. The counts elsewhere in this file are older.
+- **Known broken until fixed (do not rely on them):** "Duplicate chart" makes an empty chart (R-10).
+- Real test counts: **658 frontend + 665 API**, 82 e2e, after R-01/R-02/R-03 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -82,7 +82,16 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
   (only for offline, 5xx, 429, 408) and **Reload** (discards the unsaved change; an exact rollback because nothing after the failure was sent). A 409 `chart-changed` only stops the queue (the conflict banner explains). `beforeunload` warns while writes are pending.
 - **Ids are made on the client** (`newId('n'|'e')` = prefix + `crypto.randomUUID()`), and `addEdge` returns the edge so the same id is saved. The server accepts an optional `id` on `POST /edges`; the same edge sent again returns 200 (a retry
   after a lost reply is safe, no revision bump), an id used by anything else is `409 id-taken`. `POST /nodes` with an existing id in the same chart also returns 200; in another chart `409 id-taken`.
-- `useCanvasState` keeps `nodesRef`/`edgesRef` updated synchronously; `undo()`/`redo()` return `{from, to}` (or null) so the caller can save the difference (R-02, not yet wired).
+- `useCanvasState` keeps `nodesRef`/`edgesRef` updated synchronously; `undo()`/`redo()` return `{from, to}` (or null).
+
+### Undo/redo are saved, and deleted roles can be restored (R-02, 2026-11-13; owner decision D-1: soft-delete window)
+- `OrgChart.handleUndo/handleRedo` pass the step to `saveHistoryStep()` (`canvasSync.ts`), which sends `diffCanvas(from, to)` (`canvasDiff.ts`, pure) through the same queue: lines and roles removed, roles brought back, changed fields, lines back (same ids), positions.
+- **Deleted roles are kept 3 days** (`TRASH_DAYS` in `api/_lib/nodeTrash.ts`, table `deleted_nodes`, migration 0012; cascades with the chart). `DELETE /api/charts/:id/nodes/:nodeId` copies the role, its comments and its lines there, then removes them
+  (it now also removes the role's reporting lines; they used to be left dangling). `POST /api/charts/:id/nodes/:nodeId/restore` (editor, plan checks like adding a role, structural: bumps and checks the revision) puts them back; 200 `alreadyThere` if the role exists,
+  404 `nothing-to-restore` if there is no copy (the client then creates the role afresh: no comments). A line is restored only if the role at its other end still exists. Nothing else reads the table, so no query needs a "not deleted" filter.
+- Expired copies go in the daily `purge-deleted` job and whenever a role in that chart is deleted. **Privacy:** deleted roles, comments and (R-38) job descriptions live 3 days after delete; say so in the privacy text (R-04).
+- `chartRevision.ts` knows `POST …/nodes/:id/restore` is a structural write (queued, revision header). **Job descriptions are still orphaned on delete (R-38).**
+- Gotcha fixed: the canvas keyboard-shortcut effect must list `readOnly` in its dependencies, or after a hard reload (page starts view-only) Cmd+Z and Delete stay dead.
 
 ## Phase 0 security pass (2026-11-05)
 
@@ -356,7 +365,7 @@ All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/dat
 - **Restore:** `POST /api/workspace/restore {workspaceId}` (`requireUser`; only the owner, within `RESTORE_DAYS` = 30, and refused with 409 `owns-another-workspace` if they own a live one: one owned workspace per user).
   It comes back on Free (the subscription is gone). `GET /api/workspaces` returns `deleted: [{id,name,eraseOn}]` for the owner; `DeletedWorkspaceNotice` shows it on onboarding and in Settings → General.
   Owners may create a new workspace straight after deleting (the create guard in `POST /api/workspace` ignores deleted ones).
-- **Purge:** `GET /api/cron/purge-deleted` (Vercel cron, daily 03:17 UTC, `vercel.json` "crons") needs `Authorization: Bearer $CRON_SECRET`; **without `CRON_SECRET` set it returns 503 and does nothing**. It deletes workspaces deleted more
+- **Purge:** `GET /api/cron/purge-deleted` (Vercel cron, daily 03:17 UTC, `vercel.json` "crons"; it also erases expired deleted-role copies, R-02) needs `Authorization: Bearer $CRON_SECRET`; **without `CRON_SECRET` set it returns 503 and does nothing**. It deletes workspaces deleted more
   than 30 days ago; every table cascades from `workspaces`, and a test proves no row is left. When you add a table with a `workspace_id`, give it `onDelete: 'cascade'` and add it to the purge test's `seedEverything`.
 - **Account deletion:** `DELETE /api/account {confirm:'DELETE'}` (`requireUser`). **Owner-decided: an owned workspace is deleted with the account** (soft delete, members emailed). Their memberships elsewhere are removed
   (logged as `member.left`, with no personal data), their email is removed from every audit log row, pending invites to their email are deleted, then the Clerk user is deleted **last** (`deleteUserAccount` in

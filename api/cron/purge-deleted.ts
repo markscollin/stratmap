@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { timingSafeEqual } from 'node:crypto'
 import { reportError } from '../_lib/sentry'
 import { purgeExpiredWorkspaces } from '../_lib/workspaceLifecycle'
+import { purgeExpiredTrash } from '../_lib/nodeTrash'
 
 // Daily job (vercel.json "crons"): erases workspaces that were deleted more than 30 days ago (roadmap 4.2).
 // Vercel calls it with `Authorization: Bearer $CRON_SECRET`. Without CRON_SECRET set it refuses to run, so it can
@@ -21,8 +22,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!authorised(req)) return res.status(401).json({ error: 'Unauthorized' })
   try {
     const purged = await purgeExpiredWorkspaces()
-    console.log(`[purge-deleted] erased ${purged} workspace(s)`)
-    return res.json({ purged })
+    // Also the kept copies of deleted roles past their few days (R-02); deleting a role tidies its own chart too.
+    const trashPurged = await purgeExpiredTrash()
+    console.log(`[purge-deleted] erased ${purged} workspace(s), ${trashPurged} deleted role cop${trashPurged === 1 ? 'y' : 'ies'}`)
+    return res.json({ purged, trashPurged })
   } catch (err) {
     console.error('/api/cron/purge-deleted', err)
     reportError(err, { route: '/api/cron/purge-deleted' })

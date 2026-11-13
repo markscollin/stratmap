@@ -63,6 +63,7 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-35 | Split `OrgChart.tsx` and centralise persistence | P3 | L | code |
 | R-36 | Dependency audit triage | P3 | S | code |
 | R-37 | Server-side JD HTML sanitisation (before any new renderer) | P3 | S | code |
+| R-38 | Job descriptions are orphaned (not deleted) when a role is deleted | P2 | S | code |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -98,7 +99,7 @@ shows a visible error and the user cannot keep editing a chart that is not being
 sync module; one e2e test (`tests/e2e/`) blocks the route with `page.route` and asserts the message.
 
 ### R-02 Undo and redo never reach the server
-- [ ] Open
+- [x] Done 2026-11-13. **D-1 decided by the owner: soft-delete window.** Built as a *trash table*, not a `deleted_at` flag (the backlog's option (a) would have meant a "not deleted" filter in about 15 queries): `DELETE /nodes/:id` first copies the role, its comments and its lines into `deleted_nodes` (migration 0012, 3-day window, `TRASH_DAYS`), then `POST /nodes/:id/restore` puts them back; undo/redo diff the canvas (`canvasDiff.ts`) and send the difference through the R-01 queue (`saveHistoryStep`). Expired copies are erased by the daily purge job and whenever a role in that chart is deleted. Also fixed on the way: deleting a role left its reporting lines dangling on the server; Cmd/Ctrl+Shift+Z never matched (`e.key` is `Z`); the keyboard-shortcut effect missed `readOnly` in its dependencies, so after a hard reload Cmd+Z and Delete were dead until something else re-registered the handler. Tests: `api/__tests__/node-trash.test.ts`, `canvasDiff.test.ts`, `canvasSync.test.ts`, e2e delete/add/edit → undo → reload (+ redo, + failed undo).
 
 **Problem.** `undo` and `redo` only call `setNodes`/`setEdges`. Deleting a role and pressing Cmd+Z brings it
 back on screen, but the server has already deleted it, with its job description and comments (they cascade).
@@ -312,6 +313,8 @@ the server schema. Validate min ≤ max in the UI before sending.
 onboarding and asked to create a workspace; the POST returns the existing one, the typed name is discarded, and
 `OnboardingPage` sets `permission: 'owner'` locally even for an invited viewer. A returning browser gets stale
 state with permission stuck at `viewer`.
+
+**Also seen (2026-11-13).** After a hard reload the canvas is view-only until `/api/workspace` answers (permission starts as `viewer`, and the plan as Free, which can read as "over the chart limit" for a moment). The Cmd+Z/Delete handler used to keep that stale state; that is fixed, the underlying load-state design is not.
 
 **Evidence.** `src/features/auth/AuthProvider.tsx:98-101`, `127-131`, `176-178`; `src/pages/OnboardingPage.tsx:88`;
 `api/workspace.ts:57-71`.
@@ -540,6 +543,15 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 
 ## P3: later and housekeeping
 
+### R-38 Job descriptions are orphaned when a role is deleted
+- [ ] Open
+
+**Problem (found 2026-11-13 while building R-02).** `job_descriptions.node_id` has no foreign key (`schema.ts`), so deleting a role leaves its JD row behind, salary band included, forever. Nothing shows it, but it is personal/compensation data that outlives the role, it is still in any query that selects by chart, and a later role that reuses the id (undo does) silently re-attaches it.
+
+**Suggested fix.** On `DELETE /nodes/:id`, put the JD in the `deleted_nodes` copy and delete it in the same atomic batch; `restore` re-inserts it. Add a one-off migration/cleanup that deletes JD rows whose node no longer exists. Mention the 3-day copy in the privacy text (R-04): deleted roles, their comments and JD are kept for 3 days so Undo works.
+
+**Done when.** Delete → no `job_descriptions` row for that role; undo brings the JD back; a test proves a purge leaves none.
+
 ### R-33 Small billing and limit gaps
 - [ ] Open (all reported)
 - An active trial wins even when it is **lower** than the paid tier (`api/_lib/billing.ts:176`): take the higher.
@@ -622,7 +634,7 @@ allow-list matching the TipTap schema. Add a test with `<img onerror>` and `<scr
 
 | # | Decision | Blocks |
 |---|---|---|
-| D-1 | Undo of a role delete: soft-delete window, or warn that the JD and comments are gone | R-02 |
+| D-1 | Undo of a role delete: soft-delete window, or warn that the JD and comments are gone | R-02 (**decided 2026-11-13: soft-delete window**) |
 | D-2 | Monthly AI cap for Growth and Enterprise, and the wording on the pricing page | R-07 |
 | D-3 | New-workspace trial (14 days of Growth?) or a small Free allowance of paid features | R-18 |
 | D-4 | Delete a paid workspace: prorated refund, or keep the plan until period end | R-21 |

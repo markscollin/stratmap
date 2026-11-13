@@ -1,5 +1,5 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test'
-import { testUser, signedInContext, onboard, createChart } from './helpers'
+import { testUser, signedInContext, onboard, createChart, setPlanFor } from './helpers'
 
 // Launch review R-03 and R-01: a reporting line drawn this session can be deleted before any reload, and a
 // canvas change that cannot be saved says so instead of vanishing on the next reload.
@@ -17,6 +17,12 @@ async function addRole(p: Page, name: string, reportsTo?: string) {
   }
   await p.getByRole('button', { name: 'Create node' }).click()
   await expect(p.getByTestId('node-card').filter({ hasText: name })).toBeVisible()
+}
+
+/** Reload and wait until the plan and permissions have loaded: until then the page can briefly treat the chart as view-only (workspace still looks over its limit). */
+async function reload(p: Page) {
+  await p.reload()
+  await p.waitForLoadState('networkidle')
 }
 
 const chartId = (p: Page) => /\/charts\/([^/?#]+)/.exec(p.url())![1]
@@ -55,7 +61,7 @@ test.describe.serial('canvas saves', () => {
       return c.edges.length === 1 && c.edges[0].sourceId === bravo
     }, { timeout: 10_000 }).toBe(true)
 
-    await page.reload()
+    await reload(page)
     await expect(page.getByTestId('node-card').filter({ hasText: 'Carol Report' })).toBeVisible()
     const { nodes, edges } = await serverChart(page)
     const id = (n: string) => nodes.find(x => x.name === n)!.id
@@ -76,7 +82,7 @@ test.describe.serial('canvas saves', () => {
     await alert.getByRole('button', { name: 'Retry' }).click()
     await expect(alert).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Add node/ })).toBeVisible()
-    await page.reload()
+    await reload(page)
     await expect(page.getByTestId('node-card').filter({ hasText: 'Dana Unsaved' })).toBeVisible()
   })
 
@@ -106,5 +112,98 @@ test.describe.serial('canvas saves', () => {
     await page.mouse.up()
     await expect(page.getByRole('alert').filter({ hasText: "Couldn't save the new position" })).toBeVisible()
     await page.unroute('**/api/charts/*/nodes')
+  })
+
+  // ── R-02: undo and redo reach the server ─────────────────────────────────────
+  // A fresh chart so the earlier tests' failures cannot leak in.
+  test.describe('undo and redo are saved', () => {
+    test.beforeAll(async () => {
+      await setPlanFor(slug, 'growth') // the Free plan has one chart
+      await page.goto('/charts')
+      await createChart(page, 'Undo plan')
+      await addRole(page, 'Una Keeper')
+      await addRole(page, 'Uri Report', 'Una Keeper')
+    })
+
+    const roleCard = (name: string) => page.getByTestId('node-card').filter({ hasText: name })
+    const settled = async (fn: (c: Awaited<ReturnType<typeof serverChart>>) => boolean) =>
+      expect.poll(async () => fn(await serverChart(page)), { timeout: 10_000 }).toBe(true)
+    // Waits for the "Undo"/"Redo" toast: proof the shortcut was heard. (A hard reload used to leave Ctrl+Z dead: the
+    // key handler kept the view-only state the page starts in. The tests below reload before pressing, so they cover that.)
+    const press = async (keys: string) => {
+      const toast = page.getByText(keys.includes('Shift') ? 'Redo' : 'Undo', { exact: true })
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()) // keys go to the page, not a field
+      await page.keyboard.press(keys)
+      await expect(toast).toBeVisible()
+      await expect(toast).toHaveCount(0, { timeout: 5000 }) // let it clear before the next press
+    }
+
+    test('delete → undo → reload shows the role again, with its comment and its line', async () => {
+      const chart = await serverChart(page)
+      const una = chart.nodes.find(n => n.name === 'Una Keeper')!.id
+      const posted = await ctx.request.post(`/api/charts/${chartId(page)}/comments`, { headers: { 'X-Dev-User': slug }, data: { nodeId: una, body: 'Keep this discussion' } })
+      expect(posted.ok()).toBe(true)
+
+      await roleCard('Una Keeper').dblclick()
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.getByRole('button', { name: 'Confirm' }).click()
+      await expect(roleCard('Una Keeper')).toHaveCount(0)
+      await settled(c => !c.nodes.some(n => n.id === una))
+
+      await press('Control+z')
+      await expect(roleCard('Una Keeper')).toBeVisible()
+      await settled(c => c.nodes.some(n => n.id === una) && c.edges.length === 1)
+
+      await reload(page)
+      await expect(roleCard('Una Keeper')).toBeVisible()
+      const comments = await (await ctx.request.get(`/api/charts/${chartId(page)}/comments?nodeId=${una}`, { headers: { 'X-Dev-User': slug } })).json()
+      expect(JSON.stringify(comments)).toContain('Keep this discussion')
+      expect((await serverChart(page)).edges).toHaveLength(1)
+      await expect(page.getByRole('alert')).toHaveCount(0)
+    })
+
+    test('add → undo → reload: the role is gone; redo brings it back', async () => {
+      await addRole(page, 'Vic Temporary')
+      await settled(c => c.nodes.some(n => n.name === 'Vic Temporary'))
+      await press('Control+z')
+      await expect(roleCard('Vic Temporary')).toHaveCount(0)
+      await settled(c => !c.nodes.some(n => n.name === 'Vic Temporary'))
+      await reload(page)
+      await expect(roleCard('Una Keeper')).toBeVisible()
+      await expect(roleCard('Vic Temporary')).toHaveCount(0)
+
+      // Redo (same page load: the history is per session, so add again first)
+      await addRole(page, 'Wes Again')
+      await press('Control+z')
+      await settled(c => !c.nodes.some(n => n.name === 'Wes Again'))
+      await press('Control+Shift+z')
+      await expect(roleCard('Wes Again')).toBeVisible()
+      await settled(c => c.nodes.some(n => n.name === 'Wes Again'))
+      await reload(page)
+      await expect(roleCard('Wes Again')).toBeVisible()
+    })
+
+    test('edit → undo → reload shows the old value', async () => {
+      await roleCard('Uri Report').dblclick()
+      await page.getByPlaceholder('e.g. Senior Engineer').fill('Principal Wizard')
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await expect(roleCard('Uri Report')).toContainText('Principal Wizard')
+      await settled(c => JSON.stringify(c).includes('Uri Report'))
+      await press('Control+z')
+      await expect(roleCard('Uri Report')).toContainText('Engineer')
+      await expect.poll(async () => JSON.stringify(await serverChart(page)), { timeout: 10_000 }).not.toContain('Principal Wizard')
+      await reload(page)
+      await expect(roleCard('Uri Report')).toContainText('Engineer')
+      await expect(roleCard('Uri Report')).not.toContainText('Principal Wizard')
+    })
+
+    test('an undo that cannot be saved shows the same error as any other edit', async () => {
+      await addRole(page, 'Xan Blocked')
+      await settled(c => c.nodes.some(n => n.name === 'Xan Blocked'))
+      await page.route('**/api/charts/*/nodes/*', route => route.request().method() === 'DELETE' ? route.abort('failed') : route.continue())
+      await press('Control+z')
+      await expect(page.getByRole('alert').filter({ hasText: "Couldn't delete the role" })).toBeVisible()
+      await page.unroute('**/api/charts/*/nodes/*')
+    })
   })
 })

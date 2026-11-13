@@ -10,6 +10,7 @@ describe('structuralChartId', () => {
     ['POST', '/api/charts/c1/edges', 'c1'],
     ['DELETE', '/api/charts/c1/edges/e1', 'c1'],
     ['POST', '/api/charts/c1/import', 'c1'],
+    ['POST', '/api/charts/c1/nodes/n1/restore', 'c1'],   // Undo of a role delete
     ['PUT', '/api/charts/c1', 'c1'],
   ])('%s %s is structural', (method, path, id) => expect(structuralChartId(method, path)).toBe(id))
 
@@ -18,6 +19,7 @@ describe('structuralChartId', () => {
     ['GET', '/api/charts/c1'],
     ['DELETE', '/api/charts/c1'],
     ['POST', '/api/charts/c1/share'],
+    ['GET', '/api/charts/c1/nodes/n1/restore'],
     ['PUT', '/api/charts/c1/jd/n1'],
     ['POST', '/api/charts'],
     ['GET', '/api/workspace'],

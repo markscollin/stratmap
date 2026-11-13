@@ -6,6 +6,7 @@ import { useToastStore } from '../../../store/toastStore'
 const flush = () => new Promise(r => setTimeout(r, 0))
 
 beforeEach(() => {
+  vi.restoreAllMocks()
   resetCanvasSave()
   useToastStore.setState({ toasts: [] })
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -109,5 +110,70 @@ describe('describeFailure', () => {
     const d = describeFailure(new TypeError('Failed to fetch'))
     expect(d.retryable).toBe(true)
     expect(d.message).toMatch(/reach the server/i)
+  })
+})
+
+// ─── Undo and redo reach the server (R-02) ────────────────────────────────────
+
+describe('saveHistoryStep', () => {
+  const role = (id: string, over: Record<string, unknown> = {}) => ({ id, name: id, title: 'Eng', departmentId: '', managerId: null, status: 'active', employmentType: 'full-time', x: 0, y: 0, ...over }) as never
+
+  async function run(step: { from: { nodes: unknown[]; edges: unknown[] }; to: { nodes: unknown[]; edges: unknown[] } }, hooks = {}) {
+    const { saveHistoryStep } = await import('../canvasSync')
+    saveHistoryStep('c1', step as never, hooks)
+    await flush(); await flush()
+  }
+
+  it('undo of a delete restores the role from the server\'s copy, then re-sends its line under the same id', async () => {
+    const { api } = await import('../../../lib/apiClient')
+    const post = vi.spyOn(api, 'post').mockResolvedValue({}); vi.spyOn(api, 'put').mockResolvedValue({})
+    await run({ from: { nodes: [role('a')], edges: [] }, to: { nodes: [role('a'), role('b', { x: 5 })], edges: [{ id: 'e-1', sourceId: 'a', targetId: 'b' }] } })
+    expect(post.mock.calls.map(c => c[0])).toEqual(['/api/charts/c1/nodes/b/restore', '/api/charts/c1/edges'])
+    expect(post.mock.calls[1][1]).toEqual({ id: 'e-1', sourceId: 'a', targetId: 'b' })
+  })
+
+  it('falls back to creating the role when the server has no copy (404 nothing-to-restore)', async () => {
+    const { api } = await import('../../../lib/apiClient')
+    const post = vi.spyOn(api, 'post')
+      .mockRejectedValueOnce(new ApiError(404, { error: 'nothing-to-restore' }))
+      .mockResolvedValue({})
+    vi.spyOn(api, 'put').mockResolvedValue({})
+    await run({ from: { nodes: [], edges: [] }, to: { nodes: [role('b')], edges: [] } })
+    expect(post.mock.calls.map(c => c[0])).toEqual(['/api/charts/c1/nodes/b/restore', '/api/charts/c1/nodes'])
+    expect(useCanvasSave.getState().failure).toBeNull()
+  })
+
+  it('any other restore error is a visible failure, not a silent fallback', async () => {
+    const { api } = await import('../../../lib/apiClient')
+    vi.spyOn(api, 'post').mockRejectedValue(new ApiError(402, { error: 'plan-limit', message: 'Your plan allows 30 roles per chart.' }))
+    vi.spyOn(api, 'put').mockResolvedValue({})
+    await run({ from: { nodes: [], edges: [] }, to: { nodes: [role('b')], edges: [] } })
+    expect(useCanvasSave.getState().failure).toMatchObject({ action: "Couldn't restore the role", retryable: false })
+  })
+
+  it('undo of an add deletes the role; edit and move are sent as a field PUT and a positions PUT', async () => {
+    const { api } = await import('../../../lib/apiClient')
+    const del = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
+    const put = vi.spyOn(api, 'put').mockResolvedValue({})
+    const synced = new Map([['x', { x: 0, y: 0 }]])
+    await run({
+      from: { nodes: [role('a', { title: 'New', x: 50 }), role('x')], edges: [] },
+      to: { nodes: [role('a', { title: 'Old', x: 0 })], edges: [] },
+    }, { syncedPositions: synced })
+    expect(del.mock.calls.map(c => c[0])).toEqual(['/api/charts/c1/nodes/x'])
+    expect(put.mock.calls).toEqual([
+      ['/api/charts/c1/nodes/a', { title: 'Old' }],
+      ['/api/charts/c1/nodes', [{ id: 'a', x: 0, y: 0 }]],
+    ])
+    expect(synced.has('x')).toBe(false)
+    expect(synced.get('a')).toEqual({ x: 0, y: 0 })
+  })
+
+  it('tells the page to refresh comment badges after a role came back', async () => {
+    const { api } = await import('../../../lib/apiClient')
+    vi.spyOn(api, 'post').mockResolvedValue({}); vi.spyOn(api, 'put').mockResolvedValue({})
+    const afterRestore = vi.fn()
+    await run({ from: { nodes: [], edges: [] }, to: { nodes: [role('b')], edges: [] } }, { afterRestore })
+    expect(afterRestore).toHaveBeenCalledTimes(1)
   })
 })

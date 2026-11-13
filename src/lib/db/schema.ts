@@ -343,3 +343,26 @@ export const chartSnapshots = pgTable('chart_snapshots', {
   edgeCount: integer('edge_count').notNull().default(0),
   data: jsonb('data').$type<SnapshotData>().notNull(),
 }, (t) => [index('chart_snapshots_chart_idx').on(t.chartId, t.createdAt)])
+
+// ─── Deleted roles (launch review R-02, owner decision D-1) ──────────────────
+// Deleting a role really removes it, but first keeps a copy here (the role, its comments and its reporting lines)
+// for a few days, so Undo can bring back everything: `POST /api/charts/:id/nodes/:nodeId/restore`. Nothing else reads
+// this table, so no ordinary query needs a "not deleted" filter. Rows go with their chart (cascade), are replaced if the
+// same role is deleted again, and are erased after TRASH_DAYS (`api/_lib/nodeTrash.ts`).
+export interface DeletedNodeData {
+  node: typeof nodes.$inferSelect
+  comments: (typeof roleComments.$inferSelect)[]
+  edges: (typeof edges.$inferSelect)[]
+}
+
+export const deletedNodes = pgTable('deleted_nodes', {
+  id: text('id').primaryKey(),
+  chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
+  nodeId: text('node_id').notNull(),
+  deletedBy: text('deleted_by').notNull(),          // Clerk userId
+  deletedAt: timestamp('deleted_at').notNull().defaultNow(),
+  data: jsonb('data').$type<DeletedNodeData>().notNull(),
+}, (t) => [
+  uniqueIndex('deleted_nodes_chart_node_idx').on(t.chartId, t.nodeId),
+  index('deleted_nodes_deleted_at_idx').on(t.deletedAt),
+])

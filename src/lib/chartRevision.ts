@@ -25,7 +25,7 @@ export const useChartConflict = create<{
   clear: () => set({ chartId: null }),
 }))
 
-const CHART_PATH = /^\/api\/charts\/([^/?#]+)(?:\/(nodes|edges|import)(?:\/([^/?#]+))?)?(?:[?#].*)?$/
+const CHART_PATH = /^\/api\/charts\/([^/?#]+)(?:\/(nodes|edges|import)(?:\/([^/?#]+)(?:\/(restore))?)?)?(?:[?#].*)?$/
 
 /** The chart id if `path` is anywhere under /api/charts/:id (used to remember revisions). */
 export function chartIdOfPath(path: string): string | null {
@@ -42,8 +42,9 @@ export function isChartRead(method: string, path: string): boolean {
 export function structuralChartId(method: string, path: string): string | null {
   const m = CHART_PATH.exec(path)
   if (!m) return null
-  const [, id, sub, subId] = m
+  const [, id, sub, subId, action] = m
   if (!sub) return method === 'PUT' ? id : null                       // rename / status / sharing
+  if (sub === 'nodes' && action === 'restore') return method === 'POST' ? id : null          // Undo of a role delete
   if (sub === 'nodes') return subId ? (method === 'PUT' || method === 'DELETE' ? id : null) : (method === 'POST' ? id : null) // PUT /nodes = positions
   if (sub === 'edges') return subId ? (method === 'DELETE' ? id : null) : (method === 'POST' ? id : null)
   return sub === 'import' && method === 'POST' ? id : null

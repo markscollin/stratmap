@@ -18,6 +18,7 @@ import { create } from 'zustand'
 import { api, ApiError } from '../../lib/apiClient'
 import { useToastStore } from '../../store/toastStore'
 import type { OrgNode, OrgEdge } from '../../types'
+import { diffCanvas, type CanvasState } from './canvasDiff'
 
 export interface SaveFailure {
   chartId: string
@@ -176,4 +177,45 @@ export function savePositions(chartId: string, positions: { id: string; x: numbe
     await api.put(`/api/charts/${chartId}/nodes`, positions)
     onSaved?.()
   })
+}
+
+/**
+ * Undo of a role delete (or redo of an add): ask the server to restore the role from the copy it kept, which brings
+ * back its comments and lines too. With no copy (404: never deleted, or older than the window) create the role afresh.
+ */
+export function saveRoleRestore(chartId: string, node: OrgNode) {
+  saveChange(chartId, "Couldn't restore the role", async () => {
+    try {
+      await api.post(`/api/charts/${chartId}/nodes/${node.id}/restore`, {})
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404 && err.message === 'nothing-to-restore')) throw err
+      await api.post(`/api/charts/${chartId}/nodes`, nodeBody(node))
+    }
+  })
+}
+
+/**
+ * Saves what an undo or redo changed on screen (R-02), through the same queue and with the same failure handling as
+ * any other edit. `syncedPositions` is the canvas's record of what the server holds, kept up to date here.
+ * `afterRestore` runs once the writes are done (comment badges may have changed when a role came back).
+ */
+export function saveHistoryStep(
+  chartId: string,
+  step: { from: CanvasState; to: CanvasState },
+  hooks: { syncedPositions?: Map<string, { x: number; y: number }>; afterRestore?: () => void } = {},
+) {
+  let restored = false
+  for (const w of diffCanvas(step.from, step.to)) {
+    switch (w.kind) {
+      case 'delete-line': saveLineDelete(chartId, w.id); break
+      case 'delete-role': saveRoleDelete(chartId, w.id); hooks.syncedPositions?.delete(w.id); break
+      case 'bring-back-role': saveRoleRestore(chartId, w.node); restored = true; break
+      case 'edit-role': saveRoleEdit(chartId, w.id, w.fields); break
+      case 'add-line': saveNewLine(chartId, w.edge); break
+      case 'move':
+        savePositions(chartId, w.positions, "Couldn't save the undone position", () => w.positions.forEach(p => hooks.syncedPositions?.set(p.id, { x: p.x, y: p.y })))
+        break
+    }
+  }
+  if (restored && hooks.afterRestore) saveChange(chartId, 'Refreshing comments', async () => hooks.afterRestore?.())
 }

@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, or } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
 import { requireRole, requireChartsEditable } from '../../../_lib/access'
 import { claimRevision } from '../../../_lib/revision'
 import { parseBody } from '../../../_lib/validate'
 import { NodeUpdate } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
-import { charts, nodes } from '../../../../src/lib/db/schema'
+import { runAtomically } from '../../../_lib/atomic'
+import { purgeExpiredTrash } from '../../../_lib/nodeTrash'
+import { charts, nodes, edges, roleComments, deletedNodes } from '../../../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -45,7 +47,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       if ((await claimRevision(req, res, chartId)) === null) return
-      await db.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId)))
+      const [node] = await db.select().from(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))).limit(1)
+      if (!node) return res.status(204).end() // already gone (a retried delete)
+
+      // Keep a copy for a few days so Undo can bring back the role with its comments and lines (D-1, R-02).
+      // The reporting lines go with the role: they have no foreign key, so without this they were left dangling.
+      const touching = or(eq(edges.sourceId, nodeId), eq(edges.targetId, nodeId))
+      const [comments, lines] = await Promise.all([
+        db.select().from(roleComments).where(and(eq(roleComments.chartId, chartId), eq(roleComments.nodeId, nodeId))),
+        db.select().from(edges).where(and(eq(edges.chartId, chartId), touching)),
+      ])
+      const copy = { id: crypto.randomUUID(), chartId, nodeId, deletedBy: auth.userId, deletedAt: new Date(), data: { node, comments, edges: lines } }
+      await runAtomically(d => [
+        d.insert(deletedNodes).values(copy).onConflictDoUpdate({
+          target: [deletedNodes.chartId, deletedNodes.nodeId],
+          set: { deletedBy: copy.deletedBy, deletedAt: copy.deletedAt, data: copy.data },
+        }),
+        d.delete(edges).where(and(eq(edges.chartId, chartId), touching)),
+        d.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))), // comments cascade
+      ])
+      // Tidy-up of this chart's expired copies; the daily job covers the rest. Never fails the delete.
+      await purgeExpiredTrash(chartId).catch(err => console.error('[nodeTrash] purge failed', err))
       return res.status(204).end()
     }
 

@@ -7,7 +7,7 @@ import { useChartStore } from '../../store/chartStore'
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus } from '../../types'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import { useCanvasState } from './useCanvasState'
-import { saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine, saveLineDelete, savePositions } from './canvasSync'
+import { saveHistoryStep, saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine, saveLineDelete, savePositions } from './canvasSync'
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeChip } from '../nodes/NodeChip'
 import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
@@ -788,6 +788,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   scaleRef.current = transform.scale
   const nodesRef   = useRef(nodes)
   nodesRef.current = nodes
+  // What the server last saw for each role's position, so a drag sends only what moved (roadmap 3.4).
+  const syncedPositions = useRef(new Map<string, Point>(initialNodes.map(n => [n.id, { x: n.x, y: n.y }])))
 
   const [mouseCanvas, setMouseCanvas] = useState({ x: 0, y: 0 })
   const [hovEdgeId,   setHovEdgeId]   = useState<string | null>(null)
@@ -880,6 +882,16 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     }
   }, [vpSize]) // eslint-disable-line
 
+  // Undo and redo change the canvas; the same change is then saved, so a reload shows what is on screen (R-02).
+  const handleUndo = useCallback(() => {
+    const step = undo()
+    if (step && chartId) saveHistoryStep(chartId, step, { syncedPositions: syncedPositions.current, afterRestore: onCommentsChanged })
+  }, [undo, chartId, onCommentsChanged])
+  const handleRedo = useCallback(() => {
+    const step = redo()
+    if (step && chartId) saveHistoryStep(chartId, step, { syncedPositions: syncedPositions.current, afterRestore: onCommentsChanged })
+  }, [redo, chartId, onCommentsChanged])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -888,8 +900,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       if (e.target instanceof HTMLElement && e.target.isContentEditable) return
       const mod = e.ctrlKey || e.metaKey
       if (!readOnly) {
-        if (mod && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
-        if (mod &&  e.shiftKey && e.key === 'z') { e.preventDefault(); redo() }
+        if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); handleUndo() }
+        if (mod &&  e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); handleRedo() }
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) {
           removeEdge(selectedEdgeId)
           saveLineDelete(chartId, selectedEdgeId)
@@ -903,7 +915,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo, removeEdge, selectedEdgeId, setConnectingFrom, setSelectedId, setActiveTool])
+  }, [handleUndo, handleRedo, removeEdge, selectedEdgeId, chartId, readOnly, setConnectingFrom, setSelectedId, setActiveTool])
 
   // ── Zoom ───────────────────────────────────────────────────────────────────
 
@@ -937,8 +949,6 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   // ── Touch: pinch to zoom (roadmap 2.8) ────────────────────────────────────
   // Pointers are tracked in the capture phase so a pinch works even when a finger lands on a node.
-  // What the server last saw for each role's position, so a drag sends only what moved (roadmap 3.4).
-  const syncedPositions = useRef(new Map<string, Point>(initialNodes.map(n => [n.id, { x: n.x, y: n.y }])))
   const pointersRef = useRef(new Map<number, Point>())
   const pinchRef = useRef<{ start: ViewTransform; startMid: Point; startDist: number } | null>(null)
   const transformRef = useRef(transform)
@@ -1313,7 +1323,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         onImport={() => setIsImportOpen(true)}
         onHistory={onVersionRestored ? () => setIsHistoryOpen(true) : undefined}
         onAutoLayout={handleAutoLayout}
-        onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo}
+        onUndo={handleUndo} onRedo={handleRedo} canUndo={canUndo} canRedo={canRedo}
         readOnly={readOnly}
         nodeCount={nodes.length}
         maxNodesPerChart={plan.maxNodesPerChart}
