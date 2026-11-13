@@ -131,6 +131,11 @@ const ROUTES: RouteCase[] = [
   { name: 'rename chart', handler: chartHandler, method: 'PUT', query: c, body: { name: 'X' }, min: 'editor' },
   { name: 'make chart public', handler: chartHandler, method: 'PUT', query: c, body: { isPublic: true }, min: 'editor' },
   { name: 'delete chart', handler: chartHandler, method: 'DELETE', query: c, min: 'admin' },
+  { name: 'approve chart', handler: chartHandler, method: 'PUT', query: c, body: { status: 'approved' }, min: 'admin' },
+  { name: 'request changes on a chart', handler: chartHandler, method: 'PUT', query: c, body: { status: 'rejected' }, min: 'admin' },
+  { name: 'publish chart (live)', handler: chartHandler, method: 'PUT', query: c, body: { status: 'live' }, min: 'admin' },
+  { name: 'submit chart for review', handler: chartHandler, method: 'PUT', query: c, body: { status: 'review' }, min: 'editor' },
+  { name: 'create chart already live', handler: chartsHandler, method: 'POST', body: { name: 'New', status: 'live' }, min: 'admin' },
   { name: 'add node', handler: nodesHandler, method: 'POST', query: c, body: { name: 'N', title: 'T', x: 0, y: 0 }, min: 'editor' },
   { name: 'move nodes', handler: nodesHandler, method: 'PUT', query: c, body: [{ id: TEST_NODE_ID, x: 1, y: 1 }], min: 'editor' },
   { name: 'edit node', handler: nodeHandler, method: 'PUT', query: { ...c, nodeId: TEST_NODE_ID }, body: { title: 'VP' }, min: 'editor' },
@@ -196,6 +201,70 @@ describe('server-side role enforcement', () => {
     expect((await call(chartHandler, { method: 'GET', query: c }))._status).toBe(200)
     expect((await call(jdHandler, { method: 'GET', query: { ...c, nodeId: TEST_NODE_ID } }))._status).toBe(200)
     expect((await call(templatesHandler, { method: 'GET' }))._status).toBe(200)
+  })
+})
+
+// Launch review R-08: editors could approve and publish charts by calling the API directly.
+describe('chart status changes are the approvers\' decision', () => {
+  const setStatus = (status: string) => testDb.update(schema.charts).set({ status: status as never }).where(eq(schema.charts.id, TEST_CHART_ID))
+  const put = (status: string) => call(chartHandler, { method: 'PUT', query: c, body: { status } })
+  const statusNow = async () => (await testDb.select({ s: schema.charts.status }).from(schema.charts))[0].s
+
+  it('an editor cannot approve, reject or publish, and the chart is left as it was', async () => {
+    await actAs('editor')
+    for (const status of ['approved', 'rejected', 'live']) {
+      expect((await put(status))._status, status).toBe(403)
+    }
+    expect(await statusNow()).toBe('draft')
+  })
+
+  it('an admin can: editor → live is 403 where admin → live is 200', async () => {
+    await actAs('editor')
+    expect((await put('live'))._status).toBe(403)
+    await testDb.delete(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, ACTOR))
+    await actAs('admin')
+    expect((await put('live'))._status).toBe(200)
+    expect(await statusNow()).toBe('live')
+  })
+
+  it('an editor cannot pull a chart back out of approved or live (revise, retire, anything)', async () => {
+    await actAs('editor')
+    for (const from of ['approved', 'live']) {
+      await setStatus(from)
+      for (const to of ['draft', 'editing', 'review', 'archived']) {
+        expect((await put(to))._status, `${from} → ${to}`).toBe(403)
+      }
+      expect(await statusNow()).toBe(from)
+    }
+  })
+
+  it('an editor can still draft, edit, submit for review, archive and revise after changes were requested', async () => {
+    await actAs('editor')
+    for (const status of ['editing', 'review', 'draft', 'archived']) expect((await put(status))._status, status).toBe(200)
+    await setStatus('rejected')
+    expect((await put('editing'))._status).toBe(200)
+  })
+
+  it('sending the status a chart already has is not a change, so an editor can still rename a live chart', async () => {
+    await actAs('editor')
+    await setStatus('live')
+    expect((await call(chartHandler, { method: 'PUT', query: c, body: { name: 'Renamed', status: 'live' } }))._status).toBe(200)
+  })
+
+  it('an editor cannot create a chart that starts approved, rejected or live; review is fine', async () => {
+    await actAs('editor')
+    await testDb.delete(schema.charts) // keep within the chart limit; the check under test comes before it
+    for (const status of ['approved', 'rejected', 'live']) {
+      expect((await call(chartsHandler, { method: 'POST', body: { name: 'Sneaky', status } }))._status, status).toBe(403)
+    }
+    expect((await call(chartsHandler, { method: 'POST', body: { name: 'Fine', status: 'review' } }))._status).toBe(201)
+  })
+
+  it('an owner can do all of it', async () => {
+    await actAs('owner')
+    expect((await put('approved'))._status).toBe(200)
+    expect((await put('live'))._status).toBe(200)
+    expect((await put('editing'))._status).toBe(200)
   })
 })
 

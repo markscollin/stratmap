@@ -230,7 +230,7 @@ Optional: tighten the prompt so `notes` is clearly delimited as context.
 `402 plan-limit`.
 
 ### R-08 Editors can approve and publish charts
-- [ ] Open
+- [x] Done 2026-11-13: `src/lib/chartStatus.ts` (`statusChangeNeedsAdmin`): entering approved/rejected/live, and leaving approved/live, needs admin; applied to `PUT /api/charts/:id` and `POST /api/charts`. **Did not** copy the backlog's "mirror the UI's transition graph on the server": the bug is the editor escalation, a strict graph only adds breakage risk (admins and scripts legitimately jump states). A test ties the server rule to the UI's `STATUS_ACTIONS` so they cannot drift. Tests: `security.test.ts` (new role-matrix rows + a describe), `src/lib/__tests__/chartStatus.test.ts`.
 
 **Problem.** `PUT /api/charts/:id` needs only `editor` and accepts any `status`, including `approved` and
 `live`. The UI and `CLAUDE.md` say approvals are admin-only. JD and headcount approvals are gated correctly.
@@ -245,7 +245,7 @@ rather than accepting any jump. Apply the same rule to `POST /api/charts`.
 **Done when.** `api/__tests__/security.test.ts` has editor → `live` = 403 and admin → `live` = 200.
 
 ### R-09 Owner email is client-supplied and unverified
-- [ ] Open
+- [x] Done 2026-11-13: `POST /api/workspace` takes email and name from `getUserIdentity()` (503 `identity-unavailable` if the provider cannot be asked; the body fields are gone from the schema). `deleteAccount` removes invites and log entries only for the person's **verified** addresses, asked first so an outage changes nothing. Tests in `workspace.test.ts`, `data-rights.test.ts`. **Still owed (owner/ops):** existing `workspace_members.email` rows were written from the browser; check them against Clerk before launch (`select user_id, email from workspace_members`), they still receive workspace-deleted and comment emails.
 
 **Problem.** `POST /api/workspace` stores `body.email` as given. `deleteAccount` then deletes every pending
 invite for that email **in every workspace** and strips it from every audit log. A throwaway account can cancel
@@ -263,7 +263,7 @@ and ignore the body fields (keep them in the schema only for the dev bypass, whe
 account cannot remove invites addressed to a different email.
 
 ### R-10 "Duplicate chart" creates an empty chart
-- [ ] Open
+- [x] Done 2026-11-13: new `POST /api/charts/:id/duplicate` (editor, chart and role limits, free on every plan) built on `captureChart` + `branchSnapshot`; the copy is a private draft with fresh ids, no JDs/comments/share links; `duplicateChart` in `chartStore` calls it and shows the plan-limit message. Tests: `api/__tests__/duplicate.test.ts` (5 roles → 5 roles and 4 lines), `src/store/__tests__/chartStore.test.ts`, `tests/e2e/small-fixes.spec.ts`.
 
 **Problem.** The chart list stores `nodes: []`, `edges: []`, `departments: []` for every chart, and
 `duplicateChart` copies those. The result is an empty "X (copy)", which on Free uses the only chart slot.
@@ -342,7 +342,7 @@ an error toast. Add an `error` field to `chartStore` and an error state with Ret
 Dashboard, so "failed to load" never looks like "empty".
 
 ### R-15 No 404 route
-- [ ] Open
+- [x] Done 2026-11-13: `NotFoundPage` on `path="*"`; `src/lib/routes.ts` (`KNOWN_ROUTES`, `isKnownPath`, `pageAccess`) now decides how `AuthProvider` treats a URL and treats an unknown URL as open, so a signed-out visitor sees the 404 instead of being bounced to sign-in. A test fails if `App.tsx` and `KNOWN_ROUTES` drift. Tests: `routes.test.ts`, `NotFoundPage.test.tsx`, e2e.
 
 **Problem (reported).** `src/App.tsx:27-57` has no `path="*"`; an unknown URL renders a blank page.
 **Fix.** Add a NotFound page (link to Dashboard when signed in, to `/` otherwise) and add the path to

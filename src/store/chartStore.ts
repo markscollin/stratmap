@@ -138,15 +138,38 @@ export const useChartStore = create<ChartStore>((set, get) => ({
     await api.put(`/api/charts/${id}`, { isPublic })
   },
 
+  // The server makes the copy (the list only holds counts, not roles; copying what the list holds gave an empty chart, R-10).
   async duplicateChart(id) {
-    const source = get().charts.find(c => c.id === id)
-    if (!source) return
-    const chart = await get().createChart(
-      `${source.name} (copy)`,
-      source.nodes,
-      source.edges,
-      source.departments,
-    )
-    if (!chart) return
+    try {
+      const raw = await api.post<Record<string, unknown>>(`/api/charts/${id}/duplicate`, {})
+      const source = get().charts.find(c => c.id === id)
+      const chart: OrgChart = {
+        id: String(raw.id),
+        name: String(raw.name),
+        status: raw.status as ChartStatus,
+        version: Number(raw.version ?? 1),
+        isPublic: Boolean(raw.isPublic ?? false),
+        isSample: false,
+        departments: [],
+        nodes: [],
+        edges: [],
+        owner: String(raw.ownerId ?? ''),
+        creator: String(raw.creatorId ?? ''),
+        collaborators: [],
+        createdAt: String(raw.createdAt),
+        updatedAt: String(raw.updatedAt),
+        nodeCount: source?.nodeCount,
+        deptCount: source?.deptCount,
+      }
+      set(s => ({ charts: [chart, ...s.charts] }))
+      useToastStore.getState().addToast(`Created “${chart.name}”.`, 'success')
+    } catch (err) {
+      console.error('[chartStore] duplicateChart failed:', err)
+      const refused = err instanceof ApiError && [402, 403, 409].includes(err.status)
+      useToastStore.getState().addToast(
+        refused ? (err.userMessage === 'forbidden' ? 'You do not have permission to create charts.' : err.userMessage) : "Couldn't duplicate the chart. Please try again.",
+        refused ? 'warning' : 'error',
+      )
+    }
   },
 }))

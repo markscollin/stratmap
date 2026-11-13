@@ -8,6 +8,7 @@ import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
 import { logAudit } from '../_lib/audit'
 import { APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
+import { statusChangeNeedsAdmin } from '../../src/lib/chartStatus'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -50,6 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Over the chart limit (1.6) charts are view-only, but you can still make one private.
       const onlyUnsharing = isPublic === false && name === undefined && status === undefined
       if (!onlyUnsharing && !(await requireChartsEditable(auth.workspaceId, res))) return
+      // Approving, requesting changes, publishing and pulling a chart back out of approved/live are the approvers' decisions (R-08):
+      // an editor can draft, edit, submit for review and archive, nothing more. Checked on the server, whatever the UI shows.
+      if (status !== undefined && statusChangeNeedsAdmin(chart.status, status) && !(await requireRole(auth, res, 'admin'))) return
       // Free plans can draft, edit and archive charts; review/approve/publish is the paid approval workflow.
       if (status && status !== chart.status && (APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
         && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return

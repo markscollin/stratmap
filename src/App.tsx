@@ -19,6 +19,7 @@ import { BillingSuccessPage } from './pages/BillingSuccessPage'
 import { SharePage } from './pages/SharePage'
 import { InvitePage } from './pages/InvitePage'
 import { EmbedPage } from './pages/EmbedPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 
 export default function App() {
   return (
@@ -55,6 +56,9 @@ export default function App() {
             <Route path="/settings"   element={<SettingsView />} />
             <Route path="/billing/success" element={<BillingSuccessPage />} />
           </Route>
+
+          {/* Anything else: a 404 page (public, see isKnownPath in AuthProvider) */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <ToastStack />
         <Spotlight />

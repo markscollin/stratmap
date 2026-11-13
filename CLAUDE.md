@@ -72,8 +72,8 @@ content reviewed by a lawyer.
 **Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
-- **Known broken until fixed (do not rely on them):** "Duplicate chart" makes an empty chart (R-10).
-- Real test counts: **679 frontend (+2 skipped launch-gate) + 691 API**, 82 e2e, after the P0 band R-01 to R-06 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
+- **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
+- Real test counts: **726 frontend (+2 skipped launch-gate) + 733 API**, 85 e2e, after the P0 band R-01 to R-06 plus R-08, R-09, R-10, R-15 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -91,6 +91,12 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
 - Expired copies go in the daily `purge-deleted` job and whenever a role in that chart is deleted. **Privacy:** deleted roles, comments and (R-38) job descriptions live 3 days after delete; say so in the privacy text (R-04).
 - `chartRevision.ts` knows `POST …/nodes/:id/restore` is a structural write (queued, revision header). **Job descriptions are still orphaned on delete (R-38).**
 - Gotcha fixed: the canvas keyboard-shortcut effect must list `readOnly` in its dependencies, or after a hard reload (page starts view-only) Cmd+Z and Delete stay dead.
+
+### Also shipped 2026-11-13 (R-08, R-09, R-10, R-15)
+- **Chart status rule (R-08):** `statusChangeNeedsAdmin(from, to)` in `src/lib/chartStatus.ts`. Entering approved/rejected/live, or leaving approved/live, is admin-only on the server (`PUT` and `POST /api/charts`); editors keep draft, editing, review, archived. A test compares it with `STATUS_ACTIONS` in `statusMeta.tsx`; change both together.
+- **Verified identity (R-09):** `POST /api/workspace` ignores any email or name in the body and uses `getUserIdentity()`; `deleteAccount` uses only the person's verified addresses. Never store or act on an email the browser sent.
+- **Duplicate chart (R-10):** `POST /api/charts/:id/duplicate` (server-side copy via `captureChart` + `branchSnapshot`). Do not rebuild it from the chart list, which holds counts, not roles.
+- **404 (R-15):** `src/lib/routes.ts` has `KNOWN_ROUTES` (must match the `<Route path>`s in `App.tsx`; a test checks) and `pageAccess()`, which `AuthProvider` uses; an unknown URL is open and shows `NotFoundPage`. **Adding a page means adding it to `KNOWN_ROUTES`.**
 
 ## Phase 0 security pass (2026-11-05)
 

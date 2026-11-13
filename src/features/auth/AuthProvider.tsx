@@ -10,6 +10,7 @@ import { IS_DEV_BYPASS } from './useAuth'
 import { api, ApiError } from '../../lib/apiClient'
 import { getDevIdentity, devIdentityEmail } from '../../lib/devIdentity'
 import { getRememberedInviteToken, forgetInviteToken } from './pendingInvite'
+import { pageAccess } from '../../lib/routes'
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ?? ''
 
@@ -68,11 +69,9 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
   const { setPlan, setSubscription } = useBillingStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const isAuthPage   = pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')
-  const isPublicPage = pathname === '/' || pathname.startsWith('/share') || pathname.startsWith('/embed/') || pathname.startsWith('/privacy')
-    || pathname.startsWith('/terms') || pathname.startsWith('/invite/')
-  // Open to everyone (roadmap 2.5) but signed-in people still get their workspace and plan loaded.
-  const isOptionalAuthPage = pathname === '/pricing'
+  // Which kind of page this is decides who may see it (src/lib/routes.ts). A URL with no page behind it is open too: it shows
+  // the 404 page instead of being bounced to sign-in first (R-15).
+  const { isAuthPage, isPublicPage, isOptionalAuthPage } = pageAccess(pathname)
   // True once we know whether this user has a workspace (after any invite acceptance).
   // The onboarding redirect waits for it, so an invited user never lands there.
   // Each workspace load gets a unique key; `resolvedFor` holds the key of the

@@ -18,7 +18,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, sql } from 'drizzle-orm'
 import { requireAuth, requireUser } from '../_lib/auth'
 import { sendWorkspaceDeleted } from '../_lib/email'
-import { deleteUserAccount } from '../_lib/identity'
+import { deleteUserAccount, getUserIdentity } from '../_lib/identity'
 import { RESTORE_DAYS } from '../_lib/workspaceLifecycle'
 import workspaceHandler from '../workspace'
 import workspacesHandler from '../workspaces'
@@ -58,6 +58,8 @@ beforeEach(async () => {
   vi.clearAllMocks()
   cancelMock.mockReset().mockResolvedValue({})
   vi.mocked(deleteUserAccount).mockResolvedValue(undefined)
+  // The sign-in provider's verified addresses for whoever deletes their account (R-09): the person's own, by user id.
+  vi.mocked(getUserIdentity).mockImplementation(async (id: string) => ({ emails: id === 'u-ed' ? ['ed@co.com'] : id === TEST_USER_ID ? ['test@example.com'] : [], name: null, avatarUrl: null }))
   process.env.STRIPE_SECRET_KEY = 'sk_test'
   delete process.env.CRON_SECRET
   await seedWorkspace()            // u-test owns ws-test ("Test Workspace")
@@ -305,6 +307,35 @@ describe('deleting an account', () => {
     expect(JSON.stringify(logs)).not.toMatch(/ed@co\.com/i)
     expect(logs.find(e => e.id === 'a3')!.details).toMatchObject({ email: 'someone-else@co.com' })   // other people's emails stay
     expect(logs.filter(e => e.action === 'member.left').map(e => e.workspaceId).sort()).toEqual(['ws-2', TEST_WS_ID])
+  })
+
+  // Launch review R-09: the address on a member row was typed by the browser, so it must not decide whose invites go.
+  it('cannot remove invites or log entries addressed to someone else, even if a member row claims that address', async () => {
+    await seedMember('u-mallory', 'editor', 'victim@co.com')                 // Mallory told the server her email was the victim's
+    vi.mocked(getUserIdentity).mockResolvedValue({ emails: ['mallory@real.test'], name: null, avatarUrl: null })
+    await testDb.insert(schema.pendingInvites).values([
+      { id: 'inv-victim', workspaceId: TEST_WS_ID, email: 'victim@co.com', permission: 'viewer', invitedBy: TEST_USER_ID },
+      { id: 'inv-mallory', workspaceId: TEST_WS_ID, email: 'mallory@real.test', permission: 'viewer', invitedBy: TEST_USER_ID },
+    ])
+    await testDb.insert(schema.auditLog).values([
+      { id: 'log-victim', workspaceId: TEST_WS_ID, actorUserId: TEST_USER_ID, action: 'invite.sent', targetType: 'invite', targetId: 'inv-victim', details: { email: 'victim@co.com', role: 'viewer' } },
+      { id: 'log-mallory', workspaceId: TEST_WS_ID, actorUserId: TEST_USER_ID, action: 'invite.sent', targetType: 'invite', targetId: 'inv-mallory', details: { email: 'mallory@real.test', role: 'viewer' } },
+    ])
+    as('u-mallory')
+    expect((await remove())._status).toBe(200)
+    expect((await testDb.select().from(schema.pendingInvites)).map(i => i.id)).toEqual(['inv-victim'])
+    const logs = await testDb.select().from(schema.auditLog)
+    expect(logs.find(l => l.id === 'log-victim')!.details).toMatchObject({ email: 'victim@co.com' })
+    expect(logs.find(l => l.id === 'log-mallory')!.details).not.toHaveProperty('email')
+  })
+
+  it('if the sign-in provider cannot say who this is, nothing is changed and a retry works', async () => {
+    vi.mocked(getUserIdentity).mockRejectedValueOnce(new Error('clerk down'))
+    expect((await remove())._status).toBe(502)
+    expect((await getWs()).deletedAt).toBeNull()
+    expect(await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))).toHaveLength(1)
+    expect(deleteUserAccount).not.toHaveBeenCalled()
+    expect((await remove())._status).toBe(200)
   })
 
   it('an owner takes their workspace with them (soft delete, Stripe cancelled, members emailed)', async () => {

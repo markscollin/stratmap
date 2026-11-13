@@ -4,7 +4,7 @@ import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { db } from './db'
 import { logAudit } from './audit'
 import { sendWorkspaceDeleted } from './email'
-import { deleteUserAccount } from './identity'
+import { deleteUserAccount, getUserIdentity } from './identity'
 import { reportError } from './sentry'
 import { auditLog, pendingInvites, userNotificationPrefs, workspaceMembers, workspaces } from '../../src/lib/db/schema'
 
@@ -115,8 +115,13 @@ export interface AccountDeletion { workspacesDeleted: number; membershipsRemoved
  * restored by them and is erased after the restore window.
  */
 export async function deleteAccount(userId: string): Promise<AccountDeletion> {
+  // The person's VERIFIED addresses, from the sign-in provider. Never the addresses stored on member rows: those were
+  // typed by the browser before R-09, and deleting invites or log entries for an address someone merely claimed would let
+  // a throwaway account cancel other people's invites. Asked first, so an outage changes nothing and a retry is clean.
+  const identity = await getUserIdentity(userId)
+  const emails = [...new Set(identity.emails.map(e => e.toLowerCase()).filter(Boolean))]
+
   const memberships = await db.select().from(workspaceMembers).where(eq(workspaceMembers.userId, userId))
-  const emails = [...new Set(memberships.map(m => m.email.toLowerCase()).filter(Boolean))]
 
   const owned = await db.select().from(workspaces).where(and(eq(workspaces.ownerId, userId), isNull(workspaces.deletedAt)))
   let workspacesDeleted = 0

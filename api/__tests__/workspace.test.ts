@@ -10,7 +10,10 @@ vi.mock('../_lib/auth', () => ({
   requireUser: vi.fn(),
 }))
 
+vi.mock('../_lib/identity', () => ({ getUserIdentity: vi.fn(), deleteUserAccount: vi.fn() }))
+
 import { requireAuth, requireUser } from '../_lib/auth'
+import { getUserIdentity } from '../_lib/identity'
 import handler from '../workspace'
 import { setupSchema, cleanDb, seedWorkspace, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
 import { createReq } from './helpers/req'
@@ -24,6 +27,7 @@ beforeEach(async () => {
   await cleanDb()
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID })
   vi.mocked(requireUser).mockResolvedValue({ userId: TEST_USER_ID })
+  vi.mocked(getUserIdentity).mockResolvedValue({ emails: ['verified@co.com'], name: 'Verified Person', avatarUrl: null })
 })
 
 describe('GET /api/workspace', () => {
@@ -113,6 +117,36 @@ describe('POST /api/workspace', () => {
     const members = await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))
     expect(members).toHaveLength(1)
     expect(members[0].permission).toBe('owner')
+  })
+
+  // Launch review R-09: the owner's email and name come from the sign-in provider, never from the request.
+  it('stores the verified email and name from the sign-in provider, ignoring what the body claims', async () => {
+    const res = createRes()
+    await handler(
+      createReq({ method: 'POST', body: { name: 'Acme', ownerRole: 'Founder/CEO', size: '11-50', email: 'ceo@victim-company.com', userName: 'Someone Else' } }) as never,
+      res as never,
+    )
+    expect(res._status).toBe(201)
+    const [member] = await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))
+    expect(member.email).toBe('verified@co.com')
+    expect(member.name).toBe('Verified Person')
+    expect(JSON.stringify(await testDb.select().from(schema.workspaceMembers))).not.toContain('victim-company')
+  })
+
+  it('stores no email at all when the provider has no verified address (never the claimed one)', async () => {
+    vi.mocked(getUserIdentity).mockResolvedValue({ emails: [], name: null, avatarUrl: null })
+    await handler(createReq({ method: 'POST', body: { name: 'Acme', ownerRole: 'CEO', size: '1-10', email: 'x@y.com' } }) as never, createRes() as never)
+    const [member] = await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))
+    expect(member.email).toBe('')
+  })
+
+  it('if the sign-in provider cannot be asked, no workspace is created and the client is told to retry', async () => {
+    vi.mocked(getUserIdentity).mockRejectedValue(new Error('clerk down'))
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'Acme', ownerRole: 'CEO', size: '1-10' } }) as never, res as never)
+    expect(res._status).toBe(503)
+    expect((res._body as { error: string }).error).toBe('identity-unavailable')
+    expect(await testDb.select().from(schema.workspaces)).toHaveLength(0)
   })
 
   it('returns 400 when required fields are missing', async () => {

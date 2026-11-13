@@ -9,6 +9,7 @@ import { db } from '../_lib/db'
 import { chunk } from '../_lib/chunk'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 import { fitsLimit, APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
+import { statusChangeNeedsAdmin } from '../../src/lib/chartStatus'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -38,6 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!body) return
       const { name, status = 'draft', templateNodes, templateEdges, templateDepts } = body
       const isSample = body.isSample === true
+      // A chart cannot start out approved, rejected or live unless an approver creates it (R-08).
+      if (statusChangeNeedsAdmin(null, status) && !(await requireRole(auth, res, 'admin'))) return
       if ((APPROVAL_CHART_STATUSES as readonly string[]).includes(status)
         && !(await requireFeature(auth.workspaceId, res, 'approval-workflow'))) return
 

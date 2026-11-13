@@ -166,8 +166,7 @@ export const WorkspaceCreate = z.object({
   name: z.string().trim().min(1).max(100),
   ownerRole: z.string().trim().min(1).max(100),
   size: z.string().trim().min(1).max(50),
-  email: z.string().max(320).optional(),
-  userName: z.string().max(200).optional(),
+  // No email or name here on purpose (R-09): the server takes both from the sign-in provider. A client that still sends them is ignored.
 })
 
 export const WorkspaceUpdate = z.object({ name: z.string().trim().min(1).max(100) })

@@ -9,6 +9,7 @@ import { db } from './_lib/db'
 import { resolvePlanTier } from './_lib/billing'
 import { softDeleteWorkspace, eraseDate } from './_lib/workspaceLifecycle'
 import { reportError } from './_lib/sentry'
+import { getUserIdentity, type UserIdentity } from './_lib/identity'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -71,6 +72,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json(ws)
       }
 
+      // Who this person is comes from the sign-in provider, not from the request body: the stored address receives
+      // workspace-deleted and comment emails and decides whose invites an account deletion removes (R-09).
+      let identity: UserIdentity
+      try {
+        identity = await getUserIdentity(user.userId)
+      } catch (err) {
+        console.error('/api/workspace POST identity', err)
+        reportError(err, { route: '/api/workspace POST', step: 'identity' })
+        return res.status(503).json({ error: 'identity-unavailable', message: "We couldn't verify your account just now. Please try again in a moment." })
+      }
+
       const workspaceId = crypto.randomUUID()
 
       const [ws] = await db
@@ -82,8 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: crypto.randomUUID(),
         workspaceId,
         userId: user.userId,
-        email: body.email ?? '',
-        name: body.userName ?? '',
+        email: identity.emails[0] ?? '',   // verified by the sign-in provider, never what the browser sent (R-09)
+        name: identity.name ?? '',
         permission: 'owner',
       })
 
