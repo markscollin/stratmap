@@ -166,7 +166,8 @@ See `docs/BILLING.md`. Summary:
 - `GET /api/workspace` returns `billing: { status, planExpiresAt, cancelAtPeriodEnd, hasBillingAccount }` and never returns Stripe ids.
   The client keeps it in `useBillingStore().subscription`.
 - `POST /api/billing/portal` (admin) opens the Customer Portal (`ManageBillingButton`). Checkout sends existing subscribers there.
-- **Idempotency:** `stripe_events` dedups webhook deliveries. A failed-payment email goes to owners and admins on the first attempt only.
+- **Idempotency:** `stripe_events` dedups webhook deliveries and survives a crash (R-06, `api/_lib/stripeEvents.ts`): a claim is marked `processed_at` when done; an unfinished claim older than 60 s is taken over by the next delivery, a fresh one answers 409.
+  A failed-payment email goes to owners and admins on the first attempt only (`emails_sent_at` stops a takeover re-sending it). `syncSubscription` links an unlinked workspace from the subscription's `workspaceId` metadata, so a lost checkout event heals on the next event. `/billing/success` says "Payment received" (not "complete") if the plan has not changed after polling; `VITE_SUPPORT_EMAIL` adds a mailto there.
 - **Seats (1.5):** flat tiers with a hard cap (`PLAN_LIMITS[tier].seats`). A seat is a member or a live pending invite (`getSeatUsage()`).
   The cap is checked on invite, on accept and on resending an expired invite. Going over returns `402 plan-limit` with `limit: 'seats'`. Nobody is ever removed.
 

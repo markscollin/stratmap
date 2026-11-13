@@ -241,7 +241,11 @@ export const aiUsage = pgTable('ai_usage', {
 export const stripeEvents = pgTable('stripe_events', {
   id: text('id').primaryKey(),                 // Stripe event id (evt_…)
   type: text('type').notNull(),
+  // When the claim was taken (or last taken over). A claim with no `processedAt` that is older than
+  // CLAIM_STALE_MS belongs to a delivery that crashed: the next delivery takes it over (launch review R-06).
   receivedAt: timestamp('received_at').notNull().defaultNow(),
+  processedAt: timestamp('processed_at'),      // set when the event was handled in full
+  emailsSentAt: timestamp('emails_sent_at'),   // set once the payment-failed emails went out, so a retry never sends them twice
 })
 
 // ─── Inferred types (for use in Phase 2 API routes) ─────────────────────────

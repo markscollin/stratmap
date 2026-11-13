@@ -100,11 +100,27 @@ export async function syncSubscription(
 ): Promise<SyncResult | null> {
   const sub = await stripe.subscriptions.retrieve(subscriptionId)
 
-  const [ws] = await db
-    .select({ id: workspaces.id, planTier: workspaces.planTier, stripeSubscriptionId: workspaces.stripeSubscriptionId })
+  const cols = { id: workspaces.id, planTier: workspaces.planTier, stripeSubscriptionId: workspaces.stripeSubscriptionId }
+  let [ws] = await db
+    .select(cols)
     .from(workspaces)
     .where(opts.workspaceId ? eq(workspaces.id, opts.workspaceId) : eq(workspaces.stripeSubscriptionId, sub.id))
     .limit(1)
+
+  // Self-heal (R-06): if the checkout event was lost, any later event for this subscription can still find its workspace,
+  // because checkout stamped our workspace id on the subscription itself (`subscription_data.metadata`). Metadata is only
+  // used to FIND the workspace, never to decide the tier (that comes from the price id). It links only a workspace that
+  // has no subscription yet: it never replaces another subscription, and a finished subscription links nothing.
+  if (!ws && !opts.workspaceId && !TERMINAL_STATUSES.has(sub.status)) {
+    const fromMetadata = sub.metadata?.workspaceId
+    if (fromMetadata) {
+      const [candidate] = await db.select({ ...cols, deletedAt: workspaces.deletedAt }).from(workspaces).where(eq(workspaces.id, fromMetadata)).limit(1)
+      if (candidate && !candidate.stripeSubscriptionId && !candidate.deletedAt) {
+        ws = candidate
+        console.warn(`[stripe] linked workspace ${ws.id} to subscription ${sub.id} from subscription metadata (checkout event was missed)`)
+      }
+    }
+  }
   if (!ws) {
     console.warn(`[stripe] no workspace for subscription ${sub.id}`)
     return null

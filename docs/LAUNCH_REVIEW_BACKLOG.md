@@ -182,7 +182,7 @@ Production behaviour: **unproven**.
 **Done when.** A signed test event against a deployed function returns 200 and upgrades a test workspace.
 
 ### R-06 A crashed webhook leaves a customer paid but not upgraded
-- [ ] Open
+- [x] Done 2026-11-13: `stripe_events.processed_at` + `emails_sent_at` (migration 0013, backfills old rows); a stale (over 60 s) unprocessed claim is taken over, a fresh one answers 409, a handler error releases at once; `syncSubscription` links a workspace from subscription metadata when no workspace is linked (checkout already set it, so no checkout change was needed); `BillingSuccessPage` no longer claims success when polling runs out. Not done: a support address (set `VITE_SUPPORT_EMAIL`; none exists in the repo). Tests: `api/__tests__/stripe-webhook.test.ts`, `src/pages/__tests__/BillingSuccessPage.test.tsx`. R-22 (reconciliation of a lost *later* event) is still open.
 
 **Problem.** The event id is inserted into `stripe_events` before processing and removed only in `catch`. If
 the function times out or is killed mid-handler, the row stays, and every Stripe retry is answered

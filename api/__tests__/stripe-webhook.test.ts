@@ -28,6 +28,7 @@ import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { claimEvent, CLAIM_STALE_MS } from '../_lib/stripeEvents'
 
 // The webhook reads the raw request stream via `for await (const chunk of req)`.
 // Mock requests must be async-iterable; we yield nothing so getRawBody returns empty
@@ -42,12 +43,13 @@ const PERIOD_END = 1_900_000_000 // 2030-03-17
 let eventSeq = 0
 
 function makeSub(over: {
-  id?: string; status?: string; price?: string; cancelAtPeriodEnd?: boolean; cancelAt?: number | null; customer?: string
+  id?: string; status?: string; price?: string; cancelAtPeriodEnd?: boolean; cancelAt?: number | null; customer?: string; metadata?: Record<string, string>
 } = {}) {
   const sub = {
     id: over.id ?? 'sub_1',
     status: over.status ?? 'active',
     customer: over.customer ?? 'cus_1',
+    metadata: over.metadata ?? {},
     cancel_at_period_end: over.cancelAtPeriodEnd ?? false,
     cancel_at: over.cancelAt ?? null,
     items: { data: [{ price: { id: over.price ?? 'price_starter' }, current_period_end: PERIOD_END }] },
@@ -325,6 +327,144 @@ describe('POST /api/webhooks/stripe', () => {
       expect((await getWs()).planTier).toBe('growth')
     })
 
+    it('a processed event is marked as processed', async () => {
+      await linkSubscription('starter'); makeSub()
+      await send(event('customer.subscription.updated', { id: 'sub_1' }, 'evt_done'))
+      const [row] = await testDb.select().from(schema.stripeEvents).where(eq(schema.stripeEvents.id, 'evt_done'))
+      expect(row.processedAt).not.toBeNull()
+    })
+  })
+
+  // Launch review R-06: a delivery that crashed after claiming the event used to block every retry for ever.
+  describe('a crashed delivery is recoverable (R-06)', () => {
+    const ago = (ms: number) => new Date(Date.now() - ms)
+    const claimRow = (id: string, over: Partial<typeof schema.stripeEvents.$inferInsert> = {}) =>
+      testDb.insert(schema.stripeEvents).values({ id, type: 'customer.subscription.updated', receivedAt: ago(0), ...over })
+
+    beforeEach(async () => { await seedMember('u-admin', 'admin', 'admin@example.com') })
+
+    it('a stale claim that was never completed is taken over, handled and marked processed', async () => {
+      await linkSubscription('starter'); makeSub({ price: 'price_growth_annual' })
+      await claimRow('evt_crashed', { receivedAt: ago(CLAIM_STALE_MS + 5_000) }) // the first delivery died here
+      const res = await send(event('customer.subscription.updated', { id: 'sub_1' }, 'evt_crashed'))
+      expect(res._body).toEqual({ received: true })
+      expect((await getWs()).planTier).toBe('growth') // the work really happened
+      const [row] = await testDb.select().from(schema.stripeEvents).where(eq(schema.stripeEvents.id, 'evt_crashed'))
+      expect(row.processedAt).not.toBeNull()
+    })
+
+    it('a fresh unfinished claim is still respected: 409 so Stripe retries later, nothing is done twice', async () => {
+      await linkSubscription('starter'); makeSub({ price: 'price_growth_annual' })
+      await claimRow('evt_busy', { receivedAt: ago(5_000) }) // another delivery is working on it right now
+      const res = await send(event('customer.subscription.updated', { id: 'sub_1' }, 'evt_busy'))
+      expect(res._status).toBe(409)
+      expect(retrieve).not.toHaveBeenCalled()
+      expect((await getWs()).planTier).toBe('starter')
+    })
+
+    it('a completed event stays a duplicate however old it is', async () => {
+      await linkSubscription('starter'); makeSub()
+      await claimRow('evt_old', { receivedAt: ago(10 * CLAIM_STALE_MS), processedAt: ago(10 * CLAIM_STALE_MS) })
+      const res = await send(event('customer.subscription.updated', { id: 'sub_1' }, 'evt_old'))
+      expect(res._body).toEqual({ received: true, duplicate: true })
+      expect(retrieve).not.toHaveBeenCalled()
+    })
+
+    it('two retries arriving together: exactly one takes the stale claim', async () => {
+      await claimRow('evt_race', { receivedAt: ago(CLAIM_STALE_MS + 5_000) })
+      const results = await Promise.all([claimEvent('evt_race', 'x'), claimEvent('evt_race', 'x'), claimEvent('evt_race', 'x')])
+      expect(results.filter(r => r === 'claimed')).toHaveLength(1)
+    })
+
+    it('after a handler error the retry is processed at once (the claim is released, not left to go stale)', async () => {
+      await linkSubscription('starter')
+      const evt = event('customer.subscription.updated', { id: 'sub_1' }, 'evt_err')
+      expect((await send(evt))._status).toBe(500) // Stripe unreachable: sub_1 unknown
+      makeSub({ price: 'price_growth_annual' })
+      expect((await send(evt))._body).toEqual({ received: true }) // no 60-second wait
+      expect((await getWs()).planTier).toBe('growth')
+    })
+
+    it('a takeover does not send the payment-failed emails a second time', async () => {
+      await linkSubscription('starter'); makeSub({ status: 'past_due' })
+      // The first delivery sent the emails, then died before marking the event processed.
+      await claimRow('evt_mail', { type: 'invoice.payment_failed', receivedAt: ago(CLAIM_STALE_MS + 5_000), emailsSentAt: ago(CLAIM_STALE_MS + 4_000) })
+      const res = await send(event('invoice.payment_failed', invoice(), 'evt_mail'))
+      expect(res._body).toEqual({ received: true })
+      expect(sendPaymentFailed).not.toHaveBeenCalled()
+      expect((await getWs()).subscriptionStatus).toBe('past_due') // the sync itself still ran
+    })
+
+    it('the emails are sent once, and recorded as sent', async () => {
+      await linkSubscription('starter'); makeSub({ status: 'past_due' })
+      await send(event('invoice.payment_failed', invoice(), 'evt_mail2'))
+      expect(sendPaymentFailed).toHaveBeenCalledTimes(2)
+      const [row] = await testDb.select().from(schema.stripeEvents).where(eq(schema.stripeEvents.id, 'evt_mail2'))
+      expect(row.emailsSentAt).not.toBeNull()
+    })
+  })
+
+  // Launch review R-06: with the checkout event lost, nothing used to link the workspace to its subscription.
+  describe('later events link a workspace whose checkout event was lost (R-06)', () => {
+    const ws = 'ws-test'
+
+    it('invoice.paid alone links the workspace from the subscription metadata and upgrades it', async () => {
+      makeSub({ price: 'price_starter', metadata: { workspaceId: ws } })
+      const res = await send(event('invoice.paid', invoice()))
+      expect(res._body).toEqual({ received: true })
+      const w = await getWs()
+      expect(w.planTier).toBe('starter')
+      expect(w.stripeSubscriptionId).toBe('sub_1')
+      expect(w.stripeCustomerId).toBe('cus_1')
+      expect(w.subscriptionStatus).toBe('active')
+    })
+
+    it('customer.subscription.updated alone does the same', async () => {
+      makeSub({ price: 'price_growth_annual', metadata: { workspaceId: ws } })
+      await send(event('customer.subscription.updated', { id: 'sub_1' }))
+      expect((await getWs()).planTier).toBe('growth')
+    })
+
+    it('the tier still comes from the price, never from metadata', async () => {
+      makeSub({ price: 'price_starter', metadata: { workspaceId: ws, tier: 'growth', planTier: 'growth' } })
+      await send(event('invoice.paid', invoice()))
+      expect((await getWs()).planTier).toBe('starter')
+    })
+
+    it('never replaces a subscription the workspace already has', async () => {
+      await linkSubscription('growth') // linked to sub_1
+      makeSub({ id: 'sub_stray', price: 'price_starter', metadata: { workspaceId: ws } })
+      await send(event('customer.subscription.updated', { id: 'sub_stray' }))
+      const w = await getWs()
+      expect(w.stripeSubscriptionId).toBe('sub_1')
+      expect(w.planTier).toBe('growth')
+    })
+
+    it('a finished subscription links nothing', async () => {
+      makeSub({ status: 'canceled', metadata: { workspaceId: ws } })
+      await send(event('customer.subscription.deleted', { id: 'sub_1' }))
+      expect((await getWs()).stripeSubscriptionId).toBeNull()
+    })
+
+    it('metadata naming an unknown or deleted workspace links nothing', async () => {
+      makeSub({ metadata: { workspaceId: 'ws-nobody' } })
+      await send(event('invoice.paid', invoice()))
+      expect((await getWs()).stripeSubscriptionId).toBeNull()
+
+      await testDb.update(schema.workspaces).set({ deletedAt: new Date() }).where(eq(schema.workspaces.id, ws))
+      subs.clear(); makeSub({ metadata: { workspaceId: ws } })
+      await send(event('invoice.paid', invoice()))
+      expect((await getWs()).stripeSubscriptionId).toBeNull()
+    })
+
+    it('a subscription with no metadata and no link is still ignored', async () => {
+      makeSub()
+      await send(event('invoice.paid', invoice()))
+      expect((await getWs()).stripeSubscriptionId).toBeNull()
+    })
+  })
+
+  describe('event types it ignores', () => {
     it('does not record event types it ignores', async () => {
       const res = await send(event('customer.created', { id: 'cus_1' }))
       expect(res._body).toEqual({ received: true })

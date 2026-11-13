@@ -26,9 +26,19 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
   `cancel_at_period_end`.
 - **Effective plan:** `resolvePlanTier()` decides which tier applies. An active admin trial wins. A scheduled cancellation
   more than 2 days past its end date counts as Free, even if the deletion webhook never arrived.
-- **Idempotency (1.4):** the webhook claims `event.id` in `stripe_events` before handling it. A duplicate delivery
-  returns `{ received: true, duplicate: true }` and does nothing. If handling fails, the claim is released, so Stripe's
-  retry runs the event again.
+- **Idempotency (1.4, made crash-proof in R-06):** the webhook *claims* `event.id` in `stripe_events` before handling it and
+  marks it `processed_at` at the end (`api/_lib/stripeEvents.ts`).
+  - Processed already → `{ received: true, duplicate: true }`, nothing is done.
+  - Claimed, not processed, **younger than 60 s** → another delivery is working on it: **409** so Stripe retries later.
+  - Claimed, not processed, **older than 60 s** (`CLAIM_STALE_MS`) → that delivery crashed or timed out; the next delivery
+    **takes the claim over** (compare-and-set, so two retries cannot both win) and handles the event again. Handlers re-read Stripe, so repeating is safe.
+  - A handler error makes the claim stale at once, so Stripe's retry does not wait a minute.
+  - The failed-payment emails are guarded separately (`emails_sent_at`), so a takeover never sends them twice.
+- **A lost checkout event heals itself (R-06):** checkout stamps `workspaceId` on the subscription (`subscription_data.metadata`).
+  If an event arrives for a subscription no workspace is linked to, `syncSubscription` finds the workspace from that metadata and links it,
+  but only if the workspace has **no** subscription yet, is not deleted, and the subscription is not finished. The tier still comes from the price id.
+- **Success page (R-06):** `/billing/success` polls `/api/workspace` for about 10 s. If the plan has not changed it says "Payment received, your plan
+  has not updated yet" with a **Check again** button, never "Your upgrade is complete". Set `VITE_SUPPORT_EMAIL` (build time) to show a support address there.
 - **Handled events:** `checkout.session.completed`, `customer.subscription.created|updated|deleted|paused|resumed`,
   `invoice.paid` and `invoice.payment_failed`. Other event types are acknowledged and not recorded.
 - **Checkout:** if a workspace already has a subscription, Checkout returns a **Customer Portal** URL instead

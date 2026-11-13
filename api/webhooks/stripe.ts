@@ -6,7 +6,8 @@ import { reportError } from '../_lib/sentry'
 import { sendPaymentFailed } from '../_lib/email'
 import { getAppUrl } from '../_lib/url'
 import { invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
-import { stripeEvents, workspaces, workspaceMembers } from '../../src/lib/db/schema'
+import { claimEvent, markProcessed, releaseClaim, emailsAlreadySent, markEmailsSent } from '../_lib/stripeEvents'
+import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 import { track } from '../_lib/analytics'
 
 // Disable body parsing so we can verify the Stripe signature against raw bytes
@@ -61,21 +62,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!HANDLED_EVENTS.has(event.type)) return res.json({ received: true })
 
-  // Idempotency (roadmap 1.4): claim the event id first. A replayed or duplicate
-  // delivery finds it taken and does nothing, so emails are never sent twice.
+  // Idempotency (roadmap 1.4) that survives a crash (R-06): see api/_lib/stripeEvents.ts.
   let claimed = false
   try {
-    const rows = await db.insert(stripeEvents)
-      .values({ id: event.id, type: event.type })
-      .onConflictDoNothing()
-      .returning({ id: stripeEvents.id })
-    if (rows.length === 0) return res.json({ received: true, duplicate: true })
+    const claim = await claimEvent(event.id, event.type)
+    if (claim === 'duplicate') return res.json({ received: true, duplicate: true })
+    // Another delivery is working on it. A 409 makes Stripe retry later: if that delivery dies, the retry takes over.
+    if (claim === 'in-progress') return res.status(409).json({ error: 'in-progress' })
     claimed = true
 
     await handleEvent(stripe, event)
+    await markProcessed(event.id)
   } catch (err) {
-    // Release the claim so Stripe's retry processes the event again.
-    if (claimed) await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id)).catch(() => {})
+    // Give the claim up so Stripe's retry processes the event again at once.
+    if (claimed) await releaseClaim(event.id).catch(() => {})
     console.error('[stripe] webhook handler error:', err)
     reportError(err, { route: '/api/webhooks/stripe', eventType: event.type })
     return res.status(500).json({ error: 'Webhook handler failed' })
@@ -141,7 +141,11 @@ async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
         result && event.type === 'invoice.payment_failed'
         && invoice.attempt_count === 1 && invoice.billing_reason !== 'subscription_create'
       ) {
-        await emailAdminsPaymentFailed(result.workspaceId, invoice)
+        // A retry of this event (after a crash) must not email twice.
+        if (!(await emailsAlreadySent(event.id))) {
+          await emailAdminsPaymentFailed(result.workspaceId, invoice)
+          await markEmailsSent(event.id)
+        }
       }
       return
     }
