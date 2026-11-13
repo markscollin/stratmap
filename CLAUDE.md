@@ -68,6 +68,15 @@ content reviewed by a lawyer.
 
 ---
 
+## Launch review backlog (2026-11-13)
+
+**Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
+(ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
+and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
+- **Known broken until fixed (do not rely on them):** canvas saves fail silently (R-01), undo/redo is local-only (R-02), a reporting line
+  drawn in the current session cannot be deleted until reload (R-03), "Duplicate chart" makes an empty chart (R-10).
+- Real test counts at the review: **614 frontend + 638 API**, all passing (the counts elsewhere in this file are older).
+
 ## Phase 0 security pass (2026-11-05)
 
 See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:

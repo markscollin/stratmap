@@ -1,6 +1,9 @@
 # StratMap Development Backlog
 *All remaining work across Sprints 2–7. Check off tasks as they're completed.*
 
+> **This file is historical (the original sprint list).** The live backlog is
+> [`docs/LAUNCH_REVIEW_BACKLOG.md`](docs/LAUNCH_REVIEW_BACKLOG.md) (launch review, 2026-11-13).
+
 ---
 
 ## Sprint 2 — Node Management + Reporting Lines

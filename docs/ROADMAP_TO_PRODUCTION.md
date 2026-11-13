@@ -2,6 +2,9 @@
 
 *Review date: 2026-11-04. Based on a read of the codebase at commit `80e4cb3`.*
 
+> **Follow-up review, 2026-11-13 (commit `b959041`):** the open work is now tracked in
+> [`LAUNCH_REVIEW_BACKLOG.md`](LAUNCH_REVIEW_BACKLOG.md). Items still open here (3.5 to 3.8, 3.10) are listed there as owner actions.
+
 ---
 
 ## 1. Product Review
