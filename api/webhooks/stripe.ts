@@ -9,17 +9,10 @@ import { invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
 import { claimEvent, markProcessed, releaseClaim, emailsAlreadySent, markEmailsSent } from '../_lib/stripeEvents'
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 import { track } from '../_lib/analytics'
+import { readRawBody } from '../_lib/rawBody'
 
-// Disable body parsing so we can verify the Stripe signature against raw bytes
-export const config = { api: { bodyParser: false } }
-
-async function getRawBody(req: VercelRequest): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-  return Buffer.concat(chunks)
-}
+// The signature is computed over the raw bytes, which `readRawBody` gets without depending on any framework config
+// (Next.js's `config.api.bodyParser` does nothing under @vercel/node; see api/_lib/rawBody.ts and docs/BILLING.md, R-05).
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -33,12 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let event: Stripe.Event
 
-  // In production Vercel Functions, bodyParser:false lets us read the raw stream
-  // and verify the Stripe signature byte-for-byte.
-  // In vercel dev, the body is pre-parsed as JSON before our handler runs —
-  // so the stream is empty. We skip signature verification locally since
-  // localhost is not publicly accessible to attackers.
-  const rawBody = await getRawBody(req)
+  // The raw bytes, so the Stripe signature can be verified byte for byte. In `vercel dev` the body may arrive pre-parsed
+  // with nothing to read; that is the only case where verification is skipped, and never on a deployed function.
+  const rawBody = await readRawBody(req)
 
   if (rawBody.length > 0 && sig) {
     try {
@@ -51,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // vercel dev pre-parsed the body — safe to skip verification in local dev only,
     // never on a deployed (preview or production) function.
     if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'development') {
-      console.error('[stripe] could not read raw body on a deployed function')
+      console.error('[stripe] could not read raw body on a deployed function', { hasSignature: !!sig, contentType: req.headers['content-type'], bodyType: typeof req.body })
       return res.status(400).json({ error: 'Could not read raw body' })
     }
     console.warn('[stripe] skipping signature verification in dev mode')

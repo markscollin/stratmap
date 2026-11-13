@@ -159,7 +159,7 @@ Vercel, Stripe, Resend, Anthropic, Sentry, PostHog), bump `LAST_UPDATED`. Add a 
 `src/pages/__tests__/` that fails if the rendered pages contain `[` … `]` placeholders or "Template notice".
 
 ### R-05 Stripe webhook body read is unproven on Vercel
-- [ ] Open
+- [ ] Code done 2026-11-13, **deployed check still owed (owner, 5 minutes: `docs/BILLING.md` "Release check for the webhook body")**. The suggested `config = { helpers: false }` was NOT used: `config` in `@vercel/node` is the *builder* config (vercel.json), not an in-file export, so that line would have done nothing. Instead: `api/_lib/rawBody.ts` reads the body through `req.on('data'|'end')` (the only way `@vercel/node`'s helper replays it; a `for await` loop gets nothing), with a 2 s guard against a hang; the Next.js `bodyParser` export was removed; tests run the real handler with a real Stripe signature behind an emulation of the helper (`api/__tests__/stripe-raw-body.test.ts`). Still unproven: that Vercel's production runtime replays the body like the dev helper.
 
 **Problem.** `export const config = { api: { bodyParser: false } }` is Next.js syntax. `@vercel/node` only
 honours `helpers: false` (or `NODEJS_HELPERS=0`). Its dev server reads the whole body before the handler runs,

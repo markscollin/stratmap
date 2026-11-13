@@ -30,12 +30,11 @@ import * as schema from '../../src/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { claimEvent, CLAIM_STALE_MS } from '../_lib/stripeEvents'
 
-// The webhook reads the raw request stream via `for await (const chunk of req)`.
-// Mock requests must be async-iterable; we yield nothing so getRawBody returns empty
-// and the handler falls through to the dev pre-parsed-body path.
+// The webhook reads the raw request bytes (api/_lib/rawBody.ts). These mock requests are not streams, so the raw
+// body is empty and the handler falls through to the dev pre-parsed-body path. The real byte path is covered by
+// stripe-raw-body.test.ts.
 function webhookReq(body: unknown) {
   const req = createReq({ method: 'POST', body, headers: {} }) as unknown as Record<PropertyKey, unknown>
-  req[Symbol.asyncIterator] = async function* () { /* empty raw body */ }
   return req
 }
 
