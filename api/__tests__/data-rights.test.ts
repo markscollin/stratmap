@@ -258,13 +258,13 @@ describe('the daily purge', () => {
 
     const res = await run('Bearer cron-secret')
     expect(res._status).toBe(200)
-    expect(res._body).toEqual({ purged: 1, trashPurged: 0 })
+    expect(res._body).toEqual({ purged: 1, trashPurged: 0, orphanJds: 0 })
 
     expect(Object.values(await rowsOf('ws-old')).every(n => n === 0), JSON.stringify(await rowsOf('ws-old'))).toBe(true)
     for (const kept of ['ws-recent', 'ws-live']) {
       expect(Object.values(await rowsOf(kept)).every(n => n >= 1), kept).toBe(true)
     }
-    expect((await run('Bearer cron-secret'))._body).toEqual({ purged: 0, trashPurged: 0 })
+    expect((await run('Bearer cron-secret'))._body).toEqual({ purged: 0, trashPurged: 0, orphanJds: 0 })
   })
 })
 

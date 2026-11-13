@@ -16,7 +16,8 @@ import nodeHandler from '../charts/[id]/nodes/[nodeId]'
 import restoreHandler from '../charts/[id]/nodes/[nodeId]/restore'
 import { PLAN_LIMITS } from '../../src/lib/plans'
 import cronHandler from '../cron/purge-deleted'
-import { purgeExpiredTrash, TRASH_DAYS } from '../_lib/nodeTrash'
+import jdHandler from '../charts/[id]/jd/[nodeId]'
+import { purgeExpiredTrash, purgeOrphanJobDescriptions, TRASH_DAYS } from '../_lib/nodeTrash'
 import {
   setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, seedMember, testDb,
   TEST_USER_ID, TEST_WS_ID, TEST_CHART_ID, TEST_NODE_ID,
@@ -213,7 +214,67 @@ describe('the daily job', () => {
       await testDb.insert(schema.deletedNodes).values({ id: 'old', chartId: TEST_CHART_ID, nodeId: 'ancient', deletedBy: 'x', deletedAt: ago(TRASH_DAYS + 1), data: { node: {} as never, comments: [], edges: [] } })
       const res = await call(cronHandler, { method: 'GET', headers: { authorization: 'Bearer cron-secret' } })
       expect(res._status).toBe(200)
-      expect(res._body).toEqual({ purged: 0, trashPurged: 1 })
+      expect(res._body).toEqual({ purged: 0, trashPurged: 1, orphanJds: 0 })
     } finally { delete process.env.CRON_SECRET }
+  })
+})
+
+
+// R-38: a job description (salary band included) must not outlive its role, and Undo must bring it back.
+describe('job descriptions follow their role (R-38)', () => {
+  const jd = (nodeId: string, updatedAt = new Date()) => ({
+    id: `jd-${nodeId}`, nodeId, chartId: TEST_CHART_ID, responsibilities: '<p>Lead</p>', requirements: '<p>10y</p>',
+    salaryBandMin: 100000, salaryBandMax: 150000, salaryCurrency: 'GBP', version: 3, updatedAt, updatedBy: TEST_USER_ID,
+  })
+
+  it('deleting the role removes its job description from job_descriptions', async () => {
+    await testDb.insert(schema.jobDescriptions).values([jd(TEST_NODE_ID), jd('boss')])
+    await del()
+    expect((await testDb.select().from(schema.jobDescriptions)).map(j => j.nodeId)).toEqual(['boss'])
+  })
+
+  it('Undo brings the job description back whole, with its salary band and a real date', async () => {
+    await testDb.insert(schema.jobDescriptions).values(jd(TEST_NODE_ID, new Date('2026-11-02T09:00:00Z')))
+    await del()
+    expect((await restore())._status).toBe(201)
+    const [back] = await testDb.select().from(schema.jobDescriptions)
+    expect(back).toMatchObject({ id: `jd-${TEST_NODE_ID}`, salaryBandMin: 100000, salaryBandMax: 150000, salaryCurrency: 'GBP', version: 3, responsibilities: '<p>Lead</p>' })
+    expect(back.updatedAt).toEqual(new Date('2026-11-02T09:00:00Z'))
+  })
+
+  it('restores a copy made before R-38 (no job description in it) without error', async () => {
+    await testDb.insert(schema.deletedNodes).values({
+      id: 'legacy', chartId: TEST_CHART_ID, nodeId: 'old-role', deletedBy: 'x',
+      data: { node: { id: 'old-role', chartId: TEST_CHART_ID, name: 'Old', title: 'T', x: 0, y: 0 } as never, comments: [], edges: [] },
+    })
+    expect((await restore('old-role'))._status).toBe(201)
+    expect(await testDb.select().from(schema.jobDescriptions)).toHaveLength(0)
+  })
+
+  it('a first save of a job description for a role that is not in the chart is a 404 and creates nothing', async () => {
+    await testDb.update(schema.workspaces).set({ planTier: 'starter' }) // job descriptions are a paid feature
+    await del()
+    const res = await call(jdHandler, { method: 'PUT', query: q(), body: { responsibilities: '<p>late autosave</p>' } })
+    expect(res._status).toBe(404)
+    expect(await testDb.select().from(schema.jobDescriptions)).toHaveLength(0)
+  })
+
+  it('the daily purge erases orphaned job descriptions older than a day and leaves everything else', async () => {
+    await testDb.insert(schema.jobDescriptions).values([
+      jd('ghost', ago(3)),                 // role gone, old: erased
+      jd('ghost-fresh', new Date()),       // role gone but just written (its role may still be saving): kept
+      jd(TEST_NODE_ID, ago(3)),            // role exists: kept
+    ])
+    expect(await purgeOrphanJobDescriptions()).toBe(1)
+    expect((await testDb.select().from(schema.jobDescriptions)).map(j => j.nodeId).sort()).toEqual(['ghost-fresh', TEST_NODE_ID].sort())
+  })
+
+  it('the cron endpoint runs the orphan clean-up and reports it', async () => {
+    process.env.CRON_SECRET = 'test-secret'
+    await testDb.insert(schema.jobDescriptions).values(jd('ghost', ago(3)))
+    const res = await call(cronHandler, { method: 'GET', headers: { authorization: 'Bearer test-secret' } })
+    expect(res._status).toBe(200)
+    expect(res._body).toMatchObject({ orphanJds: 1 })
+    delete process.env.CRON_SECRET
   })
 })

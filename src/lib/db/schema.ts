@@ -357,6 +357,8 @@ export interface DeletedNodeData {
   node: typeof nodes.$inferSelect
   comments: (typeof roleComments.$inferSelect)[]
   edges: (typeof edges.$inferSelect)[]
+  /** The role's job description rows, salary band included (R-38). Absent in copies made before R-38. */
+  jobDescriptions?: (typeof jobDescriptions.$inferSelect)[]
 }
 
 export const deletedNodes = pgTable('deleted_nodes', {

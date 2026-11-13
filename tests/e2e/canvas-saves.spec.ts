@@ -162,6 +162,31 @@ test.describe.serial('canvas saves', () => {
       await expect(page.getByRole('alert')).toHaveCount(0)
     })
 
+    test('R-38: deleting a role takes its job description (salary band too); undo brings it back', async () => {
+      await addRole(page, 'Jo Described')
+      await settled(c => c.nodes.some(n => n.name === 'Jo Described'))
+      const jo = (await serverChart(page)).nodes.find(n => n.name === 'Jo Described')!.id
+      const jdUrl = `/api/charts/${chartId(page)}/jd/${jo}`
+      const headers = { 'X-Dev-User': slug }
+      const saved = await ctx.request.put(jdUrl, { headers, data: { responsibilities: '<p>Keep the lights on</p>', salaryBandMin: 70000, salaryBandMax: 90000, salaryCurrency: 'GBP' } })
+      expect(saved.ok()).toBe(true)
+
+      await roleCard('Jo Described').dblclick()
+      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page.getByRole('button', { name: 'Confirm' }).click()
+      await expect(roleCard('Jo Described')).toHaveCount(0)
+      await settled(c => !c.nodes.some(n => n.id === jo))
+      // Gone from the server: the lookup now answers the empty default, and a late autosave cannot recreate it.
+      expect(JSON.stringify(await (await ctx.request.get(jdUrl, { headers })).json())).not.toContain('Keep the lights on')
+      expect((await ctx.request.put(jdUrl, { headers, data: { responsibilities: '<p>late</p>' } })).status()).toBe(404)
+
+      await press('Control+z')
+      await expect(roleCard('Jo Described')).toBeVisible()
+      await settled(c => c.nodes.some(n => n.id === jo))
+      const back = await (await ctx.request.get(jdUrl, { headers })).json()
+      expect(back).toMatchObject({ responsibilities: '<p>Keep the lights on</p>', salaryBandMin: 70000, salaryBandMax: 90000, salaryCurrency: 'GBP' })
+    })
+
     test('add → undo → reload: the role is gone; redo brings it back', async () => {
       await addRole(page, 'Vic Temporary')
       await settled(c => c.nodes.some(n => n.name === 'Vic Temporary'))

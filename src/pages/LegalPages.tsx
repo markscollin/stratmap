@@ -106,8 +106,8 @@ export function PrivacyPage() {
         descriptions, members and activity log. Backups are overwritten on their normal schedule. Records we are
         legally required to keep, such as invoices, are retained as the law requires. You can also delete your own
         account in Settings: you leave every workspace, your sign-in account is deleted, and a workspace you own is
-        deleted with you under the same 30-day rule. When you delete a single role, we keep a copy of it, its comments and
-        its reporting lines for 3 days so that Undo can bring it back, and then erase it. The activity log records who changed members, sharing and
+        deleted with you under the same 30-day rule. When you delete a single role, we keep a copy of it, its comments, its job description
+        (including any salary band) and its reporting lines for 3 days so that Undo can bring it back, and then erase it. The activity log records who changed members, sharing and
         salary bands (never salary amounts) and is kept with the workspace it belongs to.
       </p>
 

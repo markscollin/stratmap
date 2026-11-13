@@ -117,6 +117,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.json(redactSalary(updated, permission))
       }
 
+      // A job description belongs to a role that exists. Without this a late autosave after a delete leaves an orphan (R-38).
+      const [role] = await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))).limit(1)
+      if (!role) return res.status(404).json({ error: 'Role not found' })
+
       const [created] = await db
         .insert(jobDescriptions)
         .values({

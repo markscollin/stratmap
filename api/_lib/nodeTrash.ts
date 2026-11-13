@@ -1,6 +1,6 @@
-import { and, eq, lt } from 'drizzle-orm'
+import { and, eq, lt, sql } from 'drizzle-orm'
 import { db } from './db'
-import { deletedNodes } from '../../src/lib/db/schema'
+import { deletedNodes, jobDescriptions } from '../../src/lib/db/schema'
 
 /** How long a deleted role can be brought back. Undo only needs minutes; this is the outer limit (data-protection: keep it short). */
 export const TRASH_DAYS = 3
@@ -13,5 +13,20 @@ export async function purgeExpiredTrash(chartId?: string): Promise<number> {
     .delete(deletedNodes)
     .where(and(lt(deletedNodes.deletedAt, trashCutoff()), chartId ? eq(deletedNodes.chartId, chartId) : undefined))
     .returning({ id: deletedNodes.id })
+  return gone.length
+}
+
+/**
+ * Erases job descriptions whose role no longer exists (R-38): rows orphaned before deletes took them along. Only rows
+ * untouched for a day, so one written a moment before its role finished saving is never caught. Returns how many.
+ */
+export async function purgeOrphanJobDescriptions(): Promise<number> {
+  const gone = await db
+    .delete(jobDescriptions)
+    .where(and(
+      lt(jobDescriptions.updatedAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+      sql`not exists (select 1 from nodes where nodes.id = ${jobDescriptions.nodeId} and nodes.chart_id = ${jobDescriptions.chartId})`,
+    ))
+    .returning({ id: jobDescriptions.id })
   return gone.length
 }

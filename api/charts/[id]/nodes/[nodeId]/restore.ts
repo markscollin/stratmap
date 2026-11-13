@@ -6,7 +6,7 @@ import { claimRevision } from '../../../../_lib/revision'
 import { runAtomically } from '../../../../_lib/atomic'
 import { trashCutoff } from '../../../../_lib/nodeTrash'
 import { db } from '../../../../_lib/db'
-import { charts, nodes, edges, roleComments, deletedNodes } from '../../../../../src/lib/db/schema'
+import { charts, nodes, edges, roleComments, deletedNodes, jobDescriptions } from '../../../../../src/lib/db/schema'
 import { fitsLimit } from '../../../../../src/lib/plans'
 
 // POST /api/charts/:id/nodes/:nodeId/restore — Undo of a role delete (launch review R-02, owner decision D-1).
@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!fitsLimit(plan.limits.maxNodesPerChart, nodeCount)) return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
 
     // A line comes back only if the role at its other end is still in the chart (it may have been deleted since).
-    const { node, comments, edges: lines } = copy.data
+    const { node, comments, edges: lines, jobDescriptions: jds = [] } = copy.data
     const others = [...new Set(lines.map(l => (l.sourceId === nodeId ? l.targetId : l.sourceId)))]
     const stillThere = new Set(others.length
       ? (await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.chartId, chartId), inArray(nodes.id, others)))).map(n => n.id)
@@ -59,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...(commentsBack.length ? [d.insert(roleComments).values(commentsBack.map(c => ({
         ...c, createdAt: new Date(c.createdAt), editedAt: asDate(c.editedAt), deletedAt: asDate(c.deletedAt), resolvedAt: asDate(c.resolvedAt),
       }))).onConflictDoNothing()] : []),
+      ...(jds.length ? [d.insert(jobDescriptions).values(jds.map(j => ({ ...j, updatedAt: new Date(j.updatedAt) }))).onConflictDoNothing()] : []),
       ...(linesBack.length ? [d.insert(edges).values(linesBack).onConflictDoNothing()] : []),
       d.delete(deletedNodes).where(eq(deletedNodes.id, copy.id)),
     ])

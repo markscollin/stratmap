@@ -8,7 +8,7 @@ import { NodeUpdate } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
 import { runAtomically } from '../../../_lib/atomic'
 import { purgeExpiredTrash } from '../../../_lib/nodeTrash'
-import { charts, nodes, edges, roleComments, deletedNodes } from '../../../../src/lib/db/schema'
+import { charts, nodes, edges, roleComments, deletedNodes, jobDescriptions } from '../../../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -53,17 +53,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Keep a copy for a few days so Undo can bring back the role with its comments and lines (D-1, R-02).
       // The reporting lines go with the role: they have no foreign key, so without this they were left dangling.
       const touching = or(eq(edges.sourceId, nodeId), eq(edges.targetId, nodeId))
-      const [comments, lines] = await Promise.all([
+      const jdMatch = and(eq(jobDescriptions.chartId, chartId), eq(jobDescriptions.nodeId, nodeId))
+      const [comments, lines, jds] = await Promise.all([
         db.select().from(roleComments).where(and(eq(roleComments.chartId, chartId), eq(roleComments.nodeId, nodeId))),
         db.select().from(edges).where(and(eq(edges.chartId, chartId), touching)),
+        db.select().from(jobDescriptions).where(jdMatch),
       ])
-      const copy = { id: crypto.randomUUID(), chartId, nodeId, deletedBy: auth.userId, deletedAt: new Date(), data: { node, comments, edges: lines } }
+      const copy = { id: crypto.randomUUID(), chartId, nodeId, deletedBy: auth.userId, deletedAt: new Date(), data: { node, comments, edges: lines, jobDescriptions: jds } }
       await runAtomically(d => [
         d.insert(deletedNodes).values(copy).onConflictDoUpdate({
           target: [deletedNodes.chartId, deletedNodes.nodeId],
           set: { deletedBy: copy.deletedBy, deletedAt: copy.deletedAt, data: copy.data },
         }),
         d.delete(edges).where(and(eq(edges.chartId, chartId), touching)),
+        d.delete(jobDescriptions).where(jdMatch), // R-38: the job description (and salary band) goes with the role; the copy above keeps it for Undo
         d.delete(nodes).where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))), // comments cascade
       ])
       // Tidy-up of this chart's expired copies; the daily job covers the rest. Never fails the delete.

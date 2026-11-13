@@ -544,7 +544,7 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 ## P3: later and housekeeping
 
 ### R-38 Job descriptions are orphaned when a role is deleted
-- [ ] Open
+- [x] Done 2026-11-13: delete removes the JD rows in the same atomic batch and keeps them in the 3-day `deleted_nodes` copy (jsonb, so **no migration**; the old copies restore fine without them); restore puts them back with real dates. A first JD save for a role that is not in the chart is now 404, so a late autosave cannot orphan one. Existing orphans: **not a one-off migration** (the backlog's suggestion) but the daily purge, which also catches future ones, and only touches rows older than a day so a JD written just before its role finished saving is safe. Privacy text mentions the JD. Tests: `node-trash.test.ts` (6 new), e2e in `canvas-saves.spec.ts`.
 
 **Problem (found 2026-11-13 while building R-02).** `job_descriptions.node_id` has no foreign key (`schema.ts`), so deleting a role leaves its JD row behind, salary band included, forever. Nothing shows it, but it is personal/compensation data that outlives the role, it is still in any query that selects by chart, and a later role that reuses the id (undo does) silently re-attaches it.
 
