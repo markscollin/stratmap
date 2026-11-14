@@ -4,6 +4,7 @@ import { api, ApiError } from '../../lib/apiClient'
 import { downloadText } from '../../lib/csvSafe'
 import { setSelectedWorkspaceId } from '../../lib/workspaceSelection'
 import { useUserStore } from '../../store/userStore'
+import { useBillingStore } from '../../store/billingStore'
 import { usePermission } from '../../hooks/usePermission'
 import { useSignOut } from '../auth/useSignOut'
 
@@ -19,6 +20,8 @@ const input = { width: '100%', boxSizing: 'border-box', padding: '9px 12px', bac
 
 export function DataRightsSection() {
   const { workspace } = useUserStore()
+  const paidTier = useBillingStore(st => st.plan.tier)
+  const paidUntil = useBillingStore(st => st.subscription.planExpiresAt)
   const { permission, canAdmin } = usePermission()
   const isOwner = permission === 'owner'
   const signOut = useSignOut()
@@ -85,9 +88,16 @@ export function DataRightsSection() {
         {isOwner && workspace && (
           <div style={{ marginBottom: 20 }}>
             <p style={small}>
-              <strong>Delete this workspace.</strong> Everyone loses access immediately, the subscription is cancelled and members are emailed.
-              You can restore it for 30 days (on the Free plan); after that everything in it is permanently erased.
+              <strong>Delete this workspace.</strong> Everyone loses access immediately and members are emailed.
+              You can restore it for 30 days; after that everything in it is permanently erased.
             </p>
+            {paidTier !== 'free' && (
+              <p style={small} data-testid="delete-paid-note">
+                Your paid plan <strong>will not renew</strong>, and it is not refunded or lost: it stays active until
+                {paidUntil ? <> <strong>{new Date(paidUntil).toLocaleDateString()}</strong>, the end of the period you have paid for</> : ' the end of the period you have paid for'}.
+                If you restore the workspace before then, it carries on with the same plan until that date.
+              </p>
+            )}
             {open !== 'workspace' ? (
               <button style={dangerBtn(true)} onClick={() => toggle('workspace')}>Delete workspace…</button>
             ) : (

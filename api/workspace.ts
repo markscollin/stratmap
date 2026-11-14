@@ -131,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Delete the workspace (roadmap 4.2): owner only, and only after typing its name. It is hidden at once, the
-    // subscription is cancelled, members are emailed, and the owner can restore it for 30 days.
+    // subscription stops renewing at the end of the paid period (D-4), members are emailed, and the owner can restore it for 30 days.
     if (req.method === 'DELETE') {
       const auth = await requireAuth(req, res)
       if (!auth) return

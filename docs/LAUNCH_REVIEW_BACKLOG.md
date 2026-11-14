@@ -417,7 +417,7 @@ it returns `/billing/success`, so production without the key would show "Welcome
 Make the demo success path dev-only (same rule as R-16); on a deployed env return 503 and report it.
 
 ### R-21 Deleting a workspace forfeits the paid period without warning
-- [ ] Open
+- [x] Done 2026-11-14 (**D-4: stop renewal, keep the plan until the period ends**). Delete now calls `subscriptions.update(id, { cancel_at_period_end: true })` instead of cancelling at once: no refund is needed and nothing is forfeited. The workspace keeps its plan, period end and subscription link while hidden; a restore inside the 30 days gives back the same plan until the period ends (it shows "cancels on …"; resume in the portal to keep it). When Stripe ends it, the normal webhook drops the workspace to Free whether or not it was restored. If Stripe cannot be told, nothing is deleted (502, as before); a subscription Stripe no longer has falls back to Free as before. Delete dialog (`DataRightsSection`), the privacy retention text and the member email say it. **After the 30 days the workspace is erased but an annual subscription may still be running to its period end (not billed again).** Tests: `data-rights.test.ts`, `stripe-webhook.test.ts`, `dataRights.test.tsx`, e2e in `small-fixes.spec.ts`. `docs/BILLING.md` updated.
 
 **Problem (reported).** Delete cancels the subscription immediately with no refund, and restore brings the
 workspace back on Free. An annual customer who deletes by mistake loses the rest of the year.
@@ -636,9 +636,9 @@ allow-list matching the TipTap schema. Add a test with `<img onerror>` and `<scr
 |---|---|---|
 | D-1 | Undo of a role delete: soft-delete window, or warn that the JD and comments are gone | R-02 (**decided 2026-11-13: soft-delete window**) |
 | D-2 | Monthly AI cap for Growth and Enterprise, and the wording on the pricing page | R-07 |
-| D-3 | New-workspace trial (14 days of Growth?) or a small Free allowance of paid features | R-18 |
-| D-4 | Delete a paid workspace: prorated refund, or keep the plan until period end | R-21 |
-| D-5 | Which role fields a public share link may show (`location`, `startDate`, `avatarUrl`) | R-26 |
+| D-3 | New-workspace trial (14 days of Growth?) or a small Free allowance of paid features | R-18 (**decided 2026-11-14: 14-day Growth trial for every new workspace**) |
+| D-4 | Delete a paid workspace: prorated refund, or keep the plan until period end | R-21 (**decided 2026-11-14: stop renewal, keep the plan until period end, also through a restore**) |
+| D-5 | Which role fields a public share link may show (`location`, `startDate`, `avatarUrl`) | R-26 (**decided 2026-11-14: all three may be shown**) |
 
 ## Reviewed and found sound (do not redo)
 

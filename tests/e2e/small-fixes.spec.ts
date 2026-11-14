@@ -58,6 +58,14 @@ test.describe.serial('small launch fixes', () => {
     expect(copy.status).toBe('draft')
   })
 
+  test('R-21: the delete-workspace area tells a paid owner the plan will not renew and is not lost', async () => {
+    await page.goto('/settings')
+    await expect(page.getByRole('button', { name: 'Delete workspace…' })).toBeVisible()
+    const note = page.getByTestId('delete-paid-note')
+    await expect(note).toContainText('will not renew')
+    await expect(note).toContainText('not refunded or lost')
+  })
+
   test('R-15: an unknown URL shows a 404 page with a way back, and does not bounce away', async () => {
     await page.goto('/this-page-does-not-exist')
     await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()

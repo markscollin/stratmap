@@ -130,7 +130,7 @@ export async function sendWorkspaceDeleted(opts: {
   const date = opts.eraseOn.toISOString().slice(0, 10)
   const subject = `${opts.workspaceName} was deleted on StratMap`.replace(/[\r\n]+/g, ' ')
   const body = opts.isOwner
-    ? `<p style="font-size:14px;line-height:1.6">You deleted <strong>${ws}</strong>. Its members no longer have access and its subscription was cancelled.</p>
+    ? `<p style="font-size:14px;line-height:1.6">You deleted <strong>${ws}</strong>. Its members no longer have access and its subscription will not renew.</p>
        <p style="font-size:14px;line-height:1.6">You can restore it until <strong>${date}</strong> by signing in to StratMap. After that date everything in it is permanently erased. A restored workspace starts on the Free plan.</p>`
     : `<p style="font-size:14px;line-height:1.6">The owner of <strong>${ws}</strong> has deleted it, so you no longer have access to it.</p>
        <p style="font-size:14px;line-height:1.6">The workspace and everything in it will be permanently erased on <strong>${date}</strong>. If you need anything from it, ask the owner, who can still restore it until then.</p>`

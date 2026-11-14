@@ -11,7 +11,7 @@ import { auditLog, pendingInvites, userNotificationPrefs, workspaceMembers, work
 // Data rights (roadmap 4.2): deleting a workspace, restoring it, erasing it for good, and deleting an account.
 //
 // Deleting a workspace is a SOFT delete (owner-decided): the row is marked, every route stops seeing it at once
-// (auth.ts, share links), the subscription is cancelled and members are emailed. The owner can restore it for
+// (auth.ts, share links), the subscription is set to end at the close of the paid period (D-4: no refund, no forfeit) and members are emailed. The owner can restore it for
 // RESTORE_DAYS days; a daily job (api/cron/purge-deleted.ts) then erases it, and the database cascades remove
 // every chart, role, job description, member, invite, template, plan and audit row that belonged to it.
 
@@ -20,17 +20,21 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export const eraseDate = (deletedAt: Date) => new Date(deletedAt.getTime() + RESTORE_DAYS * DAY_MS)
 
-/** Cancels the subscription now (no refund, no further charges). A missing key or subscription is a no-op; throws if Stripe fails. */
-async function cancelSubscription(subscriptionId: string | null): Promise<boolean> {
-  if (!subscriptionId || !process.env.STRIPE_SECRET_KEY) return false
+/**
+ * Stops a subscription from renewing at the end of the period that is already paid for (owner decision D-4, R-21): nobody is
+ * charged again, nobody is refunded, and the paid plan is not thrown away if the workspace is restored inside the window.
+ * 'none' = nothing to do (no key, no subscription); 'gone' = Stripe no longer has it; throws if Stripe fails.
+ */
+async function endAtPeriodEnd(subscriptionId: string | null): Promise<'scheduled' | 'gone' | 'none'> {
+  if (!subscriptionId || !process.env.STRIPE_SECRET_KEY) return 'none'
   try {
-    await new Stripe(process.env.STRIPE_SECRET_KEY).subscriptions.cancel(subscriptionId)
+    await new Stripe(process.env.STRIPE_SECRET_KEY).subscriptions.update(subscriptionId, { cancel_at_period_end: true })
+    return 'scheduled'
   } catch (err) {
-    // Already cancelled in Stripe: that is the state we want.
-    if ((err as { code?: string }).code === 'resource_missing') return true
+    // Already gone from Stripe: that is the state we want.
+    if ((err as { code?: string }).code === 'resource_missing') return 'gone'
     throw err
   }
-  return true
 }
 
 export interface DeletableWorkspace {
@@ -40,24 +44,28 @@ export interface DeletableWorkspace {
 }
 
 /**
- * Soft-deletes a workspace on behalf of its owner. Stripe is cancelled FIRST: if that fails this throws and
- * nothing else changes, so a workspace is never left deleted but still being billed. Returns false when it was
- * already deleted.
+ * Soft-deletes a workspace on behalf of its owner. Stripe is told FIRST to stop renewing at the end of the paid period: if
+ * that fails this throws and nothing else changes, so a workspace is never left deleted but still renewing. The paid plan
+ * stays on the workspace (hidden while deleted), so restoring inside the window gives back what was paid for, until the
+ * period ends. Returns false when it was already deleted.
  */
 export async function softDeleteWorkspace(ws: DeletableWorkspace, actorUserId: string): Promise<boolean> {
   const members = await db.select({ email: workspaceMembers.email, userId: workspaceMembers.userId })
     .from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws.id))
 
-  const cancelled = await cancelSubscription(ws.stripeSubscriptionId)
+  const stripeState = await endAtPeriodEnd(ws.stripeSubscriptionId)
 
   const deletedAt = new Date()
   const [marked] = await db.update(workspaces)
-    .set({
-      deletedAt, deletedBy: actorUserId, updatedAt: deletedAt,
-      // A restored workspace starts on Free; the subscription is gone either way.
-      planTier: 'free', planExpiresAt: null, cancelAtPeriodEnd: false,
-      ...(cancelled ? { stripeSubscriptionId: null, subscriptionStatus: 'canceled' } : {}),
-    })
+    .set(stripeState === 'scheduled'
+      // Keep the plan, the period end and the link to the subscription: Stripe ends it at the period end and the usual webhook
+      // then drops the workspace to Free, whether or not it has been restored by then.
+      ? { deletedAt, deletedBy: actorUserId, updatedAt: deletedAt, cancelAtPeriodEnd: true }
+      // No subscription (or Stripe has none any more): a restored workspace starts on Free.
+      : {
+        deletedAt, deletedBy: actorUserId, updatedAt: deletedAt, planTier: 'free', planExpiresAt: null, cancelAtPeriodEnd: false,
+        ...(stripeState === 'gone' ? { stripeSubscriptionId: null, subscriptionStatus: 'canceled' } : {}),
+      })
     .where(and(eq(workspaces.id, ws.id), isNull(workspaces.deletedAt)))
     .returning({ id: workspaces.id })
   if (!marked) return false

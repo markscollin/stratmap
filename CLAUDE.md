@@ -378,12 +378,12 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
 ## Data rights (roadmap 4.2, 2026-11-06)
 
 All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/data-rights.test.ts` (auth mocked) and `data-rights-auth.test.ts` (**real** `requireAuth`, which is what proves the hiding).
-- **Delete workspace = soft delete (owner-decided).** `DELETE /api/workspace {confirmName}` (owner only, name must match exactly) sets `workspaces.deletedAt/deletedBy` (migration 0008), cancels the Stripe
-  subscription **first** (if Stripe fails the call is a 502 and nothing is deleted, so a deleted workspace is never still billed), puts the plan on Free, drops pending invites, logs `workspace.deleted`
+- **Delete workspace = soft delete (owner-decided).** `DELETE /api/workspace {confirmName}` (owner only, name must match exactly) sets `workspaces.deletedAt/deletedBy` (migration 0008), tells Stripe to stop the
+  subscription renewing at the end of the paid period **first** (R-21, owner decision D-4: no refund, nothing forfeited; if Stripe fails the call is a 502 and nothing is deleted), keeps the plan while hidden (a restore gets it back until the period ends, then the webhook drops it to Free), drops pending invites, logs `workspace.deleted`
   and emails every member (`sendWorkspaceDeleted`). `resolveWorkspace` in `api/_lib/auth.ts` joins on `deletedAt IS NULL`, so **every** route stops seeing it at once; the public share routes
   (`api/share/[code].ts`, `api/share-page.ts`) check it too. A new route that reads workspaces without going through `requireAuth` must check `deletedAt` itself.
 - **Restore:** `POST /api/workspace/restore {workspaceId}` (`requireUser`; only the owner, within `RESTORE_DAYS` = 30, and refused with 409 `owns-another-workspace` if they own a live one: one owned workspace per user).
-  It comes back on Free (the subscription is gone). `GET /api/workspaces` returns `deleted: [{id,name,eraseOn}]` for the owner; `DeletedWorkspaceNotice` shows it on onboarding and in Settings → General.
+  It comes back with the plan it had (until the paid period ends; Free if it had no subscription). `GET /api/workspaces` returns `deleted: [{id,name,eraseOn}]` for the owner; `DeletedWorkspaceNotice` shows it on onboarding and in Settings → General.
   Owners may create a new workspace straight after deleting (the create guard in `POST /api/workspace` ignores deleted ones).
 - **Purge:** `GET /api/cron/purge-deleted` (Vercel cron, daily 03:17 UTC, `vercel.json` "crons"; it also erases expired deleted-role copies, R-02) needs `Authorization: Bearer $CRON_SECRET`; **without `CRON_SECRET` set it returns 503 and does nothing**. It deletes workspaces deleted more
   than 30 days ago; every table cascades from `workspaces`, and a test proves no row is left. When you add a table with a `workspace_id`, give it `onDelete: 'cascade'` and add it to the purge test's `seedEverything`.

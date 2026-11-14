@@ -101,7 +101,7 @@ export function PrivacyPage() {
       <H2>4. Data retention</H2>
       <p>
         We retain your data for as long as your account is active. A workspace owner can delete their workspace
-        at any time in Settings. A deleted workspace is hidden immediately and its subscription is cancelled; we keep
+        at any time in Settings. A deleted workspace is hidden immediately and its subscription stops renewing (the plan stays active until the end of the period already paid for); we keep
         it for 30 days so the owner can restore it, and then permanently erase it, including its charts, roles, job
         descriptions, members and activity log. Backups are overwritten on their normal schedule. Records we are
         legally required to keep, such as invoices, are retained as the law requires. You can also delete your own

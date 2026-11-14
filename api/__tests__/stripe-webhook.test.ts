@@ -536,6 +536,19 @@ describe('POST /api/webhooks/stripe', () => {
     })
   })
 
+  // R-21 / D-4: deleting a paid workspace only stops renewal. When the paid period ends Stripe sends the usual event.
+  describe('a deleted workspace whose paid period ends', () => {
+    it('drops to Free when Stripe ends the subscription, and stays deleted (restoring later gives Free)', async () => {
+      await linkSubscription('growth')
+      await testDb.update(schema.workspaces).set({ deletedAt: new Date(), cancelAtPeriodEnd: true }).where(eq(schema.workspaces.id, TEST_WS_ID))
+      makeSub({ status: 'canceled' })
+      await send(event('customer.subscription.deleted', { id: 'sub_1' }))
+      const w = await getWs()
+      expect(w).toMatchObject({ planTier: 'free', stripeSubscriptionId: null })
+      expect(w.deletedAt).not.toBeNull()
+    })
+  })
+
   describe('event types it ignores', () => {
     it('does not record event types it ignores', async () => {
       const res = await send(event('customer.created', { id: 'cus_1' }))

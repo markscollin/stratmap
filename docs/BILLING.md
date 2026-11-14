@@ -108,3 +108,7 @@ The automated tests are in `api/__tests__/stripe-webhook.test.ts`, `billing.test
 
 Still on the test-mode preview: as an admin open `/pricing` in **two tabs**, start Starter in both, and pay in both with `4242 4242 4242 4242`. Expect: one subscription stays active and linked
 (Settings → Billing shows Starter), the second is **canceled** in the Stripe dashboard with its payment **refunded**, and the function log has one `Duplicate subscription` line. Both Checkouts should show the same customer.
+
+## Deleting a paid workspace (R-21, owner decision D-4)
+
+Deleting a workspace sets its Stripe subscription to **cancel at the end of the period** (`cancel_at_period_end`): no further charge, no refund, and the plan is not thrown away. The workspace keeps its plan while hidden; if it is restored inside the 30 days it carries on until the period ends, and the normal `customer.subscription.deleted` webhook then drops it to Free. If Stripe cannot be reached the delete fails (502) and nothing changes. Erasure after 30 days does not touch Stripe: a subscription that is still running to its period end will not renew.

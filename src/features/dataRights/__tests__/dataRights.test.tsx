@@ -21,6 +21,7 @@ import { setSelectedWorkspaceId, switchWorkspace } from '../../../lib/workspaceS
 import { DataRightsSection } from '../DataRightsSection'
 import { DeletedWorkspaceNotice } from '../DeletedWorkspaceNotice'
 import { useUserStore, MOCK_WORKSPACE } from '../../../store/userStore'
+import { useBillingStore, PLAN_BY_TIER } from '../../../store/billingStore'
 import type { Permission } from '../../../types'
 
 const assign = vi.fn()
@@ -71,6 +72,24 @@ describe('Settings → data rights (roadmap 4.2)', () => {
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/workspace', { confirmName: 'Acme Inc' }))
     expect(setSelectedWorkspaceId).toHaveBeenCalledWith(null)
     expect(assign).toHaveBeenCalledWith('/dashboard')
+  })
+
+  // R-21 / D-4: a paid workspace keeps its plan until the paid period ends, and the dialog says so.
+  it('tells an owner on a paid plan that it will not renew, is not lost, and runs until the end of the paid period', () => {
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.starter)
+    useBillingStore.setState(s => ({ subscription: { ...s.subscription, planExpiresAt: '2030-03-17T00:00:00Z' } }))
+    setup('owner')
+    const note = screen.getByTestId('delete-paid-note')
+    expect(note).toHaveTextContent('will not renew')
+    expect(note).toHaveTextContent('not refunded or lost')
+    expect(note).toHaveTextContent(new Date('2030-03-17T00:00:00Z').toLocaleDateString())
+    expect(note).toHaveTextContent('restore the workspace before then')
+  })
+
+  it('says nothing about a paid plan to an owner on Free', () => {
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.free)
+    setup('owner')
+    expect(screen.queryByTestId('delete-paid-note')).toBeNull()
   })
 
   it('shows the server message if the workspace could not be deleted, and stays put', async () => {

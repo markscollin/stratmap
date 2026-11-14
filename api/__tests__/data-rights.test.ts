@@ -12,7 +12,8 @@ vi.mock('../_lib/email', async (orig) => ({
 }))
 vi.mock('../_lib/identity', () => ({ getUserIdentity: vi.fn(), deleteUserAccount: vi.fn().mockResolvedValue(undefined) }))
 const cancelMock = vi.fn()
-vi.mock('stripe', () => ({ default: class { subscriptions = { cancel: cancelMock } } }))
+const updateMock = vi.fn()
+vi.mock('stripe', () => ({ default: class { subscriptions = { cancel: cancelMock, update: updateMock } } }))
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, sql } from 'drizzle-orm'
@@ -57,6 +58,7 @@ beforeEach(async () => {
   await cleanDb()
   vi.clearAllMocks()
   cancelMock.mockReset().mockResolvedValue({})
+  updateMock.mockReset().mockResolvedValue({})
   vi.mocked(deleteUserAccount).mockResolvedValue(undefined)
   // The sign-in provider's verified addresses for whoever deletes their account (R-09): the person's own, by user id.
   vi.mocked(getUserIdentity).mockImplementation(async (id: string) => ({ emails: id === 'u-ed' ? ['ed@co.com'] : id === TEST_USER_ID ? ['test@example.com'] : [], name: null, avatarUrl: null }))
@@ -83,7 +85,7 @@ describe('deleting a workspace', () => {
     expect(cancelMock).not.toHaveBeenCalled()
   })
 
-  it('marks it deleted, cancels the subscription, drops invites, tells every member, and logs it', async () => {
+  it('marks it deleted, stops the subscription renewing, drops invites, tells every member, and logs it', async () => {
     await seedMember('u-ed', 'editor', 'ed@co.com')
     await testDb.insert(schema.pendingInvites).values({ id: 'inv-1', workspaceId: TEST_WS_ID, email: 'new@co.com', permission: 'viewer' })
 
@@ -93,8 +95,10 @@ describe('deleting a workspace', () => {
     const ws = await getWs()
     expect(ws.deletedAt).toBeInstanceOf(Date)
     expect(ws.deletedBy).toBe(TEST_USER_ID)
-    expect(ws).toMatchObject({ planTier: 'free', stripeSubscriptionId: null, subscriptionStatus: 'canceled' })
-    expect(cancelMock).toHaveBeenCalledWith('sub_1')
+    // D-4 (R-21): the paid plan is kept until the period ends; Stripe is told not to renew, never to cancel now or refund.
+    expect(ws).toMatchObject({ planTier: 'growth', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'active', cancelAtPeriodEnd: true })
+    expect(updateMock).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: true })
+    expect(cancelMock).not.toHaveBeenCalled()
     expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(0)
     expect(await auditActions()).toContain('workspace.deleted')
 
@@ -108,7 +112,7 @@ describe('deleting a workspace', () => {
   })
 
   it('does nothing at all if Stripe cannot cancel (never deleted-but-still-billed)', async () => {
-    cancelMock.mockRejectedValueOnce(new Error('stripe down'))
+    updateMock.mockRejectedValueOnce(new Error('stripe down'))
     const res = await del()
     expect(res._status).toBe(502)
     expect(res._body).toMatchObject({ error: 'cancel-failed' })
@@ -119,16 +123,18 @@ describe('deleting a workspace', () => {
     expect(await auditActions()).not.toContain('workspace.deleted')
   })
 
-  it('treats an already-cancelled Stripe subscription as cancelled', async () => {
-    cancelMock.mockRejectedValueOnce(Object.assign(new Error('gone'), { code: 'resource_missing' }))
+  it('treats a subscription Stripe no longer has as already finished', async () => {
+    updateMock.mockRejectedValueOnce(Object.assign(new Error('gone'), { code: 'resource_missing' }))
     expect((await del())._status).toBe(200)
-    expect((await getWs()).deletedAt).not.toBeNull()
+    const ws = await getWs()
+    expect(ws.deletedAt).not.toBeNull()
+    expect(ws).toMatchObject({ planTier: 'free', stripeSubscriptionId: null }) // Stripe has nothing: back to Free
   })
 
   it('works for a Free workspace with no subscription', async () => {
     await testDb.update(schema.workspaces).set({ planTier: 'free', stripeSubscriptionId: null, stripeCustomerId: null, subscriptionStatus: null })
     expect((await del())._status).toBe(200)
-    expect(cancelMock).not.toHaveBeenCalled()
+    expect(updateMock).not.toHaveBeenCalled()
   })
 
   it('its public share links stop working, and work again after a restore', async () => {
@@ -150,11 +156,11 @@ describe('restoring a workspace', () => {
   }
   const restore = (id = TEST_WS_ID) => call(restoreHandler, { method: 'POST', body: { workspaceId: id } })
 
-  it('the owner gets it back, with all its data, on the Free plan', async () => {
+  it('the owner gets it back, with all its data and the plan they had paid for (D-4)', async () => {
     await deleted()
     expect((await restore())._status).toBe(200)
     const ws = await getWs()
-    expect(ws).toMatchObject({ deletedAt: null, deletedBy: null, planTier: 'free' })
+    expect(ws).toMatchObject({ deletedAt: null, deletedBy: null, planTier: 'growth', stripeSubscriptionId: 'sub_1', cancelAtPeriodEnd: true })
     expect(await testDb.select().from(schema.nodes)).toHaveLength(1)
     expect(await auditActions()).toContain('workspace.restored')
   })
@@ -338,20 +344,20 @@ describe('deleting an account', () => {
     expect((await remove())._status).toBe(200)
   })
 
-  it('an owner takes their workspace with them (soft delete, Stripe cancelled, members emailed)', async () => {
+  it('an owner takes their workspace with them (soft delete, subscription stops renewing, members emailed)', async () => {
     await seedMember('u-ed', 'editor', 'ed@co.com')
     const res = await remove()
     expect(res._status).toBe(200)
     expect(res._body).toMatchObject({ workspacesDeleted: 1 })
     expect((await getWs()).deletedAt).not.toBeNull()
-    expect(cancelMock).toHaveBeenCalledWith('sub_1')
+    expect(updateMock).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: true })
     expect(vi.mocked(sendWorkspaceDeleted).mock.calls.map(c => c[0].to).sort()).toEqual(['ed@co.com', 'test@example.com'])
     expect(deleteUserAccount).toHaveBeenCalledWith(TEST_USER_ID)
     expect(await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))).toHaveLength(0)
   })
 
   it('if Stripe fails nothing is deleted at all, and the sign-in account stays', async () => {
-    cancelMock.mockRejectedValueOnce(new Error('stripe down'))
+    updateMock.mockRejectedValueOnce(new Error('stripe down'))
     expect((await remove())._status).toBe(502)
     expect((await getWs()).deletedAt).toBeNull()
     expect(await testDb.select().from(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))).toHaveLength(1)
