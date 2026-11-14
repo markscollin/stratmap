@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export const SALARY_CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'SGD', 'AED']
+const SALARY_CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'SGD', 'AED']
 
 export interface SalaryBandChange { salaryBandMin?: number | null; salaryBandMax?: number | null; salaryCurrency?: string }
 
