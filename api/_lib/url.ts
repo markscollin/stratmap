@@ -1,10 +1,14 @@
 /// <reference types="node" />
+import { resolveOrigin, missingAppUrlInProduction } from '../../src/lib/siteOrigin'
 
-// Resolve the app's base URL for building absolute links (checkout redirects,
-// invite links, email templates). Prefers an explicit APP_URL, then the Vercel
-// deployment URL, falling back to localhost for local dev.
+// The app's base URL for absolute links (checkout redirects, invite and comment emails). The order is in src/lib/siteOrigin.ts:
+// on production APP_URL, then the stable production domain, then the per-deployment host; on a preview, that preview.
+let warned = false
+
 export function getAppUrl(): string {
-  if (process.env.APP_URL) return process.env.APP_URL
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'http://localhost:3000'
+  if (!warned && missingAppUrlInProduction(process.env)) {
+    warned = true
+    console.error('[url] APP_URL is not set on a production deployment: emails and redirects use the Vercel-assigned domain. Set APP_URL to the real domain in Vercel (launch review O-03).')
+  }
+  return resolveOrigin(process.env) ?? 'http://localhost:3000'
 }

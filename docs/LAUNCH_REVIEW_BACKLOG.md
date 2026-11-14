@@ -365,7 +365,7 @@ for the unsigned-webhook fallback. Update `CLAUDE.md` (the dev-bypass notes) and
 passes.
 
 ### R-17 Emails and redirects use the per-deployment URL
-- [ ] Open
+- [x] Code done 2026-11-14; **owner step O-03 remains (set `APP_URL`)**. One pure function, `resolveOrigin()` in `src/lib/siteOrigin.ts`, now serves both the API (`getAppUrl`) and the build (`siteUrl`), so they cannot disagree. **Differs from the suggested fix on purpose:** the order `APP_URL` → `VERCEL_PROJECT_PRODUCTION_URL` → `VERCEL_URL` applies on **production** only. On a **preview**, `VERCEL_URL` comes first: with the suggested order, a test-mode checkout on a preview would redirect to *production* after paying and the R-05 release check could not work. Production with no `APP_URL` logs a loud one-time error. `DEFAULT_SITE_URL` was left alone: `stratmap-seven.vercel.app` is the live production URL today (CLAUDE.md), not an old one; change it when the domain exists. Tests: `siteOrigin.test.ts`, `app-url.test.ts`, existing `seo.test.ts`.
 
 **Problem.** `getAppUrl()` falls back from `APP_URL` to `VERCEL_URL`, the unique deployment hostname. Invite
 and comment emails, the checkout success URL and the billing portal return URL then point at

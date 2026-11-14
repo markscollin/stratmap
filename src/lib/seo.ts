@@ -5,6 +5,8 @@
 // index.html holds a marked block of <title>/<meta>/<link> tags. Each public page gets its own copy
 // of the built index.html with that block swapped for page-specific tags.
 
+import { resolveOrigin, type OriginEnv } from './siteOrigin'
+
 export const SITE_NAME = 'StratMap'
 export const SEO_START = '<!--seo:start-->'
 export const SEO_END = '<!--seo:end-->'
@@ -60,15 +62,9 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-interface Env { APP_URL?: string; VERCEL_PROJECT_PRODUCTION_URL?: string; VERCEL_URL?: string }
-
-/** The site's public origin, no trailing slash. APP_URL wins; then Vercel's production URL; then the deployment URL. */
-export function siteUrl(env: Env): string {
-  const explicit = env.APP_URL?.trim().replace(/\/+$/, '')
-  if (explicit && /^https?:\/\/[^\s]+$/i.test(explicit)) return explicit
-  const host = env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL
-  if (host && /^[a-z0-9.-]+$/i.test(host)) return `https://${host}`
-  return DEFAULT_SITE_URL
+/** The site's public origin, no trailing slash. The order (APP_URL, the production domain, the deployment host) is in siteOrigin.ts. */
+export function siteUrl(env: OriginEnv): string {
+  return resolveOrigin(env) ?? DEFAULT_SITE_URL
 }
 
 /** The tags between the markers for one page. Every dynamic value is escaped. */
