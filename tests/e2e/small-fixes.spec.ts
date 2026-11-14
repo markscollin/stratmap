@@ -71,3 +71,10 @@ test.describe.serial('small launch fixes', () => {
     await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
   })
 })
+
+// R-07: Growth AI drafting has a monthly cap, and the public pricing page states the real number.
+test('R-07: the pricing page states the AI draft cap instead of "unlimited"', async ({ page }) => {
+  await page.goto('/pricing')
+  await expect(page.getByText('300 AI JD drafts per month')).toBeVisible()
+  await expect(page.getByText(/unlimited ai/i)).toHaveCount(0)
+})

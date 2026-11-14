@@ -28,8 +28,8 @@ export function usePlanLimits() {
 
   const canUseAIDrafting = useCallback(() => {
     if (plan.tier === 'free') return false
-    if (plan.tier === 'starter') return usage.aiDraftsUsed < usage.aiDraftsLimit
-    return true // growth + enterprise: unlimited
+    if (usage.aiDraftsLimit === -1) return true
+    return usage.aiDraftsUsed < usage.aiDraftsLimit // starter, growth, enterprise all have a monthly cap; the server is the authority
   }, [plan.tier, usage.aiDraftsUsed, usage.aiDraftsLimit])
 
   const currentTier: PlanTier = plan.tier

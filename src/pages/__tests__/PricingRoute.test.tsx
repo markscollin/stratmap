@@ -37,6 +37,13 @@ describe('/pricing for visitors (roadmap 2.5)', () => {
     expect(screen.queryByTestId('checkout-starter')).toBeNull()
   })
 
+  it('states the AI draft numbers from plans.ts and never says "unlimited AI" (R-07)', () => {
+    renderRoute()
+    expect(screen.getByText('300 AI JD drafts per month')).toBeTruthy()
+    expect(screen.getByText('AI JD drafting (3 per month)')).toBeTruthy()
+    expect(screen.queryByText(/unlimited ai/i)).toBeNull()
+  })
+
   it('does not claim the visitor is on the Free plan', () => {
     renderRoute()
     expect(screen.queryByText('Current plan')).toBeNull()

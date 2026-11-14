@@ -126,7 +126,7 @@ describe('UpgradeModal', () => {
     expect(screen.getAllByText('Headcount planning').length).toBeGreaterThan(0)
     expect(screen.getByText('Unlimited charts')).toBeInTheDocument()
     expect(screen.getByText('Up to 500 roles per chart')).toBeInTheDocument()
-    expect(screen.getByText('Unlimited AI drafting')).toBeInTheDocument()
+    expect(screen.getByText('300 AI drafts a month')).toBeInTheDocument()
     expect(screen.getByText('Up to 10 team members')).toBeInTheDocument()
     // Not built, so never advertised
     expect(screen.queryByText(/Real-time/)).toBeNull()

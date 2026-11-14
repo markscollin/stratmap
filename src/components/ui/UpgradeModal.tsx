@@ -25,7 +25,7 @@ const TIER_INFO = {
     name: 'Growth',
     monthlyPrice: '£49',
     annualPrice: '£490',
-    features: ['Headcount planning', 'Unlimited charts', 'Up to 500 roles per chart', 'Unlimited AI drafting', 'Up to 10 team members'],
+    features: ['Headcount planning', 'Unlimited charts', 'Up to 500 roles per chart', '300 AI drafts a month', 'Up to 10 team members'],
     icon: Zap,
     colour: '#8B5CF6',
   },

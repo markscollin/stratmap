@@ -213,7 +213,7 @@ paid plan for free.
 ## P1: fix before launch
 
 ### R-07 Growth "unlimited AI" has no cost ceiling
-- [ ] Open
+- [x] Done 2026-11-14 (**D-2 decided: Growth 300, Enterprise 1,000, pricing shows the number**): `PLAN_LIMITS` in `plans.ts` is the one source, so the existing atomic monthly claim now stops both with `402 plan-limit` (`limit: 'ai-drafts'`). Also: a per-person burst limit (5 a minute) beside the workspace one (10); `notes` is wrapped in `<context>` markers and labelled as background, not instructions (the model can still be coaxed, but the 2,000-character field is no longer an open prompt); the pricing page, upgrade modal and plan tooltip text read the numbers from `plans.ts`; `canUseAIDrafting` treats every tier as capped (the browser counter is a convenience, the server decides). Tests: `ai-draft.test.ts` (6 new), `usePlanLimits.test.ts`, `PricingRoute.test.tsx`, e2e in `small-fixes.spec.ts`. **Still owed (O-08, owner):** a spend limit and alert in the Anthropic console as the backstop.
 
 **Problem.** The free-text `notes` field (up to 2,000 characters) goes straight into the prompt, so it can be
 used as a general-purpose model. Growth and Enterprise have no monthly limit; the only cap is 10 requests a

@@ -19,8 +19,8 @@ export const UNLIMITED = -1
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free:       { seats: 3,  maxCharts: 1,  maxNodesPerChart: 30,  aiDraftsPerMonth: 0 },
   starter:    { seats: 5,  maxCharts: 5,  maxNodesPerChart: 100, aiDraftsPerMonth: 3 },
-  growth:     { seats: 10, maxCharts: -1, maxNodesPerChart: 500, aiDraftsPerMonth: -1 },
-  enterprise: { seats: -1, maxCharts: -1, maxNodesPerChart: -1,  aiDraftsPerMonth: -1 },
+  growth:     { seats: 10, maxCharts: -1, maxNodesPerChart: 500, aiDraftsPerMonth: 300 },
+  enterprise: { seats: -1, maxCharts: -1, maxNodesPerChart: -1,  aiDraftsPerMonth: 1000 },
 }
 
 /**
@@ -72,7 +72,7 @@ export const PAID_FEATURES: Record<PaidFeature, FeatureInfo> = {
   'ai-drafting': {
     minTier: 'starter',
     label: 'AI job description drafting',
-    unlocks: 'Draft a job description from a role title in seconds (3 per month on Starter, unlimited on Growth).',
+    unlocks: 'Draft a job description from a role title in seconds (3 per month on Starter, 300 on Growth).',
   },
   'auto-layout': {
     minTier: 'starter',

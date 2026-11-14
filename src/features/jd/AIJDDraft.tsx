@@ -175,7 +175,7 @@ export function AIJDDraft({
           {isLocked ? <Lock size={12} /> : <Sparkles size={13} />}
           Draft with AI
           {isLocked && <span style={{ fontSize: 10, marginLeft: 2 }}>· Starter+</span>}
-          {!isLocked && currentTier === 'starter' && (
+          {!isLocked && usage.aiDraftsLimit > 0 && (
             <span style={{ fontSize: 10, opacity: 0.8 }}>· {draftsRemaining} of {usage.aiDraftsLimit} left</span>
           )}
           {!isLocked && (isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}

@@ -112,13 +112,11 @@ describe('usePlanLimits', () => {
     expect(result.current.canUseAIDrafting()).toBe(false)
   })
 
-  it('allows unlimited AI drafting on growth plan', () => {
-    useBillingStore.setState({
-      plan: GROWTH_PLAN,
-      usage: { chartsUsed: 0, seatsUsed: 1, aiDraftsUsed: 100, aiDraftsLimit: -1 },
-    })
-    const { result } = renderHook(() => usePlanLimits())
-    expect(result.current.canUseAIDrafting()).toBe(true)
+  it('allows AI drafting on the growth plan until its monthly cap (R-07: no longer unlimited)', () => {
+    useBillingStore.setState({ plan: GROWTH_PLAN, usage: { chartsUsed: 0, seatsUsed: 1, aiDraftsUsed: 299, aiDraftsLimit: 300 } })
+    expect(renderHook(() => usePlanLimits()).result.current.canUseAIDrafting()).toBe(true)
+    useBillingStore.setState({ usage: { chartsUsed: 0, seatsUsed: 1, aiDraftsUsed: 300, aiDraftsLimit: 300 } })
+    expect(renderHook(() => usePlanLimits()).result.current.canUseAIDrafting()).toBe(false)
   })
 
   it('tracks current tier correctly', () => {

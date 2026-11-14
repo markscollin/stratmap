@@ -21,7 +21,7 @@ function open() {
 }
 
 describe('AI draft disclosure (roadmap 4.3)', () => {
-  beforeEach(() => { useBillingStore.setState({ plan: PLAN_BY_TIER.growth }) })
+  beforeEach(() => { useBillingStore.getState().setPlan(PLAN_BY_TIER.growth) })
 
   it('tells the user what is sent to Anthropic, and that it excludes names, emails and salaries', () => {
     open()

@@ -109,7 +109,7 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
 - **Salary bands** are redacted from JD responses for non-admins (`api/charts/[id]/jd/[nodeId].ts`).
 - **Plan limits are enforced on the server.** The single source of truth is `src/lib/plans.ts`
   (shared with `billingStore`). Going over a limit returns `402 { error: 'plan-limit', limit, max, message }`.
-- **AI quota**: `ai_usage` table, atomic per-month claim in `api/ai/draft.ts`. The model is
+- **AI quota**: `ai_usage` table, atomic per-month claim in `api/ai/draft.ts`. Caps live in `PLAN_LIMITS` (`src/lib/plans.ts`): Starter 3, **Growth 300, Enterprise 1,000** a month (R-07, owner decision D-2: nothing is unlimited); the pricing copy reads them from there. Burst limits: 10/min per workspace and 5/min per person. The free-text `notes` go into the prompt between `<context>` markers. The model is
   configurable via `ANTHROPIC_MODEL`.
 - **Validation**: zod schemas in `api/_lib/schemas.ts`, applied via `parseBody()`. Unknown keys are stripped.
 - **Rate limiting**: `api/_lib/rateLimit.ts` (Postgres `rate_limits` table, fails open).

@@ -7,6 +7,7 @@ import { LegalFooter } from './LegalPages'
 import { Layout } from '../components/layout/Layout'
 import { PublicNav } from '../components/layout/PublicNav'
 import { useUserStore } from '../store/userStore'
+import { PLAN_LIMITS } from '../lib/plans'
 
 /**
  * /pricing is public (roadmap 2.5): visitors see the plans in the marketing layout and are sent to sign-up;
@@ -65,7 +66,7 @@ export function PricingPage() {
         { name: 'Job descriptions', included: true },
         { name: 'Approval workflows', included: true },
         { name: 'PDF export', included: true },
-        { name: 'AI JD drafting (3 per month)', included: true },
+        { name: `AI JD drafting (${PLAN_LIMITS.starter.aiDraftsPerMonth} per month)`, included: true },
         { name: 'Auto-layout', included: true },
         { name: 'Headcount planning', included: false },
       ],
@@ -82,7 +83,7 @@ export function PricingPage() {
         { name: 'Up to 500 nodes', included: true },
         { name: 'Up to 10 team members', included: true },
         { name: 'All export options', included: true },
-        { name: 'Unlimited AI drafting', included: true },
+        { name: `${PLAN_LIMITS.growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
         { name: 'Headcount planning', included: true },
       ],
       cta: 'Upgrade to Growth',
