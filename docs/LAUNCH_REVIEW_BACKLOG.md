@@ -307,7 +307,7 @@ the debounce window still sends the save.
 the server schema. Validate min ≤ max in the UI before sending.
 
 ### R-13 A transient `/api/workspace` failure misroutes the user
-- [ ] Open
+- [x] Done 2026-11-14: three outcomes in `UserSync` (`AuthProvider.tsx`): loaded, no workspace, **failed**. Network, 5xx, 408 and 429 failures are retried quietly twice (0.6 s, 1.8 s); then a full-page "Couldn't load your workspace" with **Retry**, and onboarding is never reached on a failure (also not when the invite check itself cannot reach the server, nor when the workspace fetch after accepting an invite fails). A refusal retrying cannot fix (401) is shown at once without retries. **Nothing renders for a signed-in person until the workspace has answered**, which also fixes the "after a hard reload the canvas is briefly view-only and the plan reads as Free" note. `POST /api/workspace` now returns `myPermission` (so an invited viewer is no longer shown as owner) and, as the POST half of **R-29**, no Stripe ids; `OnboardingPage` uses the server's permission. First tests for `AuthProvider` (7). Tests: `AuthProvider.test.tsx`, `workspace.test.ts` (3 new), `OnboardingPage.test.tsx`, `tests/e2e/workspace-load.spec.ts`. R-29's PUT half is still open.
 
 **Problem (reported).** Any error other than `no-workspace` is treated as "resolved". A new browser is sent to
 onboarding and asked to create a workspace; the POST returns the existing one, the typed name is discarded, and
@@ -497,7 +497,7 @@ network and runs the test teardown against that database.
 the emulator is in use. Make `npm run test:e2e` an alias of `test:e2e:local`.
 
 ### R-29 Stripe ids returned by `POST`/`PUT /api/workspace`
-- [ ] Open
+- [ ] Half done 2026-11-14: **POST** (both the create and the existing-workspace reply) no longer returns Stripe ids (`withoutBillingIds` in `api/workspace.ts`, with a test). **PUT is still open** (and a shared serializer for all three methods, which is what the suggested fix asks for).
 
 **Problem (verified for POST).** When the caller already has a workspace, POST returns the full row
 (`api/workspace.ts:65-71`), including `stripeCustomerId` and `stripeSubscriptionId`; any member can call it.

@@ -140,6 +140,22 @@ describe('OnboardingPage — Step 2', () => {
     }
   })
 
+  // R-13: the page used to assume "owner" whatever the server said.
+  it('takes the permission from the server reply, not a constant', async () => {
+    const { api } = await import('../../lib/apiClient')
+    const original = vi.mocked(api.post).getMockImplementation()!
+    vi.mocked(api.post).mockImplementation(async (url: string, body: unknown) => ({ ...(await original(url, body) as object), myPermission: 'viewer' }))
+    try {
+      goToStep2()
+      fireEvent.click(screen.getByTestId('skip-btn'))
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/charts'))
+      expect(useUserStore.getState().permission).toBe('viewer')
+      expect(useUserStore.getState().workspace?.members[0].permission).toBe('viewer')
+    } finally {
+      vi.mocked(api.post).mockImplementation(original)
+    }
+  })
+
   it('empty invite rows are not stored as pending invites', async () => {
     goToStep2()
     // Only fill the first row

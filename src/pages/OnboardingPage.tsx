@@ -66,7 +66,7 @@ export function OnboardingPage() {
   async function complete(sendInvites: boolean, quickStart = false) {
     const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
     try {
-      const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string }>(
+      const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string; myPermission?: Permission }>(
         '/api/workspace',
         { name: workspaceName.trim(), ownerRole, size, email: user?.email ?? '', userName: user?.name ?? '' }
       )
@@ -78,14 +78,14 @@ export function OnboardingPage() {
         ownerRole: ws.ownerRole as WorkspaceRole,
         size: ws.size as CompanySize,
         members: user
-          ? [{ user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl }, permission: 'owner', joinedAt: now }]
+          ? [{ user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl }, permission: ws.myPermission ?? 'owner', joinedAt: now }]
           : [],
         pendingInvites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
         createdAt: ws.createdAt ?? now,
       }
       setWorkspace(created)
       // You created it, so you own it (AuthProvider starts everyone as viewer until the server says otherwise).
-      setPermission('owner')
+      setPermission(ws.myPermission ?? 'owner') // what the server says this person is (an invited viewer is not the owner)
       // Persist + email invites (best-effort — failure shouldn't block onboarding)
       if (filledInvites.length > 0) {
         try {

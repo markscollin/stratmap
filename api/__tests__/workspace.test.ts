@@ -15,7 +15,7 @@ vi.mock('../_lib/identity', () => ({ getUserIdentity: vi.fn(), deleteUserAccount
 import { requireAuth, requireUser } from '../_lib/auth'
 import { getUserIdentity } from '../_lib/identity'
 import handler from '../workspace'
-import { setupSchema, cleanDb, seedWorkspace, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
+import { setupSchema, cleanDb, seedWorkspace, seedMember, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'
@@ -169,5 +169,35 @@ describe('POST /api/workspace', () => {
     expect(res._status).toBe(200)
     const body = res._body as { name: string }
     expect(body.name).toBe('Test Workspace')
+  })
+
+  // R-13: the client used to assume "owner" for whatever this returned.
+  it('says what the caller is in the workspace it returns: the creator is owner', async () => {
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'Acme', ownerRole: 'Founder/CEO', size: '11-50' } }) as never, res as never)
+    expect(res._body).toMatchObject({ myPermission: 'owner' })
+  })
+
+  it('says "viewer" to a person who was only invited, never "owner"', async () => {
+    await seedWorkspace()
+    const viewer = 'u-invited-viewer'
+    await seedMember(viewer, 'viewer')
+    vi.mocked(requireUser).mockResolvedValue({ userId: viewer })
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'Mine', ownerRole: 'Founder/CEO', size: '1-10' } }) as never, res as never)
+    expect(res._status).toBe(200)
+    expect(res._body).toMatchObject({ name: 'Test Workspace', myPermission: 'viewer' })
+  })
+
+  it('never returns Stripe ids, on create or on the existing-workspace path (R-29, POST part)', async () => {
+    await seedWorkspace()
+    await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_secret', stripeSubscriptionId: 'sub_secret' })
+    const existing = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'X', ownerRole: 'Founder/CEO', size: '1-10' } }) as never, existing as never)
+    expect(JSON.stringify(existing._body)).not.toMatch(/stripe|cus_secret|sub_secret/i)
+    await cleanDb()
+    const created = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'Y', ownerRole: 'Founder/CEO', size: '1-10' } }) as never, created as never)
+    expect(JSON.stringify(created._body)).not.toMatch(/stripe/i)
   })
 })

@@ -49,6 +49,35 @@ interface WorkspaceResponse {
 
 interface SyncIdentity { id: string; name: string; email: string; imageUrl?: string }
 
+// A failed workspace load is its own outcome (R-13). It used to count as "resolved": a returning person on a new browser was
+// sent to onboarding and asked to create a workspace they already had, and an invited viewer was shown as owner. Now a
+// network, 5xx or rate-limit failure is retried quietly twice, then shown as "Couldn't load your workspace" with Retry.
+const RETRY_DELAYS_MS = [600, 1800]
+const isTransient = (err: unknown) => !(err instanceof ApiError) || err.status >= 500 || err.status === 429 || err.status === 408
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+async function fetchWorkspace(): Promise<WorkspaceResponse> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await api.get<WorkspaceResponse>('/api/workspace')
+    } catch (err) {
+      if (!isTransient(err) || attempt >= RETRY_DELAYS_MS.length) throw err
+      await sleep(RETRY_DELAYS_MS[attempt])
+    }
+  }
+}
+
+function WorkspaceLoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div role="alert" data-testid="workspace-load-failed" style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, textAlign: 'center' }}>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>Couldn't load your workspace</h1>
+      <p style={{ fontSize: 14, color: 'var(--muted)', maxWidth: 380, lineHeight: 1.6 }}>
+        Nothing has been lost. We couldn't reach the server just now. Check your connection and try again.
+      </p>
+      <button onClick={onRetry} style={{ padding: '10px 22px', background: 'var(--brand)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+    </div>
+  )
+}
+
 function ClerkUserSync({ children }: { children: ReactNode }) {
   const { user, isLoaded, isSignedIn } = useUser()
   const identity = useMemo<SyncIdentity | null>(() => user ? {
@@ -79,6 +108,11 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
   const [resolvedFor, setResolvedFor] = useState<string | null>(null)
   const loadKey = useRef<string | null>(null)
   const loadCount = useRef(0)
+  // How the workspace load ended for a person: 'ready' (loaded, or confirmed to have none) or 'failed'. Nothing but a spinner
+  // is shown until it is known, so a page never renders with the placeholder viewer permission and Free plan (R-13).
+  const [outcome, setOutcome] = useState<{ userId: string; status: 'ready' | 'failed' } | null>(null)
+  const [retryNonce, setRetryNonce] = useState(0)
+  const retry = () => { loadKey.current = null; setOutcome(null); setRetryNonce(n => n + 1) }
 
   useEffect(() => {
     if (isAuthPage || isPublicPage) return
@@ -86,6 +120,9 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
 
     if (!isSignedIn) {
       loadKey.current = null
+      // A later sign-in must wait for its own load, so forget how the last one ended.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOutcome(null)
       storeSignOut()
       if (!isOptionalAuthPage) navigate('/sign-in')
       return
@@ -93,7 +130,9 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
     if (!clerkUser || loadKey.current?.startsWith(`${clerkUser.id}#`)) return
     const key = `${clerkUser.id}#${++loadCount.current}`
     loadKey.current = key
-    const setResolved = () => setResolvedFor(key)
+    const userId = clerkUser.id
+    const setResolved = () => { setResolvedFor(key); setOutcome({ userId, status: 'ready' }) }
+    const fail = () => { if (loadKey.current === key) setOutcome({ userId, status: 'failed' }) }
 
     // Least privilege until the server says otherwise.
     setUser(
@@ -125,13 +164,13 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
 
     async function load() {
       try {
-        applyWorkspace(await api.get<WorkspaceResponse>('/api/workspace'))
+        applyWorkspace(await fetchWorkspace())
         setResolved()
         return
       } catch (err) {
         if (!(err instanceof ApiError) || err.message !== 'no-workspace') {
           console.error('[auth] workspace fetch failed:', err)
-          setResolved()
+          fail() // not "resolved": never guess what the workspace is
           return
         }
       }
@@ -143,13 +182,26 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
         const joined = await api.post<{ workspaceId: string }>('/api/invites/accept', token ? { token } : {})
         forgetInviteToken()
         setSelectedWorkspaceId(joined.workspaceId)
-        applyWorkspace(await api.get<WorkspaceResponse>('/api/workspace'))
+        try {
+          applyWorkspace(await fetchWorkspace())
+        } catch (err) {
+          console.error('[auth] workspace fetch after accepting an invite failed:', err)
+          fail()
+          return
+        }
         setResolved()
         if (pathname === '/onboarding') navigate('/dashboard')
         return
       } catch (err) {
+        // The server may simply be unreachable: that is not "no invite", and must not send anyone to onboarding.
+        if (isTransient(err)) {
+          console.error('[auth] invite check failed:', err)
+          fail()
+          return
+        }
         if (token && !(err instanceof ApiError && err.message === 'no-invite')) {
-          // The invite page explains what went wrong (expired, wrong account, …).
+          // The invite page explains what went wrong (expired, wrong account, …). Forget this load so a later visit starts afresh.
+          loadKey.current = null
           navigate(`/invite/${token}`)
           return
         }
@@ -170,7 +222,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
       setResolved()
     }
     void load()
-  }, [isLoaded, isSignedIn, clerkUser, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, isOptionalAuthPage, pathname])
+  }, [isLoaded, isSignedIn, clerkUser, retryNonce, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, isOptionalAuthPage, pathname])
 
   // Once we know there is no workspace, send the user to onboarding
   useEffect(() => {
@@ -186,8 +238,12 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
     return <>{children}</>
   }
 
-  // A signed-in person on an open page waits for their workspace, so the page doesn't flash its signed-out version.
-  const waitingForWorkspace = isOptionalAuthPage && isSignedIn && !resolvedFor
+  // A signed-in person waits for their workspace before any page renders: otherwise the page shows with the placeholder viewer
+  // permission and Free plan (a canvas that is briefly read-only, a chart count that looks over the limit), and an open page
+  // flashes its signed-out version.
+  const failed = isSignedIn && !!clerkUser && outcome?.userId === clerkUser.id && outcome.status === 'failed'
+  if (failed) return <WorkspaceLoadFailed onRetry={retry} />
+  const waitingForWorkspace = isSignedIn && !!clerkUser && outcome?.userId !== clerkUser.id
   if (!isLoaded || waitingForWorkspace) {
     return (
       <div style={{

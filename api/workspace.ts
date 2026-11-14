@@ -12,6 +12,12 @@ import { reportError } from './_lib/sentry'
 import { getUserIdentity, type UserIdentity } from './_lib/identity'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
 
+/** A workspace row without Stripe ids or the trial/billing internals, for replies that go to any member. */
+function withoutBillingIds<T extends { stripeCustomerId?: unknown; stripeSubscriptionId?: unknown }>(ws: T): Omit<T, 'stripeCustomerId' | 'stripeSubscriptionId'> {
+  const { stripeCustomerId: _c, stripeSubscriptionId: _s, ...rest } = ws
+  return rest
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
@@ -57,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Guard: if user already has a workspace, return it instead of creating a duplicate
       const [existing] = await db
-        .select({ workspaceId: workspaceMembers.workspaceId })
+        .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
         .from(workspaceMembers)
         .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.deletedAt)))
         .where(eq(workspaceMembers.userId, user.userId))
@@ -69,7 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from(workspaces)
           .where(eq(workspaces.id, existing.workspaceId))
           .limit(1)
-        return res.status(200).json(ws)
+        // Say what this person is in it: the client used to assume "owner", wrong for someone who was only invited (R-13).
+        // Billing ids are not part of the reply (R-29).
+        return res.status(200).json({ ...withoutBillingIds(ws), myPermission: existing.permission })
       }
 
       // Who this person is comes from the sign-in provider, not from the request body: the stored address receives
@@ -101,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await track('workspace_created', { userId: user.userId, workspaceId, consent: hasAnalyticsConsent(req), props: { plan: 'free' } })
 
-      return res.status(201).json(ws)
+      return res.status(201).json({ ...withoutBillingIds(ws), myPermission: 'owner' })
     }
 
     if (req.method === 'PUT') {
