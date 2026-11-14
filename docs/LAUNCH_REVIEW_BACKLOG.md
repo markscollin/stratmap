@@ -631,6 +631,8 @@ allow-list matching the TipTap schema. Add a test with `<img onerror>` and `<scr
 
 ## Owner and dashboard actions (not code)
 
+**Start with `docs/OWNER_CHECKLIST.md`**: every action below in one prioritised list, with two helper scripts (`npm run check:env`, `npm run check:webhook`) that do the checking for you (added 2026-11-14).
+
 - [ ] **O-01 Clerk production instance** (roadmap 3.5): `pk_live_` keys in Vercel, Google OAuth enabled, then
   run sign-up → onboarding → invite end to end. Unblocks R-23.
 - [ ] **O-02 Vercel Pro** (roadmap Phase 1 #4): Hobby does not allow commercial use.

@@ -75,7 +75,7 @@ and again after any change to `api/webhooks/stripe.ts`, `api/_lib/rawBody.ts` or
    Deployment Protection for this one test, or use *Protection Bypass for Automation* and add `?x-vercel-protection-bypass=<secret>` to the endpoint URL in step 3.
 3. **Endpoint.** Stripe dashboard (**test mode** switch on) → Developers → Webhooks → *Add endpoint*: `https://<preview-url>/api/webhooks/stripe`, subscribe the
    eight events listed above. Copy its *Signing secret* (`whsec_…`) into the preview's `STRIPE_WEBHOOK_SECRET`, then **redeploy** (env vars only apply to new deployments).
-4. **Quick check (1 minute).** Endpoint page → *Send test webhook* → `customer.subscription.updated` → Send. Open the delivery and read the response:
+4. **Quick check (1 minute).** The script does this for you: `npm run check:webhook -- https://<preview-url> whsec_...` (see `docs/OWNER_CHECKLIST.md`) and prints PASS or what is wrong. By hand: Endpoint page → *Send test webhook* → `customer.subscription.updated` → Send. Open the delivery and read the response:
    - `400 {"error":"Invalid signature"}` → wrong `STRIPE_WEBHOOK_SECRET` (step 3), not a code problem.
    - `400 {"error":"Could not read raw body"}` → **the problem this check exists for**: production does not replay the body the way the tests assume. Stop and tell whoever maintains this;
      see "If it fails" below.

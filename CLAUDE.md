@@ -73,8 +73,9 @@ content reviewed by a lawyer.
 **Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
+- **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts (2026-11-14): **799 frontend (+2 skipped launch-gate) + 792 API**, 102 e2e, after R-01 to R-14, R-16 to R-21, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
+- Real test counts (2026-11-14): **799 frontend (+2 skipped launch-gate) + 804 API**, 102 e2e, after R-01 to R-14, R-16 to R-21, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
