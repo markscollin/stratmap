@@ -64,6 +64,9 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-36 | Dependency audit triage | P3 | S | code |
 | R-37 | Server-side JD HTML sanitisation (before any new renderer) | P3 | S | code |
 | R-38 | Job descriptions are orphaned (not deleted) when a role is deleted | P2 | S | code |
+| R-39 | Trial can be farmed once the 30-day erase has run | P3 | S | code |
+| R-40 | Nothing warns by email before a trial ends | P2 | M | code |
+| R-41 | Landing page has no product screenshot or demo | P2 | S | code + owner |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -542,6 +545,24 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 ---
 
 ## P3: later and housekeeping
+
+### R-39 Trial can be farmed once the 30-day erase has run
+- [ ] Open (found 2026-11-14 while building R-18)
+
+**Problem.** The new-workspace trial (D-3) is refused to anyone who has ever owned a workspace, but the check reads the `workspaces` table, and the purge erases a deleted workspace after 30 days. Someone who deletes their workspace, waits for the erase and creates a new one gets another 14 days of Growth, about once a month.
+**Suggested fix.** Remember "has had a trial" somewhere that outlives the workspace: a `trial_used_at` column on a small per-user table, or a salted hash of the user id kept after the erase. Keep it opaque (no email), mention it in the privacy text, and make account deletion remove it. Do this only if abuse shows up; the cost is a few days of Growth.
+
+### R-40 Nothing warns by email before a trial ends
+- [ ] Open (found 2026-11-14)
+
+**Problem.** The trial banner says what happens when 14 days end, but only to people who open the app. A workspace that is over the Free limits at that moment turns view-only without a message in their inbox.
+**Suggested fix.** In the daily cron (same `CRON_SECRET` pattern as the purge), email owners and admins 3 days before `trialEndsAt` and on the day it ends, once each (a `trial_notified_at` column, additive migration). Include the Free limits and the link to /pricing. Skip workspaces that already pay.
+
+### R-41 Landing page has no product screenshot or demo
+- [ ] Open (left over from R-18)
+
+**Problem.** The landing page is copy only. The backlog asked for a real screenshot or a live read-only demo chart above the fold.
+**Suggested fix.** Create a public sample chart in a StratMap-owned workspace and embed it with `/embed/<code>` in an iframe on `/` (the route and its framing headers already exist), or ship a screenshot taken from the e2e browser. Needs the owner's say on which chart to show. Also `sales@stratmap.app` depends on O-03.
 
 ### R-38 Job descriptions are orphaned when a role is deleted
 - [x] Done 2026-11-13: delete removes the JD rows in the same atomic batch and keeps them in the 3-day `deleted_nodes` copy (jsonb, so **no migration**; the old copies restore fine without them); restore puts them back with real dates. A first JD save for a role that is not in the chart is now 404, so a late autosave cannot orphan one. Existing orphans: **not a one-off migration** (the backlog's suggestion) but the daily purge, which also catches future ones, and only touches rows older than a day so a JD written just before its role finished saving is safe. Privacy text mentions the JD. Tests: `node-trash.test.ts` (6 new), e2e in `canvas-saves.spec.ts`.
