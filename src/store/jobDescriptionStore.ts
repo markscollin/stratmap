@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { JobDescription } from '../types/jd'
 import type { RoleStatus } from '../types/chart'
 import { api } from '../lib/apiClient'
+import { saveChange } from '../features/canvas/canvasSync'
 
 function makeDefault(nodeId: string): JobDescription {
   return {
@@ -19,6 +20,8 @@ function makeDefault(nodeId: string): JobDescription {
 interface JDStore {
   jobDescriptions: Record<string, JobDescription>
   chartId: string | null
+  /** Roles whose job description could not be loaded (R-11). The editor stays closed for them: a blank one would overwrite the real text on the next autosave. */
+  loadErrors: Record<string, true>
   setChartId: (id: string) => void
   initJD: (nodeId: string) => Promise<void>
   updateJD: (nodeId: string, updates: Partial<Pick<JobDescription, 'responsibilities' | 'requirements' | 'level' | 'salaryBandMin' | 'salaryBandMax' | 'salaryCurrency'>>) => void
@@ -28,10 +31,11 @@ interface JDStore {
 export const useJobDescriptionStore = create<JDStore>((set, get) => ({
   jobDescriptions: {},
   chartId: null,
+  loadErrors: {},
 
   setChartId(id) {
     if (get().chartId !== id) {
-      set({ chartId: id, jobDescriptions: {} })
+      set({ chartId: id, jobDescriptions: {}, loadErrors: {} })
     }
   },
 
@@ -42,8 +46,10 @@ export const useJobDescriptionStore = create<JDStore>((set, get) => ({
       set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: makeDefault(nodeId) } }))
       return
     }
+    if (get().loadErrors[nodeId]) set(s => ({ loadErrors: Object.fromEntries(Object.entries(s.loadErrors).filter(([k]) => k !== nodeId)) as Record<string, true> })) // a retry
     try {
       const raw = await api.get<Record<string, unknown>>(`/api/charts/${chartId}/jd/${nodeId}`)
+      if (get().chartId !== chartId) return // the user moved to another chart while this loaded
       // id === null means no DB row yet — treat as default
       if (raw.id === null) {
         set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: makeDefault(nodeId) } }))
@@ -65,25 +71,27 @@ export const useJobDescriptionStore = create<JDStore>((set, get) => ({
       }
       set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: jd } }))
     } catch (err) {
+      // A role with no job description yet is a 200 with `id: null` (handled above), so reaching here means the load FAILED.
+      // Never fall back to a blank one: typing into it would autosave over the stored text (R-11).
       console.error('[jdStore] initJD failed:', err)
-      set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: makeDefault(nodeId) } }))
+      if (get().chartId === chartId) set(s => ({ loadErrors: { ...s.loadErrors, [nodeId]: true } }))
     }
   },
 
   updateJD(nodeId, updates) {
+    if (get().loadErrors[nodeId]) return // never write over a job description that was not loaded
     const existing = get().jobDescriptions[nodeId] ?? makeDefault(nodeId)
     const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() }
     set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: updated } }))
 
     const chartId = get().chartId
-    if (chartId) {
-      api.put(`/api/charts/${chartId}/jd/${nodeId}`, updates).catch(err =>
-        console.error('[jdStore] updateJD failed:', err)
-      )
-    }
+    // Through the same queue as canvas edits (R-01): in order after the role's own save, one at a time, and a failure is
+    // shown (banner, toast, Retry) instead of being swallowed.
+    if (chartId) saveChange(chartId, "Couldn't save the job description", () => api.put(`/api/charts/${chartId}/jd/${nodeId}`, updates, { keepalive: true }))
   },
 
   setStatus(nodeId, status) {
+    if (get().loadErrors[nodeId]) return
     const existing = get().jobDescriptions[nodeId] ?? makeDefault(nodeId)
     const versionBump = status === 'draft' && existing.status !== 'draft'
     const version = versionBump ? existing.version + 1 : existing.version
@@ -91,10 +99,6 @@ export const useJobDescriptionStore = create<JDStore>((set, get) => ({
     set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: updated } }))
 
     const chartId = get().chartId
-    if (chartId) {
-      api.put(`/api/charts/${chartId}/jd/${nodeId}`, { status, version }).catch(err =>
-        console.error('[jdStore] setStatus failed:', err)
-      )
-    }
+    if (chartId) saveChange(chartId, "Couldn't save the job description status", () => api.put(`/api/charts/${chartId}/jd/${nodeId}`, { status, version }))
   },
 }))

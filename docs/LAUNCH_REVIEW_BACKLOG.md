@@ -278,7 +278,7 @@ and departments. Better: a server route `POST /api/charts/:id/duplicate` reusing
 **Done when.** A test duplicates a 5-role chart and the copy has 5 roles and 4 lines.
 
 ### R-11 A failed JD load can overwrite the real JD; false "Saved"
-- [ ] Open
+- [x] Done 2026-11-14: confirmed by reading the code (the load fell back to a blank JD on *any* error). Now: a failed load sets `loadErrors[nodeId]`, the panel shows "Couldn't load this job description" with **Retry** and no editor, and `updateJD`/`setStatus` refuse to write for that role. JD writes go through the **R-01 `saveChange` queue** (in order after the role's own save, which also removes the first-save-before-role-exists race; a failure shows the banner, toast and Retry, and the canvas pauses). `JDEditor`'s label comes from the queue: "Saving…" until the server answered, then "Saved", or "Couldn't save". Unsaved text is flushed on unmount (closing the panel, switching role), `visibilitychange` to hidden and `pagehide`; JD PUTs use `keepalive`. Also gave the panel's close button an accessible name (R-32 item). Tests: `jobDescriptionStoreSync.test.ts`, `JDEditor.test.tsx`, `JDPanelLoadError.test.tsx`, 3 e2e in `canvas-saves.spec.ts`.
 
 **Problem (reported; confirm first).** `initJD` falls back to a blank JD on any error, so a failed load shows
 an empty editor; typing then autosaves over the stored text. `updateJD` failures are swallowed, yet the editor

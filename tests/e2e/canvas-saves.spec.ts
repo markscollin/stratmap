@@ -231,4 +231,71 @@ test.describe.serial('canvas saves', () => {
       await page.unroute('**/api/charts/*/nodes/*')
     })
   })
+
+  // ── R-11: job descriptions load and save honestly ───────────────────────────
+  test.describe('job description load and save', () => {
+    test.beforeAll(async () => {
+      await setPlanFor(slug, 'growth') // job descriptions are a paid feature
+      await page.goto('/charts')
+      await createChart(page, 'JD plan')
+      await addRole(page, 'Jade Describer')
+    })
+    const roleCard = () => page.getByTestId('node-card').filter({ hasText: 'Jade Describer' })
+    const openResponsibilities = async () => {
+      await roleCard().click()
+      await page.getByRole('button', { name: 'Responsibilities' }).click()
+    }
+
+    test('a failed load shows an error with Retry and no editor; nothing is written; Retry opens the editor', async () => {
+      await reload(page)
+      let puts = 0
+      await page.route('**/api/charts/*/jd/*', route => {
+        if (route.request().method() === 'PUT') { puts++; return route.continue() }
+        return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' })
+      })
+      await openResponsibilities()
+      await expect(page.getByTestId('jd-load-error')).toBeVisible()
+      await expect(page.locator('.ProseMirror')).toHaveCount(0)
+      await page.unroute('**/api/charts/*/jd/*')
+      await page.getByRole('button', { name: 'Retry' }).click()
+      await expect(page.locator('.ProseMirror')).toBeVisible()
+      expect(puts).toBe(0)
+    })
+
+    test('typed text is saved and shows Saved; a refused save shows "Couldn\'t save" and the banner, and Retry saves it', async () => {
+      await reload(page)
+      await openResponsibilities()
+      const editor = page.locator('.ProseMirror')
+      await editor.click()
+      await editor.pressSequentially('Owns the platform')
+      await expect(page.getByTestId('jd-save-status')).toHaveText('Saved')
+      const jdUrl = async () => {
+        const id = (await serverChart(page)).nodes.find(n => n.name === 'Jade Describer')!.id
+        return `/api/charts/${chartId(page)}/jd/${id}`
+      }
+      expect(JSON.stringify(await (await ctx.request.get(await jdUrl(), { headers: { 'X-Dev-User': slug } })).json())).toContain('Owns the platform')
+
+      await page.route('**/api/charts/*/jd/*', route => route.request().method() === 'PUT' ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }) : route.continue())
+      await editor.pressSequentially(' and the pager')
+      await expect(page.getByTestId('jd-save-status')).toHaveText("Couldn't save")
+      await expect(page.getByRole('alert').filter({ hasText: "Couldn't save the job description" })).toBeVisible()
+      await page.unroute('**/api/charts/*/jd/*')
+      await page.getByRole('button', { name: 'Retry' }).click()
+      await expect(page.getByTestId('jd-save-status')).toHaveText('Saved')
+      expect(JSON.stringify(await (await ctx.request.get(await jdUrl(), { headers: { 'X-Dev-User': slug } })).json())).toContain('and the pager')
+    })
+
+    test('text typed in the last second survives closing the panel', async () => {
+      await reload(page)
+      await openResponsibilities()
+      const editor = page.locator('.ProseMirror')
+      await editor.click()
+      await editor.press('End')
+      await editor.pressSequentially(' plus last-second words')
+      await page.getByRole('button', { name: 'Close' }).first().click() // the panel closes inside the 1 s window
+      const id = (await serverChart(page)).nodes.find(n => n.name === 'Jade Describer')!.id
+      await expect.poll(async () => JSON.stringify(await (await ctx.request.get(`/api/charts/${chartId(page)}/jd/${id}`, { headers: { 'X-Dev-User': slug } })).json()), { timeout: 10_000 })
+        .toContain('last-second words')
+    })
+  })
 })

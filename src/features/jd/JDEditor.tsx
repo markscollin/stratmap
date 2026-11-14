@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import CharacterCount from '@tiptap/extension-character-count'
+import { useCanvasSave } from '../canvas/canvasSync'
 import { Bold, Italic, List, ListOrdered, Heading2, Heading3 } from 'lucide-react'
 
 interface JDEditorProps {
@@ -12,12 +13,43 @@ interface JDEditorProps {
   placeholder?: string
 }
 
-type SaveState = 'idle' | 'saving' | 'saved'
+// 'typing': text is waiting for the 1 s pause. 'sent': handed to the save queue. What the label says comes from the queue itself
+// (useCanvasSave), so "Saved" appears only once the server has the text and "Couldn't save" when it refused (R-11).
+type SaveState = 'idle' | 'typing' | 'sent'
 
 export function JDEditor({ content, onSave, editable = true, placeholder = 'Start writing…' }: JDEditorProps) {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const clearTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const queuePending = useCanvasSave(s => s.pending)
+  const queueFailed = useCanvasSave(s => s.failure !== null)
+  // Text typed but not yet sent, and the latest onSave, so a flush (unmount, role switch, tab hidden) sends the right thing.
+  const unsentHtml = useRef<string | null>(null)
+  const onSaveRef = useRef(onSave)
+  useEffect(() => { onSaveRef.current = onSave })
+
+  const flush = () => {
+    clearTimeout(saveTimer.current)
+    if (unsentHtml.current === null) return
+    const html = unsentHtml.current
+    unsentHtml.current = null
+    onSaveRef.current(html)
+    setSaveState('sent')
+  }
+  const flushRef = useRef(flush)
+  useEffect(() => { flushRef.current = flush })
+
+  // Text typed in the last second used to be lost when the panel closed, the role changed or the tab was hidden.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushRef.current() }
+    const onPageHide = () => flushRef.current()
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onPageHide)
+      flushRef.current() // unmount
+    }
+  }, [])
 
   const editor = useEditor({
     extensions: [
@@ -29,17 +61,26 @@ export function JDEditor({ content, onSave, editable = true, placeholder = 'Star
     editable,
     onUpdate({ editor: ed }) {
       if (!editable) return
-      setSaveState('saving')
+      const html = ed.getHTML()
+      unsentHtml.current = html === '<p></p>' ? '' : html
+      setSaveState('typing')
       clearTimeout(saveTimer.current)
-      clearTimeout(clearTimer.current)
-      saveTimer.current = setTimeout(() => {
-        const html = ed.getHTML()
-        onSave(html === '<p></p>' ? '' : html)
-        setSaveState('saved')
-        clearTimer.current = setTimeout(() => setSaveState('idle'), 2000)
-      }, 1000)
+      saveTimer.current = setTimeout(flush, 1000)
     },
   })
+
+  // 'sent' + nothing in the queue = the server has it. Show "Saved" briefly, then clear.
+  const label: 'saving' | 'saved' | 'failed' | null =
+    saveState === 'idle' ? null
+    : saveState === 'typing' ? 'saving'
+    : queueFailed ? 'failed'
+    : queuePending > 0 ? 'saving'
+    : 'saved'
+  useEffect(() => {
+    if (label !== 'saved') return
+    const t = setTimeout(() => setSaveState(s => (s === 'sent' ? 'idle' : s)), 2000)
+    return () => clearTimeout(t)
+  }, [label])
 
   const charCount = editor.storage?.characterCount?.characters() ?? 0
 
@@ -90,13 +131,16 @@ export function JDEditor({ content, onSave, editable = true, placeholder = 'Star
             )
           })}
           <div style={{ flex: 1 }} />
-          {saveState !== 'idle' && (
-            <span style={{
-              fontSize: 10,
-              color: saveState === 'saved' ? 'var(--success)' : 'var(--dim)',
-              transition: 'color .2s',
-            }}>
-              {saveState === 'saving' ? 'Saving…' : 'Saved'}
+          {label && (
+            <span
+              data-testid="jd-save-status"
+              style={{
+                fontSize: 10,
+                color: label === 'saved' ? 'var(--success)' : label === 'failed' ? 'var(--danger)' : 'var(--dim)',
+                transition: 'color .2s',
+              }}
+            >
+              {label === 'saving' ? 'Saving…' : label === 'saved' ? 'Saved' : "Couldn't save"}
             </span>
           )}
         </div>

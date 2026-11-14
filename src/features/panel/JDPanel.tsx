@@ -67,6 +67,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
   const updateJD  = useJobDescriptionStore(s => s.updateJD)
   const setStatus = useJobDescriptionStore(s => s.setStatus)
   const jd        = useJobDescriptionStore(s => node ? s.jobDescriptions[node.id] : undefined)
+  const loadFailed = useJobDescriptionStore(s => node ? !!s.loadErrors[node.id] : false)
 
   const templateMap = useTemplateStore(s => s.templates)
   const templates   = Object.values(templateMap)
@@ -133,7 +134,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
                   )}
                 </div>
               </div>
-              <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4 }}>
+              <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4 }}>
                 <X size={16} />
               </button>
             </div>
@@ -272,9 +273,23 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
               </>
             )}
 
-            {(tab === 'responsibilities' || tab === 'requirements') && !jd && (
+            {(tab === 'responsibilities' || tab === 'requirements') && !jd && !loadFailed && (
               <div style={{ textAlign: 'center', paddingTop: 40, color: 'var(--dim)', fontSize: 13 }}>
                 Loading…
+              </div>
+            )}
+
+            {(tab === 'responsibilities' || tab === 'requirements') && !jd && loadFailed && (
+              <div role="alert" data-testid="jd-load-error" style={{ textAlign: 'center', paddingTop: 32, color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
+                Couldn't load this job description. It stays closed so a blank page can't replace the saved text.
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    onClick={() => { if (node) void initJD(node.id) }}
+                    style={{ padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Retry
+                  </button>
+                </div>
               </div>
             )}
           </div>

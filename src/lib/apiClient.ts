@@ -125,8 +125,9 @@ export const api = {
   getText,
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
-  put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  /** `keepalive` lets the request finish if the page is closing (small bodies only: the browser caps it at 64 KB). */
+  put: <T>(path: string, body: unknown, opts: { keepalive?: boolean } = {}) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body), ...(opts.keepalive ? { keepalive: true } : {}) }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'DELETE', ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
   postStream,
