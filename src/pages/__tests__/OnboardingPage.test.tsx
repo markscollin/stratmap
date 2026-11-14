@@ -121,6 +121,25 @@ describe('OnboardingPage — Step 2', () => {
     expect(workspace?.pendingInvites[1].email).toBe('bob@co.com')
   })
 
+  // R-14: the invitations used to be logged as failed but still listed as pending.
+  it('when the invitations cannot be sent, they are not listed as pending and the person is told where to resend them', async () => {
+    const { api } = await import('../../lib/apiClient')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const original = vi.mocked(api.post).getMockImplementation()!
+    vi.mocked(api.post).mockImplementation((url: string, body: unknown) =>
+      url === '/api/workspace/invites' ? Promise.reject(new Error('boom')) : original(url, body))
+    try {
+      goToStep2()
+      fireEvent.change(screen.getByTestId('invite-email-0'), { target: { value: 'alice@co.com' } })
+      fireEvent.click(screen.getByTestId('send-invites-btn'))
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/charts'))
+      expect(useUserStore.getState().workspace?.pendingInvites).toHaveLength(0)
+      expect(useToastStore.getState().toasts.some(t => /invitations couldn't be sent/.test(t.message))).toBe(true)
+    } finally {
+      vi.mocked(api.post).mockImplementation(original)
+    }
+  })
+
   it('empty invite rows are not stored as pending invites', async () => {
     goToStep2()
     // Only fill the first row

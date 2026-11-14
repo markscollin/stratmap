@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ChartView } from '../ChartView'
@@ -173,5 +173,22 @@ describe('ChartView — sample chart and empty state (roadmap 2.7)', () => {
     first.unmount()
     renderAt('editor', '/charts?new=1')
     expect(screen.getByText('New org chart')).toBeTruthy()
+  })
+})
+
+// R-14: a failed chart list used to read "No charts yet".
+describe('ChartView — a failed load', () => {
+  const realFetch = useChartStore.getState().fetchCharts
+  afterEach(() => { useChartStore.setState({ fetchCharts: realFetch, error: false, loaded: false, loading: false } as never) })
+  it('shows an error with Retry instead of "No charts yet", and Retry loads again', () => {
+    const fetchCharts = vi.fn().mockResolvedValue(undefined)
+    useChartStore.setState({ charts: [], loaded: false, loading: false, error: true, fetchCharts } as never)
+    useUserStore.setState({ permission: 'owner' })
+    render(<MemoryRouter><ChartView /></MemoryRouter>)
+    expect(screen.getByTestId('load-error')).toHaveTextContent("Couldn't load your charts")
+    expect(screen.queryByText('No charts yet')).toBeNull()
+    fetchCharts.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: /Retry/ }))
+    expect(fetchCharts).toHaveBeenCalledTimes(1)
   })
 })

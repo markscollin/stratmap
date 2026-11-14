@@ -4,6 +4,7 @@ import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
   Clock, ExternalLink, Copy, GitBranch, Trash2, Globe,
 } from 'lucide-react'
+import { LoadError } from '../components/ui/LoadError'
 import { useChartStore } from '../store'
 import { countOwnCharts } from '../store/chartStore'
 import { useIsPhone } from '../hooks/useMediaQuery'
@@ -368,7 +369,7 @@ function NewChartModal({ onClose, onCreate }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChartView() {
-  const { charts, loading, loaded, fetchCharts, createChart, createSampleChart, updateChartStatus } = useChartStore()
+  const { charts, loading, loaded, error: loadFailed, fetchCharts, createChart, createSampleChart, updateChartStatus } = useChartStore()
   const ownCount = countOwnCharts(charts)
   const hasSample = charts.some(c => c.isSample)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -387,7 +388,7 @@ export function ChartView() {
   const [showImport, setShowImport] = useState(wantsDialog && deepLink === 'import' && !isAtChartLimit())
 
   useEffect(() => { document.title = 'StratMap — Org Charts' }, [])
-  useEffect(() => { if (!loaded) fetchCharts() }, [loaded, fetchCharts])
+  useEffect(() => { if (!loaded && !loadFailed) fetchCharts() }, [loaded, loadFailed, fetchCharts])
 
   // The deep link has been read into the dialogs' initial state above; drop it from the URL so a reload doesn't reopen it.
   useEffect(() => { if (deepLink) setSearchParams({}, { replace: true }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -435,7 +436,7 @@ export function ChartView() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 4 }}>Org Charts</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <p style={{ fontSize: 13, color: 'var(--muted)' }}>{loading ? 'Loading…' : `${charts.length} charts in your workspace`}</p>
+            <p style={{ fontSize: 13, color: 'var(--muted)' }}>{loading ? 'Loading…' : loadFailed && !loaded && charts.length === 0 ? '' : `${charts.length} charts in your workspace`}</p>
             {currentTier === 'free' && (
               <p style={{ fontSize: 12, color: 'var(--dim)', background: 'var(--raised)', padding: '4px 10px', borderRadius: 6 }}>
                 {ownCount} of 1 chart
@@ -490,8 +491,10 @@ export function ChartView() {
         </div>
       </div>
 
-      {/* Empty state */}
-      {filtered.length === 0 ? (
+      {/* A failed load is not an empty list (R-14) */}
+      {loadFailed && !loaded && charts.length === 0 ? (
+        <LoadError what="your charts" onRetry={() => { void fetchCharts() }} busy={loading} />
+      ) : filtered.length === 0 ? (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: isPhone ? '40px 20px' : '64px 40px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--brand-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
             <Search size={22} color="var(--brand)" />

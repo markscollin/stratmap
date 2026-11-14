@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { failureMessage } from '../lib/failureMessage'
+import { useToastStore } from './toastStore'
 import { api } from '../lib/apiClient'
 
 export interface Template {
@@ -65,6 +67,7 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
       set(s => ({ templates: { ...s.templates, [template.id]: template } }))
     } catch (err) {
       console.error('[templateStore] addTemplate failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'save the template'), 'error')
     }
   },
 
@@ -77,20 +80,26 @@ export const useTemplateStore = create<TemplateStore>((set, get) => ({
         [id]: { ...existing, ...updates, updatedBy: 'You', updatedAt: new Date().toISOString() },
       },
     }))
-    api.put(`/api/templates/${id}`, updates).catch(err =>
+    api.put(`/api/templates/${id}`, updates).catch(err => {
       console.error('[templateStore] updateTemplate failed:', err)
-    )
+      // Put back what was there before the edit (R-14).
+      set(s => ({ templates: { ...s.templates, [id]: existing } }))
+      useToastStore.getState().addToast(failureMessage(err, 'save the template'), 'error')
+    })
   },
 
   deleteTemplate(id) {
+    const existing = get().templates[id]
     set(s => {
       const next = { ...s.templates }
       delete next[id]
       return { templates: next }
     })
-    api.delete(`/api/templates/${id}`).catch(err =>
+    api.delete(`/api/templates/${id}`).catch(err => {
       console.error('[templateStore] deleteTemplate failed:', err)
-    )
+      if (existing) set(s => ({ templates: { ...s.templates, [id]: existing } }))
+      useToastStore.getState().addToast(failureMessage(err, 'delete the template'), 'error')
+    })
   },
 
   duplicateTemplate(id) {

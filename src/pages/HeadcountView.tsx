@@ -696,7 +696,7 @@ export function HeadcountView() {
   const totalFilled   = filteredPlans.filter(p => p.status === 'filled').length
 
   const handleAdd = async (data: HireFormData) => {
-    await create({
+    const created = await create({
       title: data.title,
       departmentId: data.departmentId || undefined,
       roleType: data.roleType,
@@ -707,7 +707,8 @@ export function HeadcountView() {
         ? { salaryMin: data.salary.min, salaryMax: data.salary.max, salaryCurrency: data.salary.currency }
         : {}),
     })
-    setAddingToQuarter(null)
+    // A failed create keeps the form open with what was typed (the store has already said why).
+    if (created) setAddingToQuarter(null)
   }
 
   const handleEdit = async (data: HireFormData) => {

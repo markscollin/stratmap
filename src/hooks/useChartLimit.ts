@@ -21,12 +21,13 @@ export interface ChartLimit {
 /** Chart count against the plan, from the real chart list (fetched once if needed). */
 export function useChartLimit(): ChartLimit {
   const max = useBillingStore(s => s.plan.maxCharts)
-  const { charts, loaded, loading, fetchCharts } = useChartStore()
+  const { charts, loaded, loading, error, fetchCharts } = useChartStore()
   const hasWorkspace = useUserStore(s => !!s.workspace)
 
   useEffect(() => {
-    if (hasWorkspace && !loaded && !loading) void fetchCharts()
-  }, [hasWorkspace, loaded, loading, fetchCharts])
+    // Not after a failure: that retried in a tight loop (the load flipping loading back off re-ran this). The Retry button asks again.
+    if (hasWorkspace && !loaded && !loading && !error) void fetchCharts()
+  }, [hasWorkspace, loaded, loading, error, fetchCharts])
 
   // The sample chart is free and never counts (roadmap 2.7).
   const count = countOwnCharts(charts)

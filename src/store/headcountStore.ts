@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../lib/apiClient'
+import { failureMessage } from '../lib/failureMessage'
+import { useToastStore } from './toastStore'
 import type { RoleType } from '../types'
 
 export type HeadcountStatus = 'planned' | 'approved' | 'filled'
@@ -93,6 +95,7 @@ export const useHeadcountStore = create<HeadcountStore>((set, get) => ({
       return plan
     } catch (err) {
       console.error('[headcountStore] create failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'add the planned hire'), 'error')
       return null
     }
   },
@@ -106,6 +109,7 @@ export const useHeadcountStore = create<HeadcountStore>((set, get) => ({
       await api.put(`/api/headcount/${id}`, updates)
     } catch (err) {
       console.error('[headcountStore] update failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'save the planned hire'), 'error')
       get().fetch()  // rollback via re-fetch
     }
   },
@@ -116,6 +120,7 @@ export const useHeadcountStore = create<HeadcountStore>((set, get) => ({
       await api.delete(`/api/headcount/${id}`)
     } catch (err) {
       console.error('[headcountStore] remove failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'remove the planned hire'), 'error')
       get().fetch()
     }
   },

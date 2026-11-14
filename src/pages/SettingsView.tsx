@@ -5,6 +5,8 @@ import { useUserStore } from '../store/userStore'
 import { usePermission } from '../hooks/usePermission'
 import { usePlanLimits } from '../hooks/usePlanLimits'
 import { api, ApiError } from '../lib/apiClient'
+import { failureMessage } from '../lib/failureMessage'
+import { useToastStore } from '../store/toastStore'
 import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
 import { useBillingStore } from '../store/billingStore'
 import { ActivityTab } from '../features/audit/ActivityTab'
@@ -107,6 +109,7 @@ function GeneralTab() {
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       console.error('[SettingsView] save workspace failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'rename the workspace'), 'error')
     } finally {
       setSaving(false)
     }

@@ -3,6 +3,7 @@ import type { OrgChart, OrgNode, OrgEdge, ChartStatus, Department } from '../typ
 import { api, ApiError } from '../lib/apiClient'
 import { useToastStore } from './toastStore'
 import { buildChartTemplate } from '../lib/chartTemplates'
+import { failureMessage } from '../lib/failureMessage'
 
 /** Charts that count toward the plan's limit: everything except the sample (roadmap 2.7). */
 export const countOwnCharts = (charts: { isSample?: boolean }[]) => charts.filter(c => !c.isSample).length
@@ -13,6 +14,8 @@ interface ChartStore {
   charts: OrgChart[]
   loading: boolean
   loaded: boolean
+  /** The last chart-list load failed (R-14). Pages show an error with Retry; "failed to load" must never look like "no charts". */
+  error: boolean
 
   fetchCharts: () => Promise<void>
   createChart: (name: string, nodes: OrgNode[], edges: OrgEdge[], departments: Department[], opts?: { isSample?: boolean }) => Promise<OrgChart | null>
@@ -20,8 +23,9 @@ interface ChartStore {
   createSampleChart: () => Promise<OrgChart | null>
   deleteChart: (id: string) => Promise<void>
   setActiveChart: (id: string | null) => void
-  updateChartStatus: (id: string, status: ChartStatus) => void
-  updateChartPublic: (id: string, isPublic: boolean) => Promise<void>
+  updateChartStatus: (id: string, status: ChartStatus) => Promise<boolean>
+  /** Resolves true when the server accepted it; on failure the chart is put back and a toast says why. */
+  updateChartPublic: (id: string, isPublic: boolean) => Promise<boolean>
   duplicateChart: (id: string) => Promise<void>
 
   // kept for backwards compat (canvas uses this to merge fetched data)
@@ -31,10 +35,11 @@ export const useChartStore = create<ChartStore>((set, get) => ({
   charts: [],
   loading: false,
   loaded: false,
+  error: false,
 
   async fetchCharts() {
     if (get().loading) return
-    set({ loading: true })
+    set({ loading: true, error: false })
     try {
       const raw = await api.get<Record<string, unknown>[]>('/api/charts')
       const charts: OrgChart[] = raw.map(c => ({
@@ -55,9 +60,10 @@ export const useChartStore = create<ChartStore>((set, get) => ({
         nodeCount: Number(c.nodeCount ?? 0),
         deptCount: Number(c.deptCount ?? 0),
       }))
-      set({ charts, loaded: true })
+      set({ charts, loaded: true, error: false })
     } catch (err) {
       console.error('[chartStore] fetchCharts failed:', err)
+      set({ error: true })
     } finally {
       set({ loading: false })
     }
@@ -108,34 +114,54 @@ export const useChartStore = create<ChartStore>((set, get) => ({
   },
 
   async deleteChart(id) {
+    const before = get().charts
     set(s => ({ charts: s.charts.filter(c => c.id !== id) }))
     try {
       await api.delete(`/api/charts/${id}`)
     } catch (err) {
       console.error('[chartStore] deleteChart failed:', err)
+      // Put the chart back exactly where it was, and say why (R-14).
+      set(s => (s.charts.some(c => c.id === id) ? s : { charts: before }))
+      useToastStore.getState().addToast(failureMessage(err, 'delete the chart'), 'error')
     }
   },
 
   setActiveChart: () => {},
 
-  updateChartStatus(id, status) {
+  async updateChartStatus(id, status) {
+    const previous = get().charts.find(c => c.id === id)
     set(s => ({
       charts: s.charts.map(c =>
         c.id === id ? { ...c, status, updatedAt: new Date().toISOString() } : c
       ),
     }))
-    api.put(`/api/charts/${id}`, { status }).catch(err =>
+    try {
+      await api.put(`/api/charts/${id}`, { status })
+      return true
+    } catch (err) {
       console.error('[chartStore] updateChartStatus failed:', err)
-    )
+      if (previous) set(s => ({ charts: s.charts.map(c => (c.id === id ? { ...c, status: previous.status, updatedAt: previous.updatedAt } : c)) }))
+      useToastStore.getState().addToast(failureMessage(err, 'change the chart status'), 'error')
+      return false
+    }
   },
 
   async updateChartPublic(id, isPublic) {
+    const previous = get().charts.find(c => c.id === id)
     set(s => ({
       charts: s.charts.map(c =>
         c.id === id ? { ...c, isPublic, updatedAt: new Date().toISOString() } : c
       ),
     }))
-    await api.put(`/api/charts/${id}`, { isPublic })
+    try {
+      await api.put(`/api/charts/${id}`, { isPublic })
+      return true
+    } catch (err) {
+      console.error('[chartStore] updateChartPublic failed:', err)
+      if (previous) set(s => ({ charts: s.charts.map(c => (c.id === id ? { ...c, isPublic: previous.isPublic, updatedAt: previous.updatedAt } : c)) }))
+      useToastStore.getState().addToast(failureMessage(err, 'change sharing'), 'error')
+      return false
+    }
   },
 
   // The server makes the copy (the list only holds counts, not roles; copying what the list holds gave an empty chart, R-10).

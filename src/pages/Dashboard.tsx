@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, Briefcase, TrendingUp, Network, ArrowRight, Plus, BarChart2 } from 'lucide-react'
+import { LoadError } from '../components/ui/LoadError'
 import { useChartStore } from '../store'
 import { useHeadcountStore } from '../store/headcountStore'
 import { STATUS_META } from '../constants/statusMeta'
@@ -34,7 +35,7 @@ interface WorkspaceStats {
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const { charts, loaded } = useChartStore()
+  const { charts, loaded, error: chartsFailed, loading: chartsLoading, fetchCharts } = useChartStore()
   const isPhone = useIsPhone()
   const pad = isPhone ? '16px' : '28px 32px'
   const { plans, fetch: fetchPlans } = useHeadcountStore()
@@ -82,6 +83,16 @@ export function Dashboard() {
   ]
 
   const isLoading = !stats
+
+  // The chart list could not be loaded: say so, instead of a page of zeros that looks like an empty workspace (R-14).
+  if (chartsFailed && !loaded && charts.length === 0) {
+    return (
+      <div style={{ padding: pad, animation: 'fadeUp .3s ease-out' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.4px', marginBottom: 20 }}>Dashboard</h1>
+        <LoadError what="your dashboard" onRetry={() => { void fetchCharts() }} busy={chartsLoading} />
+      </div>
+    )
+  }
 
   // No chart yet (roadmap 2.7): three ways to start instead of a wall of zeros.
   if (loaded && charts.length === 0) {

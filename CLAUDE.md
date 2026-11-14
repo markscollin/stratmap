@@ -74,7 +74,7 @@ content reviewed by a lawyer.
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts: **726 frontend (+2 skipped launch-gate) + 733 API**, 85 e2e, after the P0 band R-01 to R-06 plus R-08, R-09, R-10, R-15 (614 + 638 + 74 at the review). The counts elsewhere in this file are older.
+- Real test counts (2026-11-14): **766 frontend (+2 skipped launch-gate) + 776 API**, 96 e2e, after R-01 to R-11, R-14, R-16, R-19, R-20, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -92,6 +92,11 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
 - Expired copies go in the daily `purge-deleted` job and whenever a role in that chart is deleted. **Privacy:** deleted roles, comments and job descriptions live 3 days after delete (the privacy text says so).
 - `chartRevision.ts` knows `POST …/nodes/:id/restore` is a structural write (queued, revision header). **Job descriptions (R-38, 2026-11-13):** delete also removes the role's `job_descriptions` rows in the same atomic batch and keeps them in the `deleted_nodes` copy (`DeletedNodeData.jobDescriptions`, optional so older copies still restore); restore re-inserts them. The first save of a JD for a role that is not in the chart is `404 Role not found` (a late autosave cannot orphan one). The daily purge also erases orphans older than a day (`purgeOrphanJobDescriptions`, reported as `orphanJds`); no migration.
 - Gotcha fixed: the canvas keyboard-shortcut effect must list `readOnly` in its dependencies, or after a hard reload (page starts view-only) Cmd+Z and Delete stay dead.
+
+### Failed writes (R-11 and R-14, 2026-11-14)
+- **Job descriptions use the canvas queue** (`saveChange` in `jobDescriptionStore`): a failed *load* sets `loadErrors[nodeId]` and the panel shows Retry with no editor (a blank fallback used to autosave over the real text); `updateJD`/`setStatus` do nothing for such a role. `JDEditor`'s label comes from `useCanvasSave` ("Saving…" until the server answered, "Saved", "Couldn't save"), and it flushes unsent text on unmount, `visibilitychange` and `pagehide` (`api.put(..., { keepalive: true })`).
+- **Other optimistic writes** (chart delete/status/share, templates, headcount, workspace rename, onboarding invites) are independent, so they do **not** use the queue: they restore the exact previous state and toast `failureMessage(err, 'what')` (`src/lib/failureMessage.ts`). New optimistic write = snapshot, apply, `try`/`catch`, restore + toast.
+- **"Couldn't load" is its own state:** `chartStore.error` + `LoadError` (Charts page, Dashboard). Effects that fetch must also check `!error`, or a failure retries in a loop (it did).
 
 ### Also shipped 2026-11-13 (R-08, R-09, R-10, R-15)
 - **Chart status rule (R-08):** `statusChangeNeedsAdmin(from, to)` in `src/lib/chartStatus.ts`. Entering approved/rejected/live, or leaving approved/live, is admin-only on the server (`PUT` and `POST /api/charts`); editors keep draft, editing, review, archived. A test compares it with `STATUS_ACTIONS` in `statusMeta.tsx`; change both together.

@@ -8,7 +8,7 @@ import { useAuth } from '../features/auth/useAuth'
 import { setSelectedWorkspaceId } from '../lib/workspaceSelection'
 import { api } from '../lib/apiClient'
 import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
-import type { Permission, CompanySize, WorkspaceRole } from '../types'
+import type { Permission, CompanySize, WorkspaceRole, Workspace } from '../types'
 import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
 
@@ -72,7 +72,7 @@ export function OnboardingPage() {
       )
       setSelectedWorkspaceId(ws.id)
       const now = new Date().toISOString()
-      setWorkspace({
+      const created: Workspace = {
         id: ws.id,
         name: ws.name,
         ownerRole: ws.ownerRole as WorkspaceRole,
@@ -82,7 +82,8 @@ export function OnboardingPage() {
           : [],
         pendingInvites: filledInvites.map(r => ({ email: r.email.trim(), permission: r.permission, sentAt: now })),
         createdAt: ws.createdAt ?? now,
-      })
+      }
+      setWorkspace(created)
       // You created it, so you own it (AuthProvider starts everyone as viewer until the server says otherwise).
       setPermission('owner')
       // Persist + email invites (best-effort — failure shouldn't block onboarding)
@@ -93,6 +94,9 @@ export function OnboardingPage() {
           })
         } catch (inviteErr) {
           console.error('[onboarding] sending invites failed:', inviteErr)
+          // Nothing was sent, so do not list them as pending (R-14), and say where to send them from.
+          setWorkspace({ ...created, pendingInvites: [] })
+          addToast("Your workspace is ready, but the invitations couldn't be sent. Invite people again from Settings → Members.", 'warning')
         }
       }
 

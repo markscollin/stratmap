@@ -24,6 +24,7 @@ import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
+import { failureMessage } from '../../lib/failureMessage'
 import { ImportDialog } from '../import/ImportDialog'
 import { EmptyCanvasCard } from '../onboarding/EmptyCanvasCard'
 import { pinchTransform, midpoint, distance, type Point, type ViewTransform } from './pinch'
@@ -319,12 +320,17 @@ function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: bo
     try {
       if (!isPublic) {
         const c = await fetchOrCreateCode()
-        if (c) await updateChartPublic(chartId, true)
+        if (c) await updateChartPublic(chartId, true) // rolls itself back and says why if the server refuses (R-14)
+        else useToastStore.getState().addToast("Couldn't create the share link. Please try again.", 'error')
       } else {
+        // The link is revoked first; only then does the chart stop looking public. If the revoke fails it stays public and says so.
         await api.delete(`/api/charts/${chartId}/share`)
         setCode(null)
         await updateChartPublic(chartId, false)
       }
+    } catch (err) {
+      console.error('[share] toggle failed:', err)
+      useToastStore.getState().addToast(failureMessage(err, 'change sharing'), 'error')
     } finally {
       setBusy(false)
     }
