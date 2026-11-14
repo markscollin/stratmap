@@ -11,6 +11,8 @@ export interface UserIdentity {
   avatarUrl: string | null
 }
 
+import { isDevBypassAllowed } from './devBypass'
+
 const DEV_USER_ID = 'u-dev'
 const DEV_PREFIX = 'dev-' // extra dev-bypass identities, see api/_lib/auth.ts
 
@@ -20,6 +22,7 @@ export async function getUserIdentity(userId: string): Promise<UserIdentity> {
     const slug = userId.slice(DEV_PREFIX.length)
     return { emails: [`${slug}@e2e.test`], name: slug, avatarUrl: null }
   }
+  if (!process.env.CLERK_SECRET_KEY && !isDevBypassAllowed()) throw new Error('Clerk is not configured') // never invent an identity (R-16)
   if (userId === DEV_USER_ID || !process.env.CLERK_SECRET_KEY) {
     // Dev bypass identity (local only — requireUser never yields u-dev on deployed envs).
     return { emails: ['dev@example.com'], name: 'Dev User', avatarUrl: null }

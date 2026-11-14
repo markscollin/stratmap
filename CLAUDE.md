@@ -27,8 +27,9 @@ Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
 - **Stripe billing** — `api/checkout.ts`, `api/webhooks/stripe.ts`,
   `api/admin/grant-trial.ts` (admin trial override via `x-admin-secret`). Effective
   plan resolved in `api/workspace.ts` (trial overrides base tier). Fully tested.
-- **Auth bypass hardened** — dev bypass (`x-dev-user`) now only works on local/unset
-  envs, never on `preview` or `production` (`api/_lib/auth.ts`).
+- **Auth bypass hardened (R-16, 2026-11-14)** — the dev bypass (`x-dev-user`, "no Clerk key = dev user", unsigned Stripe events, the fake checkout success, the synthetic identity) is one explicit opt-in,
+  `isDevBypassAllowed()` in `api/_lib/devBypass.ts`: **`ALLOW_DEV_BYPASS=1` is required** and it is ignored (with a log line) on `preview`/`production`. A missing `VERCEL_ENV` no longer counts as "local".
+  Set it in `.env.local` for `vercel dev` without Clerk keys; `scripts/e2e-server.mjs` and `vitest.api.config.ts` set it; tests that prove it is refused delete it (`api/__tests__/dev-bypass.test.ts`). Without Clerk keys and without the flag every request is a 401.
 - **Plan tiers centralized** — `PLAN_BY_TIER` + `ENTERPRISE_PLAN` exported from
   `billingStore`; `usePlanLimits` treats `-1` as unlimited.
 - **Legal + consent** — `/privacy`, `/terms` (`LegalPages.tsx`, template content, needs lawyer review; the owner's facts live in `src/lib/legalDetails.ts`: while any is empty the pages show placeholders and the template banner, `npm run check:legal` fails until all are filled; `SUB_PROCESSORS` (`src/lib/subProcessors.ts`) is checked against `package.json` by a test, update it when an integration is added) + app-wide `CookieConsent` banner.
@@ -171,6 +172,9 @@ See `docs/BILLING.md`. Summary:
 - `GET /api/workspace` returns `billing: { status, planExpiresAt, cancelAtPeriodEnd, hasBillingAccount }` and never returns Stripe ids.
   The client keeps it in `useBillingStore().subscription`.
 - **Webhook body (R-05):** `api/_lib/rawBody.ts` reads the raw bytes via `req.on('data'|'end')` (what `@vercel/node`'s helper replays); never use `for await` over the request, and `config.api.bodyParser` is a Next.js thing that does nothing here. **A deployed-preview check is still owed** (`docs/BILLING.md`, "Release check"): until it is done assume nothing about production.
+- **One customer per workspace, duplicates refunded (R-19, 2026-11-14):** `POST /api/checkout` creates the Stripe customer *before* Checkout (idempotency key `customer-<workspaceId>`, only the opaque workspace id on it), saves it on the workspace and always passes `customer`, so two Checkouts opened together belong to one customer.
+  If a second subscription turns up for a workspace whose linked one is still live in Stripe, `syncSubscription` keeps the first, **cancels the newer and refunds its payment** (`cancelDuplicateSubscription`; reported to Sentry; a failed refund is reported for a human). If the linked one cannot be checked it touches nothing; if Stripe says it is finished, the new one replaces it.
+- **Checkout failures (R-20):** with no `STRIPE_SECRET_KEY` the route simulates success only under the dev bypass; anywhere else it is `503 billing-unavailable` (and reported). `CheckoutButton` shows the server message in a toast, and non-admins see a disabled "Ask an admin to upgrade".
 - `POST /api/billing/portal` (admin) opens the Customer Portal (`ManageBillingButton`). Checkout sends existing subscribers there.
 - **Idempotency:** `stripe_events` dedups webhook deliveries and survives a crash (R-06, `api/_lib/stripeEvents.ts`): a claim is marked `processed_at` when done; an unfinished claim older than 60 s is taken over by the next delivery, a fresh one answers 409.
   A failed-payment email goes to owners and admins on the first attempt only (`emails_sent_at` stops a takeover re-sending it). `syncSubscription` links an unlinked workspace from the subscription's `workspaceId` metadata, so a lost checkout event heals on the next event. `/billing/success` says "Payment received" (not "complete") if the plan has not changed after polling; `VITE_SUPPORT_EMAIL` adds a mailto there.
@@ -586,7 +590,7 @@ src/
 ### Backend Phase 2: API + Auth + Persistence ✅ (2026-05-19)
 - Vercel Serverless API: `api/workspace.ts`, `api/charts/index.ts`, `api/charts/[id].ts`, nodes, edges, JD
 - `api/_lib/auth.ts` — `requireAuth` (JWT + workspace lookup) + `requireUser` (JWT only, for onboarding)
-- Dev bypass: absent `CLERK_SECRET_KEY` or `x-dev-user: true` header → `u-dev`/`ws-dev` identity
+- Dev bypass: with `ALLOW_DEV_BYPASS=1` (R-16), absent `CLERK_SECRET_KEY` or `x-dev-user: true` header → `u-dev`/`ws-dev` identity
 - `src/lib/apiClient.ts` — typed fetch wrapper (Clerk Bearer token or dev bypass header)
 - All stores and pages wired to real API — data persists across reloads
 - SPA routing: Vercel `rewrites` in `vercel.json` (see "SEO, previews and branding"); the old `public/404.html` redirect hack is gone
@@ -843,7 +847,7 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 - **Dev tools** — In browser console:
   - `__devTools.setPermission('admin'|'editor'|'viewer'|...)` — test permission levels
   - `__devTools.setPlan('free'|'starter'|'growth')` — test billing tiers
-- **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, all API requests fall back to `u-dev`/`ws-dev` identity.
+- **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, API requests fall back to the `u-dev`/`ws-dev` identity **only if `ALLOW_DEV_BYPASS=1` is also set** (R-16); otherwise they are 401.
 - **Sprint 6 AI drafting** — Runs server-side via `api/ai/draft.ts` (plan-gated, streams). Add `ANTHROPIC_API_KEY=sk-ant-...` (server-side, no `VITE_` prefix) to `.env.local`/Vercel after verifying billing balance at console.anthropic.com
 - **Schema changes** — Edit `src/lib/db/schema.ts`, run `npm run db:generate`, and commit the SQL. Production deploys apply it. `npm run db:migrate` applies it to a dev DB.
 - **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth). `SharePage` handles both 10-char short codes and legacy URL tokens.

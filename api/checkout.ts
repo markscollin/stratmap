@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
 import { requireRole } from './_lib/access'
 import { parseBody } from './_lib/validate'
@@ -11,6 +11,7 @@ import { db } from './_lib/db'
 import { createPortalSession, priceIdFor } from './_lib/billing'
 import { workspaces } from '../src/lib/db/schema'
 import { hasAnalyticsConsent } from './_lib/analytics'
+import { isDevBypassAllowed } from './_lib/devBypass'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -25,9 +26,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!body) return
     const { tier, billingCycle } = body
 
-    // Dev mode: no Stripe key configured — simulate successful checkout
+    // No Stripe key: pretend the purchase worked ONLY in explicit local dev (R-20). Anywhere else this is a
+    // misconfiguration, and showing "Welcome to Starter" for a purchase that never happened would be worse than an error.
     if (!process.env.STRIPE_SECRET_KEY) {
-      return res.json({ url: `/billing/success?plan=${tier}` })
+      if (isDevBypassAllowed()) return res.json({ url: `/billing/success?plan=${tier}` })
+      console.error('[checkout] STRIPE_SECRET_KEY is not set on a deployed environment')
+      reportError(new Error('STRIPE_SECRET_KEY is not set'), { route: '/api/checkout' })
+      return res.status(503).json({ error: 'billing-unavailable', message: 'Billing is not available right now. Please try again later or contact support.' })
     }
 
     const priceId = priceIdFor(tier, billingCycle)
@@ -48,11 +53,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ url: await createPortalSession(stripe, ws.stripeCustomerId), portal: true })
     }
 
+    // One Stripe customer per workspace, made before Checkout (R-19): two Checkouts opened at once then belong to the
+    // same customer, so the second payment is recognisable as a duplicate. The idempotency key makes two simultaneous
+    // requests get the very same customer back instead of creating two. Only the opaque workspace id is stored on it.
+    let customerId = ws?.stripeCustomerId ?? null
+    if (!customerId) {
+      const created = await stripe.customers.create(
+        { metadata: { workspaceId: auth.workspaceId } },
+        { idempotencyKey: `customer-${auth.workspaceId}` },
+      )
+      customerId = created.id
+      await db.update(workspaces).set({ stripeCustomerId: customerId, updatedAt: new Date() })
+        .where(and(eq(workspaces.id, auth.workspaceId), isNull(workspaces.stripeCustomerId)))
+      // If another request saved a different id first, use that one (the row is the truth).
+      const [saved] = await db.select({ id: workspaces.stripeCustomerId }).from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1)
+      if (saved?.id) customerId = saved.id
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      // Reuse the customer after a cancellation, so invoices stay in one place.
-      ...(ws?.stripeCustomerId ? { customer: ws.stripeCustomerId } : {}),
+      customer: customerId,
       client_reference_id: auth.workspaceId,
       // The tier is derived from the price id by the webhook; metadata only links the workspace.
       // `analyticsUser` is set only if the buyer accepted analytics: the webhook (no browser) needs it

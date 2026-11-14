@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { db } from './db'
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
+import { isDevBypassAllowed } from './devBypass'
 
 export interface AuthContext {
   userId: string
@@ -17,20 +18,12 @@ const DEV_WORKSPACE_ID = 'ws-dev'
 export const DEV_PREFIX = 'dev-'
 const DEV_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/i
 
-// Dev auth bypass is allowed only on local/unset environments — never on deployed
-// Vercel environments. Preview deployments have public URLs, so they must require
-// real auth just like production.
-function isDevBypassAllowed(): boolean {
-  const env = process.env.VERCEL_ENV
-  return env !== 'production' && env !== 'preview'
-}
-
 /**
  * Who the dev bypass acts as. `x-dev-user: true` is the classic single dev identity
  * (`u-dev`, with a ready-made workspace). Any other short slug (`x-dev-user: alice`)
  * is a distinct user `dev-alice` who starts with no workspace, so e2e tests can run
  * sign-up → onboarding → invites with several people (roadmap 3.3). Only called
- * after isDevBypassAllowed(), so none of this exists on preview or production.
+ * after isDevBypassAllowed() (an explicit ALLOW_DEV_BYPASS=1 and never on preview or production, see devBypass.ts).
  */
 function devUserFromHeader(req: VercelRequest): string | null {
   const raw = req.headers['x-dev-user']
@@ -81,6 +74,13 @@ export async function requireUser(
     return { userId: DEV_USER_ID }
   }
 
+  if (!process.env.CLERK_SECRET_KEY) {
+    // Not configured and not an explicit dev bypass: fail closed, and say why in the log (R-16).
+    console.error('[auth] CLERK_SECRET_KEY is not set and ALLOW_DEV_BYPASS is not on: refusing the request. Locally, add ALLOW_DEV_BYPASS=1 to .env.local.')
+    res.status(401).json({ error: 'Unauthorized' })
+    return null
+  }
+
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Unauthorized' })
@@ -118,6 +118,13 @@ export async function requireAuth(
     console.warn('[auth] CLERK_SECRET_KEY not set — using dev identity')
     await ensureDevWorkspace()
     return resolveWorkspace(req, res, DEV_USER_ID)
+  }
+
+  if (!process.env.CLERK_SECRET_KEY) {
+    // Not configured and not an explicit dev bypass: fail closed, and say why in the log (R-16).
+    console.error('[auth] CLERK_SECRET_KEY is not set and ALLOW_DEV_BYPASS is not on: refusing the request. Locally, add ALLOW_DEV_BYPASS=1 to .env.local.')
+    res.status(401).json({ error: 'Unauthorized' })
+    return null
   }
 
   const authHeader = req.headers.authorization

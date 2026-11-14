@@ -60,7 +60,9 @@ src/
 ## Development
 
 ```bash
-npm run dev          # Start dev server
+npm run dev          # Start dev server (frontend only)
+# `npm run dev:local` (vercel dev) runs the API too. Without Clerk keys, add ALLOW_DEV_BYPASS=1 to .env.local
+# to act as the built-in dev user; without that line every API request is a 401 (it is never honoured on Vercel).
 npx tsc --noEmit   # Type check
 npm run build       # Production build
 ```

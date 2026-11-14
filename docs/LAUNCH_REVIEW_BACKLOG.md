@@ -349,7 +349,7 @@ Dashboard, so "failed to load" never looks like "empty".
 `AuthProvider`'s public handling so it does not bounce to sign-in. Test in `src/pages/__tests__/`.
 
 ### R-16 Dev bypass and unsigned webhooks fail open without `VERCEL_ENV`
-- [ ] Open
+- [x] Done 2026-11-14: one rule, `isDevBypassAllowed()` in `api/_lib/devBypass.ts` (`ALLOW_DEV_BYPASS=1` **and** not production/preview), used by `auth.ts` (header and no-key fallback), the Stripe unsigned-event fallback, the fake checkout success (R-20) and `identity.ts` (which now throws instead of inventing an identity). No Clerk key and no flag = 401 with a log line saying what to set. The flag is set by `e2e-server.mjs` and `vitest.api.config.ts`; README and CLAUDE.md say to put it in `.env.local` for `vercel dev` without Clerk keys. Tests: `dev-bypass.test.ts` (new), existing auth/webhook tests still pass. **Owner:** if you run `vercel dev` *without* Clerk keys, add `ALLOW_DEV_BYPASS=1` to `.env.local`; with real Clerk keys nothing changes. Do **not** set it in Vercel.
 
 **Problem.** The `x-dev-user` bypass is honoured whenever `VERCEL_ENV` is neither `production` nor `preview`,
 including unset. The Stripe webhook accepts unsigned bodies on the same condition. Safe on Vercel today; open
@@ -398,7 +398,7 @@ headcount; `mailto:sales@stratmap.app` (`:276`) depends on a domain not yet boug
   create a small number of JDs. Decide, then update `plans.ts` and the FAQ to match.
 
 ### R-19 Double subscription race at checkout
-- [ ] Open
+- [x] Done 2026-11-14: customer created before Checkout with an idempotency key and saved on the workspace (so two simultaneous Checkouts share one customer); `syncSubscription` cancels and refunds a newer duplicate when the linked subscription is still live (also when found through a later event's metadata), reports it to Sentry, and does nothing destructive if the linked one cannot be checked. Refund goes through `invoicePayments` (this Stripe version has no `invoice.charge`). Tests: `checkout.test.ts`, `stripe-webhook.test.ts` (6 new). **Not proven against real Stripe:** do one test-mode run with two Checkout tabs (add it to the R-05 preview check).
 
 **Problem (reported).** The guard only looks for an already-linked subscription. Two admins (or two tabs) can
 both complete Checkout; the second link overwrites the first, which keeps billing and is then ignored.
@@ -408,7 +408,7 @@ belong to the same customer; in `syncSubscription`, when a workspace already has
 subscription, cancel the newer duplicate (with refund) and report it to Sentry. Add a test.
 
 ### R-20 Checkout button fails silently; fake success without Stripe key
-- [ ] Open
+- [x] Done 2026-11-14: errors show as a toast (server message; a 403 says to ask an admin), non-admins get a disabled "Ask an admin to upgrade" (server still enforces), and the no-key success only exists under the dev bypass (503 `billing-unavailable` elsewhere, reported). Tests: `CheckoutButton.test.tsx`, `checkout.test.ts`, `tests/e2e/billing-checkout.spec.ts`.
 
 **Problem (reported).** `src/features/billing/CheckoutButton.tsx:18-21`: a 403 (editor clicks Upgrade), 400
 (missing price env) or 500 just re-enables the button. `api/checkout.ts:29-31`: with `STRIPE_SECRET_KEY` unset

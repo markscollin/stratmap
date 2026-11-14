@@ -14,8 +14,10 @@ vi.mock('../_lib/auth', () => ({
 
 const sessionCreate = vi.fn()
 const portalCreate = vi.fn()
+const customerCreate = vi.fn()
 vi.mock('stripe', () => ({
   default: class {
+    customers = { create: customerCreate }
     checkout = { sessions: { create: sessionCreate } }
     billingPortal = { sessions: { create: portalCreate } }
   },
@@ -45,6 +47,7 @@ beforeEach(async () => {
   portalCreate.mockReset().mockResolvedValue({ url: 'https://billing.stripe.test/portal' })
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID, permission: 'owner' })
   sessionCreate.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/abc' })
+  customerCreate.mockReset().mockResolvedValue({ id: 'cus_new' })
   PRICE_ENV.forEach(k => delete process.env[k])
 })
 
@@ -100,7 +103,7 @@ describe('POST /api/checkout', () => {
     expect(arg.metadata).toEqual({ workspaceId: TEST_WS_ID })
     expect(arg.subscription_data).toEqual({ metadata: { workspaceId: TEST_WS_ID } })
     expect(arg.client_reference_id).toBe(TEST_WS_ID)
-    expect(arg.customer).toBeUndefined()
+    expect(arg.customer).toBe('cus_new') // a customer is made before Checkout (R-19)
     expect(arg.allow_promotion_codes).toBe(true)
     const body = res._body as { url: string }
     expect(body.url).toBe('https://checkout.stripe.test/abc')
@@ -126,5 +129,74 @@ describe('POST /api/checkout', () => {
     expect(sessionCreate).not.toHaveBeenCalled()
     expect(portalCreate.mock.calls[0][0].customer).toBe('cus_1')
     expect(res._body).toEqual({ url: 'https://billing.stripe.test/portal', portal: true })
+  })
+})
+
+// R-19: two Checkouts opened at once must belong to ONE Stripe customer, so the second payment can be recognised as a duplicate.
+describe('one Stripe customer per workspace (R-19)', () => {
+  const start = () => handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, createRes() as never)
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test'
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = 'price_starter_monthly'
+  })
+
+  it('creates the customer before Checkout, stores its id on the workspace, and keys the request by workspace', async () => {
+    await start()
+    expect(customerCreate).toHaveBeenCalledTimes(1)
+    expect(customerCreate.mock.calls[0][0]).toEqual({ metadata: { workspaceId: TEST_WS_ID } }) // opaque id only, no names or emails
+    expect(customerCreate.mock.calls[0][1]).toEqual({ idempotencyKey: `customer-${TEST_WS_ID}` })
+    const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.id, TEST_WS_ID))
+    expect(ws.stripeCustomerId).toBe('cus_new')
+    expect(sessionCreate.mock.calls[0][0].customer).toBe('cus_new')
+  })
+
+  it('a second Checkout started later reuses that customer and creates no new one', async () => {
+    await start(); await start()
+    expect(customerCreate).toHaveBeenCalledTimes(1)
+    expect(sessionCreate.mock.calls.map(c => c[0].customer)).toEqual(['cus_new', 'cus_new'])
+  })
+
+  it('two simultaneous starts end with one customer on the workspace and both sessions on it', async () => {
+    await Promise.all([start(), start()])
+    const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.id, TEST_WS_ID))
+    expect(ws.stripeCustomerId).toBe('cus_new')
+    expect(sessionCreate.mock.calls.map(c => c[0].customer)).toEqual(['cus_new', 'cus_new'])
+  })
+
+  it('if another request saved a different customer first, that one wins', async () => {
+    customerCreate.mockImplementation(async () => {
+      await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_first' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+      return { id: 'cus_late' }
+    })
+    await start()
+    expect(sessionCreate.mock.calls[0][0].customer).toBe('cus_first')
+  })
+})
+
+// R-20: without a Stripe key the route used to answer with a fake success everywhere.
+describe('no Stripe key (R-20)', () => {
+  const start = async () => { const res = createRes(); await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, res as never); return res }
+
+  it('in explicit local dev it still simulates success', async () => {
+    expect((await start())._body).toEqual({ url: '/billing/success?plan=starter' })
+  })
+
+  it.each([
+    ['without ALLOW_DEV_BYPASS', () => { delete process.env.ALLOW_DEV_BYPASS }],
+    ['on production', () => { process.env.VERCEL_ENV = 'production' }],
+    ['on preview', () => { process.env.VERCEL_ENV = 'preview' }],
+  ])('%s it is a 503 with a message, never a fake "Welcome to Starter"', async (_name, setup) => {
+    const saved = { flag: process.env.ALLOW_DEV_BYPASS, env: process.env.VERCEL_ENV }
+    setup()
+    try {
+      const res = await start()
+      expect(res._status).toBe(503)
+      expect(res._body).toMatchObject({ error: 'billing-unavailable' })
+      expect(JSON.stringify(res._body)).not.toContain('billing/success')
+      expect(sessionCreate).not.toHaveBeenCalled()
+    } finally {
+      if (saved.flag === undefined) delete process.env.ALLOW_DEV_BYPASS; else process.env.ALLOW_DEV_BYPASS = saved.flag
+      if (saved.env === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = saved.env
+    }
   })
 })

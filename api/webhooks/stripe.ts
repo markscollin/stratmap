@@ -10,6 +10,7 @@ import { claimEvent, markProcessed, releaseClaim, emailsAlreadySent, markEmailsS
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 import { track } from '../_lib/analytics'
 import { readRawBody } from '../_lib/rawBody'
+import { isDevBypassAllowed } from '../_lib/devBypass'
 
 // The signature is computed over the raw bytes, which `readRawBody` gets without depending on any framework config
 // (Next.js's `config.api.bodyParser` does nothing under @vercel/node; see api/_lib/rawBody.ts and docs/BILLING.md, R-05).
@@ -38,10 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid signature' })
     }
   } else if (req.body && typeof req.body === 'object') {
-    // vercel dev pre-parsed the body — safe to skip verification in local dev only,
-    // never on a deployed (preview or production) function.
-    if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'development') {
-      console.error('[stripe] could not read raw body on a deployed function', { hasSignature: !!sig, contentType: req.headers['content-type'], bodyType: typeof req.body })
+    // vercel dev pre-parsed the body — safe to skip verification in explicit local dev only (ALLOW_DEV_BYPASS=1, R-16),
+    // never on a deployed function and never when VERCEL_ENV is simply missing.
+    if (!isDevBypassAllowed()) {
+      console.error('[stripe] could not read raw body (unsigned events are only accepted with ALLOW_DEV_BYPASS=1 on a local run)', { hasSignature: !!sig, contentType: req.headers['content-type'], bodyType: typeof req.body })
       return res.status(400).json({ error: 'Could not read raw body' })
     }
     console.warn('[stripe] skipping signature verification in dev mode')

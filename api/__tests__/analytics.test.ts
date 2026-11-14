@@ -14,6 +14,7 @@ const sessionCreate = vi.fn()
 const retrieve = vi.fn()
 vi.mock('stripe', () => ({
   default: class {
+    customers = { create: vi.fn(async () => ({ id: 'cus_test' })) }
     checkout = { sessions: { create: sessionCreate } }
     billingPortal = { sessions: { create: vi.fn() } }
     webhooks = { constructEvent: vi.fn() }

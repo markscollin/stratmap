@@ -12,12 +12,19 @@ const retrieve = vi.fn(async (id: string) => {
   if (!sub) throw new Error(`No such subscription: ${id}`)
   return sub
 })
+const cancel = vi.fn(async (id: string) => { const sub = subs.get(id) as { status: string } | undefined; if (sub) sub.status = 'canceled'; return sub })
+const paymentsList = vi.fn(async (_p: { invoice: string }) => ({ data: [{ payment: { type: 'payment_intent', payment_intent: 'pi_dup' } }] as unknown[] }))
+const refundCreate = vi.fn(async (_p: { payment_intent: string }, _o?: unknown) => ({ id: 're_1' }))
 vi.mock('stripe', () => ({
   default: class {
     webhooks = { constructEvent: vi.fn() }
-    subscriptions = { retrieve }
+    subscriptions = { retrieve, cancel }
+    invoicePayments = { list: paymentsList }
+    refunds = { create: refundCreate }
   },
 }))
+const reported: unknown[] = []
+vi.mock('../_lib/sentry', () => ({ reportError: (e: unknown) => { reported.push(e) } }))
 
 const sendPaymentFailed = vi.fn(async (_opts: { to: string }) => ({ sent: true }))
 vi.mock('../_lib/email', () => ({ sendPaymentFailed: (opts: { to: string }) => sendPaymentFailed(opts) }))
@@ -45,6 +52,7 @@ function makeSub(over: {
   id?: string; status?: string; price?: string; cancelAtPeriodEnd?: boolean; cancelAt?: number | null; customer?: string; metadata?: Record<string, string>
 } = {}) {
   const sub = {
+    latest_invoice: 'in_paid',
     id: over.id ?? 'sub_1',
     status: over.status ?? 'active',
     customer: over.customer ?? 'cus_1',
@@ -94,6 +102,8 @@ beforeEach(async () => {
   await cleanDb()
   await seedWorkspace()
   subs.clear()
+  reported.length = 0
+  cancel.mockClear(); paymentsList.mockClear(); refundCreate.mockClear()
   retrieve.mockClear()
   sendPaymentFailed.mockClear()
   process.env.STRIPE_SECRET_KEY = 'sk_test'
@@ -460,6 +470,69 @@ describe('POST /api/webhooks/stripe', () => {
       makeSub()
       await send(event('invoice.paid', invoice()))
       expect((await getWs()).stripeSubscriptionId).toBeNull()
+    })
+  })
+
+  // R-19: two Checkouts for one workspace can both be paid. The first one linked wins; the newer is cancelled and refunded.
+  describe('a second paid subscription for the same workspace (R-19)', () => {
+    const checkoutFor = (subId: string) => event('checkout.session.completed', {
+      id: `cs_${subId}`, mode: 'subscription', customer: 'cus_1', subscription: subId, metadata: { workspaceId: TEST_WS_ID },
+    })
+
+    it('cancels the newer duplicate and refunds its payment; the workspace keeps the first', async () => {
+      makeSub({ id: 'sub_1', price: 'price_starter' }); await linkSubscription('starter')
+      makeSub({ id: 'sub_2', price: 'price_growth_annual' })
+      await send(checkoutFor('sub_2'))
+      expect(cancel).toHaveBeenCalledWith('sub_2')
+      expect(cancel).not.toHaveBeenCalledWith('sub_1')
+      expect(paymentsList).toHaveBeenCalledWith({ invoice: 'in_paid', status: 'paid' })
+      expect(refundCreate).toHaveBeenCalledWith({ payment_intent: 'pi_dup' }, { idempotencyKey: 'refund-dup-sub_2-pi_dup' })
+      const w = await getWs()
+      expect(w.stripeSubscriptionId).toBe('sub_1')
+      expect(w.planTier).toBe('starter') // the bigger plan the duplicate would have granted is not applied
+      expect(reported.some(e => /Duplicate subscription sub_2/.test(String((e as Error).message)))).toBe(true)
+    })
+
+    it('a duplicate found through a later event (the checkout event was lost) is handled the same way', async () => {
+      makeSub({ id: 'sub_1' }); await linkSubscription('starter')
+      makeSub({ id: 'sub_2', metadata: { workspaceId: TEST_WS_ID } })
+      await send(event('customer.subscription.updated', { id: 'sub_2' }))
+      expect(cancel).toHaveBeenCalledWith('sub_2')
+      expect((await getWs()).stripeSubscriptionId).toBe('sub_1')
+    })
+
+    it('a refund that fails is reported for a human, and the cancel still stands', async () => {
+      makeSub({ id: 'sub_1' }); await linkSubscription('starter'); makeSub({ id: 'sub_2' })
+      refundCreate.mockRejectedValueOnce(new Error('charge already refunded'))
+      const res = await send(checkoutFor('sub_2'))
+      expect(res._status).toBe(200)
+      expect(cancel).toHaveBeenCalledWith('sub_2')
+      expect(reported.some(e => /refund it by hand/.test(JSON.stringify(e)) || /charge already refunded/.test(String((e as Error).message)))).toBe(true)
+    })
+
+    it('does nothing destructive when the linked subscription cannot be checked', async () => {
+      await linkSubscription('starter') // sub_1 is not in Stripe's answers: retrieve throws
+      makeSub({ id: 'sub_2' })
+      await send(checkoutFor('sub_2'))
+      expect(cancel).not.toHaveBeenCalled()
+      expect(refundCreate).not.toHaveBeenCalled()
+      expect((await getWs()).stripeSubscriptionId).toBe('sub_1')
+    })
+
+    it('a new subscription replaces a linked one that Stripe says is already finished (its cancel event was lost)', async () => {
+      makeSub({ id: 'sub_1', status: 'canceled' }); await linkSubscription('starter')
+      makeSub({ id: 'sub_2', price: 'price_growth_annual' })
+      await send(checkoutFor('sub_2'))
+      expect(cancel).not.toHaveBeenCalled()
+      const w = await getWs()
+      expect(w.stripeSubscriptionId).toBe('sub_2')
+      expect(w.planTier).toBe('growth')
+    })
+
+    it('the same subscription arriving again is not a duplicate of itself', async () => {
+      makeSub({ id: 'sub_1' }); await linkSubscription('starter')
+      await send(event('customer.subscription.updated', { id: 'sub_1' }))
+      expect(cancel).not.toHaveBeenCalled()
     })
   })
 

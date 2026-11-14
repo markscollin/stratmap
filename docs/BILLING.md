@@ -103,3 +103,8 @@ stripe events resend evt_...   # a replay must return { duplicate: true }
 
 The automated tests are in `api/__tests__/stripe-webhook.test.ts`, `billing.test.ts` and `billing-portal.test.ts`, plus
 `api/__live__/billing.live.test.ts` against Neon.
+
+## Release check for duplicate subscriptions (R-19): add this to the preview run above
+
+Still on the test-mode preview: as an admin open `/pricing` in **two tabs**, start Starter in both, and pay in both with `4242 4242 4242 4242`. Expect: one subscription stays active and linked
+(Settings → Billing shows Starter), the second is **canceled** in the Stripe dashboard with its payment **refunded**, and the function log has one `Duplicate subscription` line. Both Checkouts should show the same customer.
