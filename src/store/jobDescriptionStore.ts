@@ -24,7 +24,8 @@ interface JDStore {
   loadErrors: Record<string, true>
   setChartId: (id: string) => void
   initJD: (nodeId: string) => Promise<void>
-  updateJD: (nodeId: string, updates: Partial<Pick<JobDescription, 'responsibilities' | 'requirements' | 'level' | 'salaryBandMin' | 'salaryBandMax' | 'salaryCurrency'>>) => void
+  /** `null` clears a salary-band bound (the server stores null); locally it becomes undefined. */
+  updateJD: (nodeId: string, updates: Partial<Pick<JobDescription, 'responsibilities' | 'requirements' | 'level' | 'salaryCurrency'>> & { salaryBandMin?: number | null; salaryBandMax?: number | null }) => void
   setStatus: (nodeId: string, status: RoleStatus) => void
 }
 
@@ -81,7 +82,10 @@ export const useJobDescriptionStore = create<JDStore>((set, get) => ({
   updateJD(nodeId, updates) {
     if (get().loadErrors[nodeId]) return // never write over a job description that was not loaded
     const existing = get().jobDescriptions[nodeId] ?? makeDefault(nodeId)
-    const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() }
+    const { salaryBandMin, salaryBandMax, ...rest } = updates
+    const updated: JobDescription = { ...existing, ...rest, updatedAt: new Date().toISOString() }
+    if (salaryBandMin !== undefined) updated.salaryBandMin = salaryBandMin ?? undefined
+    if (salaryBandMax !== undefined) updated.salaryBandMax = salaryBandMax ?? undefined
     set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: updated } }))
 
     const chartId = get().chartId

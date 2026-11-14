@@ -9,6 +9,7 @@ import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { JDEditor } from '../jd/JDEditor'
+import { SalaryBandEditor, type SalaryBandChange } from './SalaryBandEditor'
 import { AIJDDraft } from '../jd/AIJDDraft'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { LockedFeatureCard, PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
@@ -523,7 +524,6 @@ const ROLE_TYPE_LABEL: Record<string, string> = {
   'tbd':           'TBD',
 }
 
-const CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'SGD', 'AED']
 
 function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
   node: OrgNode
@@ -531,7 +531,7 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
   allNodes: OrgNode[]
   jd: JobDescription | undefined
   canAdmin: boolean
-  onUpdateJD: (nodeId: string, updates: Partial<Pick<JobDescription, 'salaryBandMin' | 'salaryBandMax' | 'salaryCurrency'>>) => void
+  onUpdateJD: (nodeId: string, updates: SalaryBandChange) => void
 }) {
   const manager = node.managerId ? allNodes.find(n => n.id === node.managerId) : null
   const fields = [
@@ -541,13 +541,6 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
     { label: 'Department',      value: dept?.name ?? node.departmentId },
     { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'No manager (root)' },
   ]
-
-  const inputStyle: React.CSSProperties = {
-    flex: 1, fontSize: 13, padding: '6px 8px',
-    background: 'var(--bg)', border: '1px solid var(--border)',
-    borderRadius: 6, color: 'var(--text)', outline: 'none',
-    width: '100%',
-  }
 
   return (
     <div>
@@ -563,45 +556,13 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
       <div style={{ marginTop: 20, padding: '14px', background: 'var(--raised)', borderRadius: 10, border: '1px solid var(--border)' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Salary band</div>
         {canAdmin ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Min</div>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={jd?.salaryBandMin ?? ''}
-                  onChange={e => onUpdateJD(node.id, { salaryBandMin: e.target.value ? Number(e.target.value) : undefined })}
-                  style={inputStyle}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Max</div>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={jd?.salaryBandMax ?? ''}
-                  onChange={e => onUpdateJD(node.id, { salaryBandMax: e.target.value ? Number(e.target.value) : undefined })}
-                  style={inputStyle}
-                />
-              </div>
-              <div style={{ width: 80 }}>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Currency</div>
-                <select
-                  value={jd?.salaryCurrency ?? 'USD'}
-                  onChange={e => onUpdateJD(node.id, { salaryCurrency: e.target.value })}
-                  style={{ ...inputStyle, cursor: 'pointer' }}
-                >
-                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-            {jd?.salaryBandMin && jd?.salaryBandMax && (
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {jd.salaryCurrency ?? 'USD'} {jd.salaryBandMin.toLocaleString()} – {jd.salaryBandMax.toLocaleString()}
-              </div>
-            )}
-          </div>
+          <SalaryBandEditor
+            key={`${node.id}:${jd?.salaryBandMin ?? ''}:${jd?.salaryBandMax ?? ''}`}
+            min={jd?.salaryBandMin}
+            max={jd?.salaryBandMax}
+            currency={jd?.salaryCurrency}
+            onChange={changes => onUpdateJD(node.id, changes)}
+          />
         ) : (
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>Admin access required to view compensation data.</div>
         )}

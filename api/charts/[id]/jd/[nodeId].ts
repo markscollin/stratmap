@@ -105,6 +105,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(and(eq(jobDescriptions.nodeId, nodeId), eq(jobDescriptions.chartId, chartId)))
         .limit(1)
 
+      // The band must make sense after this change, whichever bound it touches (R-12).
+      const effMin = body.salaryBandMin !== undefined ? body.salaryBandMin : existing?.salaryBandMin ?? null
+      const effMax = body.salaryBandMax !== undefined ? body.salaryBandMax : existing?.salaryBandMax ?? null
+      if (effMin !== null && effMax !== null && effMin > effMax) {
+        return res.status(400).json({ error: 'invalid-salary-band', message: "The minimum can't be above the maximum." })
+      }
+
       if (existing) {
         // Only bump version when explicitly requested (e.g. client passes higher version on draft revert)
         const version = body.version !== undefined ? body.version : existing.version

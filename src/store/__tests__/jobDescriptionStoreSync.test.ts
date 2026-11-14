@@ -109,3 +109,17 @@ describe('saving goes through the canvas save queue', () => {
     expect(put).toHaveBeenCalledWith('/api/charts/c1/jd/n1', { status: 'in-review', version: 2 })
   })
 })
+
+describe('clearing the salary band (R-12)', () => {
+  it('null clears a bound: the server is sent null and the local value becomes undefined', async () => {
+    get.mockResolvedValue({ ...stored, salaryBandMin: 50000, salaryBandMax: 90000, salaryCurrency: 'GBP' })
+    put.mockResolvedValue({})
+    await useJobDescriptionStore.getState().initJD('n1')
+    useJobDescriptionStore.getState().updateJD('n1', { salaryBandMin: null })
+    await flush()
+    expect(put).toHaveBeenCalledWith('/api/charts/c1/jd/n1', { salaryBandMin: null }, { keepalive: true })
+    const jd = useJobDescriptionStore.getState().jobDescriptions.n1
+    expect(jd.salaryBandMin).toBeUndefined()
+    expect(jd.salaryBandMax).toBe(90000)
+  })
+})

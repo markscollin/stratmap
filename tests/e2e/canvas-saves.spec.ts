@@ -285,6 +285,36 @@ test.describe.serial('canvas saves', () => {
       expect(JSON.stringify(await (await ctx.request.get(await jdUrl(), { headers: { 'X-Dev-User': slug } })).json())).toContain('and the pager')
     })
 
+    test('R-12: typing a salary sends one request when the box is left, a cleared box is really cleared, min above max is refused', async () => {
+      await reload(page)
+      await roleCard().click()
+      await page.getByRole('button', { name: 'Overview' }).click()
+      const puts: string[] = []
+      page.on('request', r => { if (r.method() === 'PUT' && /\/jd\//.test(r.url())) puts.push(r.postData() ?? '') })
+      const min = page.getByLabel('Min'), max = page.getByLabel('Max')
+      await max.fill('')
+      await max.pressSequentially('150000')
+      expect(puts).toHaveLength(0)                        // nothing while typing
+      await min.click()                                   // leaving the box saves
+      await expect.poll(() => puts.length).toBe(1)
+      expect(puts[0]).toBe('{"salaryBandMax":150000}')
+
+      await min.fill('200000')                            // above the max: refused before it is sent
+      await max.click()
+      await expect(page.getByRole('alert').filter({ hasText: "minimum can't be above the maximum" })).toBeVisible()
+      expect(puts).toHaveLength(1)
+
+      await min.fill('')                                  // clearing the maximum really clears it
+      await max.fill('')
+      await min.click()
+      await expect.poll(() => puts.length).toBe(2)
+      expect(puts[1]).toBe('{"salaryBandMax":null}')
+      const id = (await serverChart(page)).nodes.find(n => n.name === 'Jade Describer')!.id
+      const jd = await (await ctx.request.get(`/api/charts/${chartId(page)}/jd/${id}`, { headers: { 'X-Dev-User': slug } })).json() as { salaryBandMax: number | null }
+      expect(jd.salaryBandMax).toBeNull()
+      page.removeAllListeners('request')
+    })
+
     test('text typed in the last second survives closing the panel', async () => {
       await reload(page)
       await openResponsibilities()

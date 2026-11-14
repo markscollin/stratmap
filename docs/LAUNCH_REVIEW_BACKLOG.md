@@ -296,7 +296,7 @@ with retry on failure. Flush the pending save on unmount, on role switch and on 
 the debounce window still sends the save.
 
 ### R-12 Salary band saves on every keystroke
-- [ ] Open
+- [x] Done 2026-11-14: new `SalaryBandEditor` holds the typed text and saves once on blur or Enter (nothing if unchanged); a cleared box sends `null` (the store turns it into undefined locally); a min above the max is refused in the UI and, new, on the server (`400 invalid-salary-band`, checked against the stored other bound too, so a one-bound request cannot cross it); non-numbers are refused with a message. Currency still saves at once. Tests: `SalaryBandEditor.test.tsx`, `jd.test.ts` (4 new), `jobDescriptionStoreSync.test.ts`, e2e in `canvas-saves.spec.ts`.
 
 **Problem (reported).** Typing "120000" sends six PUTs that can land out of order, each adding a
 `salary.updated` audit row. Clearing the field sends `undefined`, which JSON drops, so it never clears.

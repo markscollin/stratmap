@@ -160,3 +160,39 @@ describe('PUT /api/charts/[id]/jd/[nodeId]', () => {
     expect(res._status).toBe(405)
   })
 })
+
+// R-12: the band must make sense whichever bound a request touches, and a bound can be cleared with null.
+describe('salary band rules (R-12)', () => {
+  const put = async (body: Record<string, unknown>) => {
+    const res = createRes()
+    await handler(createReq({ method: 'PUT', query: { id: TEST_CHART_ID, nodeId: TEST_NODE_ID }, body }) as never, res as never)
+    return res
+  }
+  const stored = async () => (await testDb.select().from(schema.jobDescriptions))[0]
+
+  it('refuses a minimum above the maximum in one request', async () => {
+    const res = await put({ salaryBandMin: 90000, salaryBandMax: 80000 })
+    expect(res._status).toBe(400)
+    expect(res._body).toMatchObject({ error: 'invalid-salary-band' })
+    expect(await testDb.select().from(schema.jobDescriptions)).toHaveLength(0)
+  })
+
+  it('refuses a request that sets only one bound across the stored other (min over stored max, max under stored min)', async () => {
+    await put({ salaryBandMin: 50000, salaryBandMax: 80000 })
+    expect((await put({ salaryBandMin: 90000 }))._status).toBe(400)
+    expect((await put({ salaryBandMax: 40000 }))._status).toBe(400)
+    expect(await stored()).toMatchObject({ salaryBandMin: 50000, salaryBandMax: 80000 })
+  })
+
+  it('accepts a valid change to one bound', async () => {
+    await put({ salaryBandMin: 50000, salaryBandMax: 80000 })
+    expect((await put({ salaryBandMax: 95000 }))._status).toBe(200)
+    expect(await stored()).toMatchObject({ salaryBandMin: 50000, salaryBandMax: 95000 })
+  })
+
+  it('null clears a bound, and clearing the minimum is never refused', async () => {
+    await put({ salaryBandMin: 50000, salaryBandMax: 80000 })
+    expect((await put({ salaryBandMin: null }))._status).toBe(200)
+    expect(await stored()).toMatchObject({ salaryBandMin: null, salaryBandMax: 80000 })
+  })
+})
