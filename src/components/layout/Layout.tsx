@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar'
 import { TopNav } from './TopNav'
 import { DesktopHint } from './DesktopHint'
 import { PaymentBanner } from '../../features/billing/PaymentBanner'
+import { TrialBanner } from '../../features/billing/TrialBanner'
 import { ChartLimitBanner } from '../../features/billing/ChartLimitBanner'
 import { useIsPhone } from '../../hooks/useMediaQuery'
 import { useUIStore } from '../../store'
@@ -62,6 +63,7 @@ export function Layout({ children }: { children?: ReactNode } = {}) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopNav />
         <PaymentBanner />
+        <TrialBanner />
         <ChartLimitBanner />
         {isPhone && DESKTOP_FIRST.some(p => pathname.startsWith(p)) && <DesktopHint />}
         <main style={{ flex: 1, overflow: 'auto', position: 'relative' }}>

@@ -1,14 +1,16 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test'
-import { testUser, signedInContext, onboard } from './helpers'
+import { testUser, signedInContext, onboard, setTrialFor } from './helpers'
 
 // Launch review R-13: when /api/workspace fails, a person who already has a workspace must not be sent to onboarding
 // (where they would be asked to create one), and no page may render with the placeholder viewer permission.
 let ctx: BrowserContext
 let page: Page
+let slug: string
 
 test.describe.serial('workspace load', () => {
   test.beforeAll(async ({ browser }, testInfo) => {
     const u = testUser(`wsl${testInfo.retry}`)
+    slug = u.slug
     ctx = await signedInContext(browser, u.slug)
     page = await ctx.newPage()
     await onboard(page, 'Load Co')
@@ -41,5 +43,25 @@ test.describe.serial('workspace load', () => {
     await expect(page.getByRole('heading', { name: /Welcome to StratMap|Dashboard/ }).first()).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('workspace-load-failed')).toHaveCount(0)
     expect(calls).toBeGreaterThanOrEqual(2)
+  })
+
+  // R-18 / D-3: a workspace on a trial says so, and what happens when it ends.
+  test('a workspace on a trial shows how long is left and what changes afterwards; the paid features are open', async () => {
+    await setTrialFor(slug, 9)
+    await page.goto('/dashboard')
+    const banner = page.getByTestId('trial-banner')
+    await expect(banner).toContainText('Growth trial has 9 days left')
+    await expect(banner).toContainText('1 chart, 30 roles per chart, 3 members')
+    await page.goto('/headcount')                       // a Growth feature, locked on Free
+    await expect(page.getByTestId('trial-banner')).toBeVisible()
+    await expect(page.getByText(/Unlock Headcount planning|requires/i)).toHaveCount(0)
+  })
+
+  test('the pricing page and the landing page describe the trial', async () => {
+    await page.goto('/pricing')
+    await expect(page.getByText(/starts with 14 days of Growth/)).toBeVisible()
+    await page.goto('/')
+    await expect(page.getByText(/starts with 14 days of Growth/)).toBeVisible()
+    await expect(page.getByTestId('feature-plan')).toHaveCount(3)
   })
 })

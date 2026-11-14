@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, eq, isNull } from 'drizzle-orm'
+import { NEW_WORKSPACE_TRIAL_PLAN, DEFAULT_NEW_WORKSPACE_TRIAL_DAYS } from '../src/lib/plans'
 import { requireAuth, requireUser } from './_lib/auth'
 import { track, hasAnalyticsConsent } from './_lib/analytics'
 import { requireRole, getPermission } from './_lib/access'
@@ -77,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .limit(1)
         // Say what this person is in it: the client used to assume "owner", wrong for someone who was only invited (R-13).
         // Billing ids are not part of the reply (R-29).
-        return res.status(200).json({ ...withoutBillingIds(ws), myPermission: existing.permission })
+        return res.status(200).json({ ...withoutBillingIds(ws), planTier: resolvePlanTier(ws), myPermission: existing.permission })
       }
 
       // Who this person is comes from the sign-in provider, not from the request body: the stored address receives
@@ -93,9 +94,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const workspaceId = crypto.randomUUID()
 
+      // A first workspace gets the new-workspace trial (R-18, D-3). Not for someone who has owned one before, deleted or not:
+      // otherwise delete-and-recreate would be a free Growth plan for ever.
+      const [owned] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.ownerId, user.userId)).limit(1)
+      const trialDays = Number(process.env.NEW_WORKSPACE_TRIAL_DAYS ?? DEFAULT_NEW_WORKSPACE_TRIAL_DAYS)
+      const trial = !owned && trialDays > 0
+        ? { trialPlan: NEW_WORKSPACE_TRIAL_PLAN, trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000) }
+        : {}
+
       const [ws] = await db
         .insert(workspaces)
-        .values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size })
+        .values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size, ...trial })
         .returning()
 
       await db.insert(workspaceMembers).values({
@@ -109,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await track('workspace_created', { userId: user.userId, workspaceId, consent: hasAnalyticsConsent(req), props: { plan: 'free' } })
 
-      return res.status(201).json({ ...withoutBillingIds(ws), myPermission: 'owner' })
+      return res.status(201).json({ ...withoutBillingIds(ws), planTier: resolvePlanTier(ws), myPermission: 'owner' })
     }
 
     if (req.method === 'PUT') {

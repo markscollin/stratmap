@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../src/lib/db/index', async () => {
   const { testDb } = await import('./helpers/db')
@@ -199,5 +199,56 @@ describe('POST /api/workspace', () => {
     const created = createRes()
     await handler(createReq({ method: 'POST', body: { name: 'Y', ownerRole: 'Founder/CEO', size: '1-10' } }) as never, created as never)
     expect(JSON.stringify(created._body)).not.toMatch(/stripe/i)
+  })
+
+  // R-18 / D-3: every new workspace starts with a free trial of Growth.
+  describe('the new-workspace trial', () => {
+    const create = async () => {
+      const res = createRes()
+      await handler(createReq({ method: 'POST', body: { name: 'Acme', ownerRole: 'Founder/CEO', size: '11-50' } }) as never, res as never)
+      return res
+    }
+    const stored = async () => (await testDb.select().from(schema.workspaces))[0]
+    afterEach(() => { delete process.env.NEW_WORKSPACE_TRIAL_DAYS })
+
+    it('a first workspace gets 14 days of Growth, and the reply already shows Growth as its plan', async () => {
+      const res = await create()
+      const ws = await stored()
+      expect(ws.trialPlan).toBe('growth')
+      const days = (ws.trialEndsAt!.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(13.99)
+      expect(days).toBeLessThan(14.01)
+      expect(ws.planTier).toBe('free') // the stored base tier is still Free: when the trial ends, so does the plan
+      expect(res._body).toMatchObject({ planTier: 'growth', trialPlan: 'growth' })
+    })
+
+    it('NEW_WORKSPACE_TRIAL_DAYS sets the length, and 0 turns it off', async () => {
+      process.env.NEW_WORKSPACE_TRIAL_DAYS = '30'
+      await create()
+      expect(((await stored()).trialEndsAt!.getTime() - Date.now()) / 86_400_000).toBeGreaterThan(29.99)
+      await cleanDb()
+      process.env.NEW_WORKSPACE_TRIAL_DAYS = '0'
+      const res = await create()
+      expect(await stored()).toMatchObject({ trialPlan: null, trialEndsAt: null })
+      expect(res._body).toMatchObject({ planTier: 'free' })
+    })
+
+    it('someone who owned a workspace before (even a deleted one) does not get a second trial', async () => {
+      await seedWorkspace()
+      await testDb.update(schema.workspaces).set({ deletedAt: new Date(), deletedBy: TEST_USER_ID })
+      const res = await create()
+      expect(res._status).toBe(201)
+      const fresh = (await testDb.select().from(schema.workspaces)).find(w => w.name === 'Acme')!
+      expect(fresh.trialPlan).toBeNull()
+      expect(res._body).toMatchObject({ planTier: 'free' })
+    })
+
+    it('the existing-workspace reply shows the effective plan too', async () => {
+      await seedWorkspace()
+      await testDb.update(schema.workspaces).set({ trialPlan: 'growth', trialEndsAt: new Date(Date.now() + 86_400_000) })
+      const res = await create()
+      expect(res._status).toBe(200)
+      expect(res._body).toMatchObject({ planTier: 'growth' })
+    })
   })
 })

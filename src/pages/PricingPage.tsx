@@ -7,7 +7,7 @@ import { LegalFooter } from './LegalPages'
 import { Layout } from '../components/layout/Layout'
 import { PublicNav } from '../components/layout/PublicNav'
 import { useUserStore } from '../store/userStore'
-import { PLAN_LIMITS } from '../lib/plans'
+import { PLAN_LIMITS, NEW_WORKSPACE_TRIAL_PLAN, DEFAULT_NEW_WORKSPACE_TRIAL_DAYS } from '../lib/plans'
 
 /**
  * /pricing is public (roadmap 2.5): visitors see the plans in the marketing layout and are sent to sign-up;
@@ -39,6 +39,7 @@ export function PricingPage() {
       annualPrice: '£0',
       description: 'Perfect for getting started',
       features: [
+        { name: `${DEFAULT_NEW_WORKSPACE_TRIAL_DAYS}-day Growth trial for every new workspace`, included: true },
         { name: '1 org chart', included: true },
         { name: 'Up to 30 nodes', included: true },
         { name: 'Up to 3 team members', included: true },
@@ -85,6 +86,7 @@ export function PricingPage() {
         { name: 'All export options', included: true },
         { name: `${PLAN_LIMITS.growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
         { name: 'Headcount planning', included: true },
+        { name: 'Version history & scenarios', included: true },
       ],
       cta: 'Upgrade to Growth',
     },
@@ -270,7 +272,7 @@ export function PricingPage() {
         <div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Need something bigger?</h3>
           <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
-            For enterprise customers with custom requirements, dedicated support, and compliance needs.
+            For larger organisations: no limits on seats, charts or roles per chart, and an exportable audit log. Talk to us about what you need.
           </p>
         </div>
         <a
@@ -303,7 +305,7 @@ export function PricingPage() {
             { q: 'Can I change plans at any time?', a: 'Yes. Upgrade, downgrade, or cancel anytime from Settings → Billing. Upgrades take effect immediately, and you pay the prorated difference. Downgrades and cancellations take effect at the end of your billing period, so you keep what you paid for until then.' },
             { q: 'What happens to my charts if I downgrade?', a: 'Your charts are never deleted. If you have more charts than the new plan allows, all of them become view-only until you delete enough charts or upgrade again. If a chart has more roles than the new plan allows, you can still edit and remove roles, but you can\'t add new ones until you\'re back under the limit.' },
             { q: 'Who counts towards the team member limit?', a: 'Every member of your workspace, plus every pending invite. People who only view a chart through a public share link don\'t count. Once every seat is taken, you can invite someone new after you upgrade or remove a member. If you downgrade with more members than the new plan allows, nobody is removed, but you can\'t add anyone until you\'re back under the limit.' },
-            { q: 'Is there a free trial?', a: 'Our Free plan is effectively a trial. No credit card required to start.' },
+            { q: 'Is there a free trial?', a: `Yes. Every new workspace starts with ${DEFAULT_NEW_WORKSPACE_TRIAL_DAYS} days of ${NEW_WORKSPACE_TRIAL_PLAN === 'growth' ? 'Growth' : 'a paid plan'}, with no card needed, so you can try job descriptions, AI drafting, headcount planning and version history. When it ends the workspace moves to the Free plan (or the plan you chose). Nothing is deleted, but if you have more charts than Free allows they become view-only until you upgrade.` },
             { q: 'What payment methods do you accept?', a: 'We accept all major credit cards, debit cards, and digital wallets via Stripe.' },
           ].map((faq, i) => (
             <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>

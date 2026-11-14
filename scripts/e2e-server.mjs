@@ -28,6 +28,9 @@ process.env.VITE_CLERK_PUBLISHABLE_KEY = 'pk_test_placeholder'
 process.env.VITE_SENTRY_DSN = ''
 for (const k of ['CLERK_SECRET_KEY', 'VERCEL_ENV', 'ANTHROPIC_API_KEY', 'RESEND_API_KEY', 'SENTRY_DSN',
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'ADMIN_SECRET']) delete process.env[k]
+// New workspaces start on a 14-day Growth trial in real life (R-18); the e2e suite wants them on Free, as before. Tests that
+// need a trial grant one with setTrialFor() in tests/e2e/helpers.ts.
+process.env.NEW_WORKSPACE_TRIAL_DAYS = '0'
 process.env.ALLOW_DEV_BYPASS = '1' // the explicit local-only opt-in for the x-dev-user header (api/_lib/devBypass.ts)
 process.env.APP_URL = `http://localhost:${port}`
 process.env.E2E_EMAIL_OUTBOX ??= path.join(root, 'test-results', 'email-outbox.jsonl')

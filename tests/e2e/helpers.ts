@@ -56,6 +56,15 @@ export async function createChart(page: Page, name: string) {
   await expect(page.getByText(name).first()).toBeVisible()
 }
 
+/** Gives a test user's workspace a trial of a paid plan that ends in `days` days (the e2e server turns the automatic new-workspace trial off). */
+export async function setTrialFor(slug: string, days: number, plan: 'starter' | 'growth' = 'growth') {
+  const url = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
+  if (!url) throw new Error('No database URL for setTrialFor')
+  if (!slug.startsWith(`e2e${RUN}-`)) throw new Error(`Refusing to change the trial of a user outside this run: ${slug}`)
+  const rows = await e2eSql(url)`UPDATE workspaces SET trial_plan = ${plan}, trial_ends_at = now() + (${days} * interval '1 day') WHERE owner_id = ${`dev-${slug}`} RETURNING id`
+  if (rows.length !== 1) throw new Error(`Expected one workspace for ${slug}, changed ${rows.length}`)
+}
+
 /**
  * Puts a test user's workspace on a plan, straight in the database (there is no checkout in e2e).
  * The workspace must already exist (call after `onboard`). Only ever touches this run's own `dev-e2e<run>-…` users.

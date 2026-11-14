@@ -43,6 +43,8 @@ interface WorkspaceResponse {
   id: string; name: string; ownerRole: string; size: string; createdAt: string
   planTier: PlanTier
   billing?: SubscriptionInfo
+  trialPlan?: PlanTier | null
+  trialEndsAt?: string | null
   myPermission: Permission | null
   members: Array<{ userId: string; email: string; name: string | null; avatarUrl: string | null; permission: string; joinedAt: string }>
 }
@@ -95,7 +97,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
   isLoaded: boolean; isSignedIn: boolean; identity: SyncIdentity | null; children: ReactNode
 }) {
   const { setUser, setPermission, setWorkspace, signOut: storeSignOut, workspace } = useUserStore()
-  const { setPlan, setSubscription } = useBillingStore()
+  const { setPlan, setSubscription, setTrial } = useBillingStore()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   // Which kind of page this is decides who may see it (src/lib/routes.ts). A URL with no page behind it is open too: it shows
@@ -160,6 +162,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
       // Sync billing plan from DB — source of truth for planTier
       setPlan(PLAN_BY_TIER[ws.planTier] ?? FREE_PLAN)
       setSubscription(ws.billing)
+      setTrial(ws.trialPlan && ws.trialEndsAt && new Date(ws.trialEndsAt) > new Date() ? { plan: ws.trialPlan, endsAt: ws.trialEndsAt } : null)
     }
 
     async function load() {
@@ -222,7 +225,7 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
       setResolved()
     }
     void load()
-  }, [isLoaded, isSignedIn, clerkUser, retryNonce, setUser, setPermission, setWorkspace, setPlan, setSubscription, storeSignOut, navigate, isAuthPage, isPublicPage, isOptionalAuthPage, pathname])
+  }, [isLoaded, isSignedIn, clerkUser, retryNonce, setUser, setPermission, setWorkspace, setPlan, setSubscription, setTrial, storeSignOut, navigate, isAuthPage, isPublicPage, isOptionalAuthPage, pathname])
 
   // Once we know there is no workspace, send the user to onboarding
   useEffect(() => {

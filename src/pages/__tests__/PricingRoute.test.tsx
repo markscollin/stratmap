@@ -71,3 +71,18 @@ describe('/pricing for signed-in people', () => {
     expect(screen.queryByTestId('pricing-cta-free')).toBeNull()
   })
 })
+
+// R-18 / D-3: the copy says what really happens to a new workspace.
+describe('trial and plan copy (R-18)', () => {
+  it('the FAQ promises the 14-day Growth trial, not "Free is effectively a trial"', () => {
+    renderRoute()
+    expect(screen.getByText(/starts with 14 days of Growth/)).toBeTruthy()
+    expect(screen.queryByText(/effectively a trial/)).toBeNull()
+  })
+
+  it('the Growth card lists version history, and Enterprise no longer promises dedicated support', () => {
+    renderRoute()
+    expect(screen.getByText('Version history & scenarios')).toBeTruthy()
+    expect(screen.queryByText(/dedicated support/i)).toBeNull()
+  })
+})

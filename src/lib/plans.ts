@@ -16,6 +16,14 @@ export interface PlanLimits {
 
 export const UNLIMITED = -1
 
+/**
+ * Every new workspace starts with a free trial of a paid plan (launch review R-18, owner decision D-3), so the first minute is not
+ * three locked features. It rides on the admin trial override (`trialPlan` + `trialEndsAt`), so nothing else needs to know about it.
+ * The API reads the length from NEW_WORKSPACE_TRIAL_DAYS (default below; 0 turns it off, which the e2e server does so tests start on Free).
+ */
+export const NEW_WORKSPACE_TRIAL_PLAN = 'growth' as const
+export const DEFAULT_NEW_WORKSPACE_TRIAL_DAYS = 14
+
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free:       { seats: 3,  maxCharts: 1,  maxNodesPerChart: 30,  aiDraftsPerMonth: 0 },
   starter:    { seats: 5,  maxCharts: 5,  maxNodesPerChart: 100, aiDraftsPerMonth: 3 },

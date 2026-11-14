@@ -19,9 +19,12 @@ interface BillingStore {
   usage: UsageLimits
   isLoading: boolean
   subscription: SubscriptionInfo
+  /** An active trial of a paid plan (the new-workspace trial, or one an admin granted), or null. */
+  trial: { plan: PlanTier; endsAt: string } | null
 
   setPlan: (plan: Plan) => void
   setSubscription: (subscription: SubscriptionInfo | null | undefined) => void
+  setTrial: (trial: { plan: PlanTier; endsAt: string } | null) => void
   incrementUsage: (key: keyof UsageLimits, amount?: number) => void
   resetMonthlyUsage: () => void
 }
@@ -81,8 +84,10 @@ export const useBillingStore = create<BillingStore>((set) => {
   isLoading: false,
   // Not persisted: always comes fresh from /api/workspace.
   subscription: NO_SUBSCRIPTION,
+  trial: null,
 
   setSubscription: (subscription) => set({ subscription: subscription ?? NO_SUBSCRIPTION }),
+  setTrial: (trial) => set({ trial }),
 
   setPlan: (plan) => {
     try {

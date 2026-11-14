@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, X, Zap } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
+import { useBillingStore, PLAN_BY_TIER } from '../store/billingStore'
 import { useToastStore } from '../store/toastStore'
 import { useChartStore } from '../store/chartStore'
 import { useAuth } from '../features/auth/useAuth'
 import { setSelectedWorkspaceId } from '../lib/workspaceSelection'
 import { api } from '../lib/apiClient'
 import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
-import type { Permission, CompanySize, WorkspaceRole, Workspace } from '../types'
+import type { Permission, CompanySize, WorkspaceRole, Workspace, PlanTier } from '../types'
 import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
 
@@ -66,7 +67,7 @@ export function OnboardingPage() {
   async function complete(sendInvites: boolean, quickStart = false) {
     const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
     try {
-      const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string; myPermission?: Permission }>(
+      const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string; myPermission?: Permission; planTier?: PlanTier; trialPlan?: PlanTier | null; trialEndsAt?: string | null }>(
         '/api/workspace',
         { name: workspaceName.trim(), ownerRole, size, email: user?.email ?? '', userName: user?.name ?? '' }
       )
@@ -84,6 +85,9 @@ export function OnboardingPage() {
         createdAt: ws.createdAt ?? now,
       }
       setWorkspace(created)
+      // The plan the new workspace actually has (it starts on a free trial of a paid plan, R-18), so nothing waits for a reload.
+      useBillingStore.getState().setPlan(PLAN_BY_TIER[ws.planTier ?? 'free'])
+      useBillingStore.getState().setTrial(ws.trialPlan && ws.trialEndsAt ? { plan: ws.trialPlan, endsAt: ws.trialEndsAt } : null)
       // You created it, so you own it (AuthProvider starts everyone as viewer until the server says otherwise).
       setPermission(ws.myPermission ?? 'owner') // what the server says this person is (an invited viewer is not the owner)
       // Persist + email invites (best-effort — failure shouldn't block onboarding)

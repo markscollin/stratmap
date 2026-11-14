@@ -74,7 +74,7 @@ content reviewed by a lawyer.
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts (2026-11-14): **782 frontend (+2 skipped launch-gate) + 783 API**, 99 e2e, after R-01 to R-14, R-16, R-19, R-20, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
+- Real test counts (2026-11-14): **799 frontend (+2 skipped launch-gate) + 792 API**, 102 e2e, after R-01 to R-14, R-16 to R-21, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -97,6 +97,10 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
 - **Job descriptions use the canvas queue** (`saveChange` in `jobDescriptionStore`): a failed *load* sets `loadErrors[nodeId]` and the panel shows Retry with no editor (a blank fallback used to autosave over the real text); `updateJD`/`setStatus` do nothing for such a role. `JDEditor`'s label comes from `useCanvasSave` ("Saving…" until the server answered, "Saved", "Couldn't save"), and it flushes unsent text on unmount, `visibilitychange` and `pagehide` (`api.put(..., { keepalive: true })`).
 - **Other optimistic writes** (chart delete/status/share, templates, headcount, workspace rename, onboarding invites) are independent, so they do **not** use the queue: they restore the exact previous state and toast `failureMessage(err, 'what')` (`src/lib/failureMessage.ts`). New optimistic write = snapshot, apply, `try`/`catch`, restore + toast.
 - **"Couldn't load" is its own state:** `chartStore.error` + `LoadError` (Charts page, Dashboard). Effects that fetch must also check `!error`, or a failure retries in a loop (it did).
+
+### New-workspace trial (R-18, owner decision D-3, 2026-11-14)
+- `POST /api/workspace` gives a person's **first** workspace `trialPlan: 'growth'` for `NEW_WORKSPACE_TRIAL_DAYS` (default 14; `0` = off; set to 0 by `scripts/e2e-server.mjs` so e2e starts on Free; `setTrialFor(slug, days)` in `tests/e2e/helpers.ts` grants one). No second trial for anyone who has ever owned a workspace. It is the admin trial override, so `resolvePlanTier()` and everything else already follow it; `GET /api/workspace` returns `trialPlan`/`trialEndsAt`, `useBillingStore().trial` holds it, `TrialBanner` (in `Layout`) says what happens when it ends. The create reply returns the effective `planTier`.
+- Copy that mentions the trial or plan limits reads from `plans.ts` (`DEFAULT_NEW_WORKSPACE_TRIAL_DAYS`, `PLAN_LIMITS`); change a number there, not in the page.
 
 ### Workspace load (R-13, 2026-11-14)
 - `UserSync` in `AuthProvider.tsx` has three outcomes for a signed-in person: loaded, no workspace (→ onboarding, after the invite check) and **failed** (full-page error + Retry; transient failures are retried twice first). **Never treat a failed load as "no workspace"**, and never render a page before the outcome is known (`outcome` state): the placeholder viewer permission / Free plan used to show.
