@@ -13,7 +13,7 @@
 ## Current State (updated 2026-05-24)
 
 The app has been through a "prepare for paid launch" hardening pass. Tests:
-**444 frontend + 491 backend = 935 passing** (after Phase 0, migrations, invites, multiple workspaces, removing mock data, paid-feature locks, the billing life-cycle, seat caps and over-limit read-only); `tsc` clean; `lint` 0 errors; build OK.
+the real, current counts are in "Launch review backlog" below (this paragraph's older figures are stale); `tsc` clean; `lint` 0 errors; build OK.
 
 **Routing changed:** `/` is now the **public marketing landing page**; the authed
 Dashboard moved to **`/dashboard`**. Public routes (no auth, no layout): `/`,
@@ -75,7 +75,7 @@ content reviewed by a lawyer.
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts (2026-11-15): **844 frontend (+2 skipped launch-gate) + 855 API**, 102 e2e, after the P1 band and R-22 to R-32 (items 1 to 3), R-38, R-40. Typecheck clean, lint 0 errors (15 warnings), build OK. Older counts elsewhere in this file are stale.
+- Real test counts (2026-11-15, end of the P3 band): **898 frontend (+2 skipped launch-gate) + 894 API**, 108 e2e. Typecheck clean, lint 0 errors (14 warnings), build OK, `npm audit --omit=dev` 0 advisories. Older counts elsewhere in this file are stale; this line is the one to update.
 
 ### Daily maintenance, share fields, references, bundle, CSP, a11y (P2 band, 2026-11-15)
 - **`GET /api/cron/daily-maintenance`** (Vercel cron 03:41 UTC, `CRON_SECRET` like the purge; auth in `api/_lib/cron.ts`): (R-22) re-reads up to 100 workspaces' Stripe subscriptions through `syncSubscription`, oldest-synced first, and reports each correction to Sentry as a probable missed webhook (`api/_lib/reconcile.ts`); (R-27) `pruneRateLimits` deletes limiter rows whose window ended over an hour ago (`rate_limits.window_seconds`, migration 0014; a limiter failure is still fail-open but sampled to Sentry); (R-40) `sendTrialNotices` emails owners/admins 3 days before and after a trial ends, once each (`workspaces.trial_warned_at` / `trial_ended_notice_at`, cleared by `grant-trial`). One step failing never stops the others. The webhook also handles `charge.refunded` and `charge.dispute.created`: Sentry plus an email to the optional `BILLING_ALERT_EMAIL`, never an automatic action (`api/_lib/billingAlerts.ts`). Tests: `daily-maintenance.test.ts`.
@@ -85,6 +85,18 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
 - **Bundle (R-24):** every page is a lazy route in `src/App.tsx`; TipTap, `html-to-image`, jsPDF, `NodeModal`, `HistoryPanel`, `ImportDialog` load on demand. Entry 354 kB / 109 kB gzip (was 1,548 / 469). **New page = `page(() => import(...), 'Name')` in `App.tsx` and an entry in `KNOWN_ROUTES`; do not import a page statically.** Do not import jspdf or html-to-image at the top of a module.
 - **CSP (R-23, code part):** both policies in `vercel.json` carry `report-uri /api/csp-report` (`api/csp-report.ts`, logs `[csp]` lines with URLs cut to origin + first path segment). Still to do after the domain exists: add the production Clerk host, watch a week, enforce (`docs/CSP.md`).
 - **Accessibility (R-32 items 1 to 3):** modals use `Dialog` (`src/components/ui/Dialog.tsx`, `useDialog.ts`): focus trap, Escape (top-most only), focus restore, labelled. A side panel uses `useDialog({ modal: false })`. New overlay = `Dialog`, not a hand-made `position: fixed` div. Every icon-only button needs `aria-label`: `src/test/iconButtonNames.test.ts` (source scan) and `accessibleNames.test.tsx` (rendered) fail otherwise, and form fields need a real label (`htmlFor`/`useId`). `--muted` and `--dim` are at least 4.5:1 on bg, surface and raised in both themes (`src/styles/__tests__/contrast.test.ts`); do not use a lighter or darker grey for text. **Item 4 (keyboard on the canvas) is open.**
+
+### P3 band (2026-11-15): canvas keyboard, limits, client gaps, dependencies, sanitising, trial, split
+Details and evidence per item are in `docs/LAUNCH_REVIEW_BACKLOG.md` (R-32 item 4, R-33, R-34, R-35, R-36, R-37, R-39). What to know when working here:
+- **Canvas keyboard (R-32 item 4):** a role card is `role="button"` with `tabIndex=0`, `data-node-id` and a spoken name (`roleAriaLabel`). Tab = reading order (`readingOrder`; charts over 300 roles keep their own order), Enter/Space opens the panel (never toggles it shut) or finishes a Connect, F2 edits, arrows follow reporting lines (Up manager, Down leftmost report, Left/Right peers; `src/features/canvas/keyboardNav.ts`, pure) and pan an off-screen role into view. Logic in the hook `useRoleKeyboard.ts`. Zoomed-out big charts draw `NodeChip`s, which are not focusable. **Because cards are buttons now, an e2e/test query for a button by a person's name must be scoped to the dialog** (`page.getByRole('dialog').getByRole('button', …)`), or it matches the card too.
+- **`OrgChart.tsx` is split (R-35)** from 1,561 to about 790 lines: `canvasTypes.ts`, `EdgeLayers.tsx`, `Minimap.tsx`, `Toolbar.tsx`, `ToolBtn.tsx`, `ExportMenu.tsx`, `ShareSettings.tsx`, `FilterPanel.tsx`, `ZoomControls.tsx`, `useRoleKeyboard.ts`. Pointer/gesture handling and the global shortcut effect stay in `OrgChart.tsx` on purpose. A new toolbar button or canvas overlay is its own file.
+- **Limits (R-33):** `resolvePlanTier` takes the *higher* of an active trial and the paid tier (`higherTier` in `plans.ts`). Adding a role counts again after the insert and takes its own row back out when over the limit (parallel requests at the edge may all be refused; Retry works); import is still check-then-insert. A sample chart is capped at `MAX_SAMPLE_NODES` on add and import too. Migration 0015: unique index `workspace_members(workspace_id, user_id)` (it removes existing duplicates first); invite accept uses `onConflictDoNothing`. Invites a person sent are revoked and logged when they are removed, leave or delete their account (`revokeInvitesSentBy`). The invite email subject is fixed text (none of the inviter's or workspace's words); Free workspaces get 3 invite requests an hour, paid 10. `sendBillingReceipt` was deleted.
+- **Client (R-34):** the theme is saved (`stratmap_theme`); `useSignOut` calls `clearAccountBrowserState()` (`src/lib/signOutCleanup.ts`: plan, usage, trial, selected workspace, remembered workspace and invite token; the theme and cookie choice stay); onboarding finishes once (ref guard, disabled buttons); a **Vercel production build fails without a real `VITE_CLERK_PUBLISHABLE_KEY`** (`src/lib/buildChecks.ts`; `pk_test_` still passes until O-01). TopNav buttons are named, the avatar is a real button, and there is no bell (no inbox exists).
+- **Dependencies (R-36):** `@vercel/node` is a **devDependency** (every import of it is `import type`; a test fails on a runtime import). `npm audit fix` crashes on this tree (npm bug), so upgrades are by name; all `@tiptap/*` packages must stay on one version (a test checks). Dependabot is configured (`.github/dependabot.yml`). What `npm audit` still lists is dev-only tooling.
+- **HTML sanitising (R-37):** JD and template text goes through `sanitizeRichText` (`api/_lib/sanitizeHtml.ts`, `sanitize-html` allow-list = what TipTap's StarterKit writes) inside the zod `LongText` schema, so every write path gets it. A test runs real TipTap output through it and compares the editor's JSON. Rows written before this are not rewritten: any new renderer must clean on read or run the rows through `sanitizeRichText` first.
+- **Trial (R-39):** `trial_grants` (migration 0016, user id + date, no workspace link) records who has had the new-workspace trial and survives the 30-day erase; claimed with one `INSERT … ON CONFLICT DO NOTHING RETURNING` in `POST /api/workspace`, released if the workspace insert fails, removed on account deletion, backfilled from current owners. Deleting the *account* and signing up again still gives a new trial (new Clerk id; closing that needs the email, deliberately not done). The privacy text (section 4) says so.
+- **Tests that were fixed on the way:** `performance.spec.ts` no longer assumes the first card is "Person 0" (the server lists roles in storage order); `headcount.test.ts` no longer seeds a second membership for the owner; `invite-accept.test.ts` clears `rate_limits` where it counts seats. `cleanDb()` also clears `trial_grants`.
+- **Still open:** R-41 (landing page screenshot, needs the owner to pick a chart), R-04/R-05/R-23 (owner), the workspace-rename failure toast has no test, share/embed first load is about 153.6 kB gzip.
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -785,13 +797,13 @@ npm run typecheck
 npm test
 
 # Run frontend tests once (CI)
-npm run test:run       # 293 tests
+npm run test:run       # frontend (count: see "Real test counts")
 
 # Run backend API tests
-npm run test:api       # 407 tests (PGlite, no network)
+npm run test:api       # backend (PGlite, no network)
 
 # Run all tests
-npm run test:all       # 700 tests total
+npm run test:all       # both
 
 # Live smoke tests against DATABASE_URL (Neon dev branch only!)
 npm run test:live
@@ -818,8 +830,8 @@ git push
 
 | Suite | Config | Environment | Count | Command |
 |---|---|---|---|---|
-| Frontend | `vite.config.ts` | jsdom | 143 | `npm run test:run` |
-| Backend API | `vitest.api.config.ts` | node | 143 | `npm run test:api` |
+| Frontend | `vite.config.ts` | jsdom | see "Real test counts" | `npm run test:run` |
+| Backend API | `vitest.api.config.ts` | node | see "Real test counts" | `npm run test:api` |
 
 Frontend tests: Vitest + RTL, co-located `__tests__/` folders in `src/`. Reset Zustand stores in `beforeEach` with `useXxxStore.setState({})`. Use `vi.useFakeTimers()` for timers.
 

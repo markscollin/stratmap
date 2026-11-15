@@ -67,6 +67,9 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-39 | Trial can be farmed once the 30-day erase has run | P3 | S | code |
 | R-40 | Nothing warns by email before a trial ends | P2 | M | code |
 | R-41 | Landing page has no product screenshot or demo | P2 | S | code + owner |
+| R-42 | Accessibility scanner misses buttons built inside helper components, and clickable non-buttons | P3 | S | code |
+| R-43 | Chart reads return roles in storage order | P3 | S | code |
+| R-44 | Dev-tooling advisories (vite, vitest, esbuild) and role-limit race on import | P3 | S | code |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -616,6 +619,24 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 - **Allow-list = what TipTap 3's StarterKit writes:** `p br hr h1-h6 strong b em i s u code pre blockquote ul ol li a`; `href` (http, https, mailto only; `javascript:`, `data:`, `file:`, protocol-relative are dropped, the text stays), `rel` forced to `noopener noreferrer nofollow`, `target` only `_blank`, `ol start`, and a `language-xxx` class on `code`. Everything else is removed; the content of `script`/`style` goes with the tag.
 - **The round trip is tested with the real editor:** each kind of document the editor can write (headings, marks, nested lists, quotes, code with a language, links, line breaks, entities) is run through the sanitiser and reopened; the editor's JSON must be identical. A TipTap upgrade that starts writing a new element fails that test instead of silently losing formatting. Known cosmetic difference: the library writes `<br />` and `<hr />`; TipTap reads both.
 - **Existing rows are not rewritten** (no migration). They were written by a browser running TipTap, and the only renderer is still TipTap. Any new renderer must clean on read too, or the rows must be run through `sanitizeRichText` once first.
+
+### R-42 Accessibility scanner misses buttons built inside helper components, and clickable non-buttons
+- [ ] Open (found 2026-11-15 while doing R-34)
+
+**Problem.** `src/test/iconButtonNames.test.ts` reads JSX `<button>` literals, so `IconBtn` in `TopNav` (one `<button>` rendered for several icons, the name passed as nothing) passed while the theme, search and bell buttons had no name; `accessibleNames.test.tsx` only renders the canvas and dialogs. The avatar that signs you out was a clickable `div`/`img` with no keyboard access, which neither scanner looks for. TopNav is fixed and has its own test (`TopNav.test.tsx`), but the same blind spots remain for every other page.
+**Suggested fix.** (1) Render each page and the layout in one test (`Layout` + each lazy page with mocked data) and fail on any `button`, `a[href]` or `[role=button]` whose computed name is empty. (2) In the source scanner, flag `onClick` on `div`/`span`/`img` without a `role` and `tabIndex`. (3) Keyboard on the zoomed-out chip view (`NodeChip`) of big charts, which are not focusable today.
+
+### R-43 Chart reads return roles in storage order
+- [ ] Open (found 2026-11-15; it made `performance.spec.ts` fail only in full runs)
+
+**Problem.** `GET /api/charts/:id` selects roles with no `ORDER BY`, so the order is whatever Postgres stores. It changes after rows are deleted and reinserted, so the DOM order of cards on big charts (which keep the server's order, see R-32 item 4), export order and any test that assumes "first" are not stable between reloads.
+**Suggested fix.** Order roles by `(y, x, id)` or add a `created_at` column (additive migration) and order by that; add a test that two reads return the same order after a delete and re-add. Check the CSV export and snapshot capture keep their own explicit order.
+
+### R-44 Dev-tooling advisories and the role-limit race on import
+- [ ] Open (left over from R-33 and R-36, both deliberate)
+
+- `npm audit` (with dev dependencies) still lists 33, all build or test tooling: `vite` (dev server), `vitest`, `esbuild` under `drizzle-kit`, and `@vercel/node`'s own tree. None ships to browsers or functions. Upgrade `vite`/`vitest` to the current major when there is time to run the whole suite; let Dependabot propose the rest.
+- The import route is check-then-insert, so an import racing another add can overshoot a plan's role limit by one import (the add-role route got a post-insert recount in R-33; import inserts in chunks and would need a transaction or a recount-and-compensate step).
 
 ---
 
