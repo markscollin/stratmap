@@ -54,10 +54,6 @@ jobs:
     # Pinned: Playwright's browser install doesn't support the newest ubuntu-latest image yet.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      # Only a label: the host is the machine itself and the emulator ignores the credentials.
-      E2E_DATABASE_URL: postgres://e2e:e2e@127.0.0.1/e2e
-      NEON_HTTP_ENDPOINT: http://127.0.0.1:4444/sql
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,15 +63,6 @@ jobs:
       - run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-
-      - name: Start the local e2e database
-        run: |
-          node scripts/neon-http-emulator.mjs --port 4444 > emulator.log 2>&1 &
-          for i in $(seq 1 60); do
-            curl -sf http://127.0.0.1:4444/health && break
-            sleep 1
-          done
-          curl -sf http://127.0.0.1:4444/health || { echo "::error::the local e2e database did not start"; cat emulator.log; exit 1; }
 
       - name: Playwright
         run: npm run test:e2e
@@ -87,5 +74,4 @@ jobs:
           path: |
             playwright-report/
             test-results/
-            emulator.log
           retention-days: 7

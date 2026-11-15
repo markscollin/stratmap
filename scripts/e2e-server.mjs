@@ -4,23 +4,26 @@
 //   - the Vite frontend in dev-bypass mode (placeholder Clerk key),
 //   - every api/**/*.ts handler mounted at its file path (`[id]` → req.query.id),
 //   - no Clerk/Stripe/Anthropic/Resend keys, so a test can never bill or email anyone.
-// Database: E2E_DATABASE_URL, else DATABASE_URL. Normally the local emulator (npm run test:e2e:local sets NEON_HTTP_ENDPOINT);
-// if you point it at a real Neon database it must be a throwaway branch, never production.
+// Database: the local emulator (npm run test:e2e sets NEON_HTTP_ENDPOINT) or an explicit E2E_DATABASE_URL on a throwaway Neon
+// branch. DATABASE_URL is never used (scripts/e2e-guard.mjs). The server listens on 127.0.0.1 only.
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createServer } from 'vite'
+import { resolveE2eDatabase } from './e2e-guard.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 process.chdir(root)
 try { process.loadEnvFile('.env.local') } catch { /* no local env file (CI) */ }
 
 const port = Number(process.env.E2E_PORT ?? 3000)
-const dbUrl = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
-if (!dbUrl) {
-  console.error('e2e: run `npm run test:e2e:local` (no database needed), or set E2E_DATABASE_URL to a throwaway Neon branch.')
+// Never the real DATABASE_URL (R-28): see scripts/e2e-guard.mjs.
+const database = resolveE2eDatabase(process.env)
+if ('error' in database) {
+  console.error(`e2e: ${database.error}`)
   process.exit(1)
 }
+const dbUrl = database.url
 
 // Force bypass + strip every external-service key (process env beats .env files).
 process.env.DATABASE_URL = dbUrl
@@ -100,5 +103,6 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith('/api/')) return void handleApi(req, res, url)
   vite.middlewares(req, res)
 })
-server.listen(port, () => console.log(`e2e server ready on http://localhost:${port} (${routes.length} api routes)`))
+// Loopback only (R-28): the API runs with the dev bypass on, so it must not be reachable from the network.
+server.listen(port, '127.0.0.1', () => console.log(`e2e server ready on http://localhost:${port} (${routes.length} api routes, 127.0.0.1 only)`))
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { void vite.close(); server.close(); process.exit(0) })

@@ -490,7 +490,7 @@ should be reported.
 **Fix.** Delete expired windows in the daily cron (R-22), and report limiter failures to Sentry (sampled).
 
 ### R-28 e2e server binds all interfaces and can use the real database
-- [ ] Open
+- [x] Done 2026-11-15: `scripts/e2e-guard.mjs` (`resolveE2eDatabase`) is the only way the suite gets a database: the local emulator (endpoint must be on this machine) or an explicit `E2E_DATABASE_URL` that differs from `DATABASE_URL`; a bare `DATABASE_URL` is refused with a message, in the server, the helpers and the teardown (none of them fall back to it any more). The server listens on `127.0.0.1` only. `npm run test:e2e` is now the emulator run (what CI uses, so the CI job no longer starts its own emulator); `test:e2e:remote` is the old plain `playwright test` for an explicit throwaway Neon branch. Tests: `e2e-guard.test.ts`.
 
 **Problem (reported).** `scripts/e2e-server.mjs:98` listens on every interface; `:16-19` loads `.env.local`
 and falls back to `DATABASE_URL`; `:28-29` removes `CLERK_SECRET_KEY` and `VERCEL_ENV`. Plain
@@ -500,7 +500,7 @@ network and runs the test teardown against that database.
 the emulator is in use. Make `npm run test:e2e` an alias of `test:e2e:local`.
 
 ### R-29 Stripe ids returned by `POST`/`PUT /api/workspace`
-- [ ] Half done 2026-11-14: **POST** (both the create and the existing-workspace reply) no longer returns Stripe ids (`withoutBillingIds` in `api/workspace.ts`, with a test). **PUT is still open** (and a shared serializer for all three methods, which is what the suggested fix asks for).
+- [x] Done 2026-11-15 (the PUT half and the shared serializer): `api/_lib/publicWorkspace.ts` is the one way a workspace leaves `/api/workspace`; GET, POST (both replies) and PUT use it. Stripe ids never leave, the subscription mirror is grouped under `billing`, the plan is the effective one, and the new trial-email stamps stay internal. PUT used to return the raw row. Tests: `workspace.test.ts` (3 new, all three methods).
 
 **Problem (verified for POST).** When the caller already has a workspace, POST returns the full row
 (`api/workspace.ts:65-71`), including `stripeCustomerId` and `stripeSubscriptionId`; any member can call it.

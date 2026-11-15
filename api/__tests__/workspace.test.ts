@@ -252,3 +252,46 @@ describe('POST /api/workspace', () => {
     })
   })
 })
+
+// R-29: one serializer (api/_lib/publicWorkspace.ts) for every method, so no response can carry Stripe ids or the trial-email bookkeeping.
+describe('publicWorkspace on every method (R-29)', () => {
+  const secrets = /stripe|cus_secret|sub_secret|trialWarnedAt|trialEndedNoticeAt/i
+  const seedPaid = async () => {
+    await seedWorkspace()
+    await testDb.update(schema.workspaces).set({
+      planTier: 'starter', stripeCustomerId: 'cus_secret', stripeSubscriptionId: 'sub_secret', subscriptionStatus: 'active',
+      planExpiresAt: new Date('2027-01-01T00:00:00Z'), trialWarnedAt: new Date(), trialEndedNoticeAt: new Date(),
+    })
+  }
+  const send = async (method: string, body?: unknown) => {
+    const res = createRes()
+    await handler(createReq({ method, body }) as never, res as never)
+    return res
+  }
+
+  it('GET, POST (existing) and PUT never carry a Stripe id or the trial stamps', async () => {
+    await seedPaid()
+    const get = await send('GET')
+    const post = await send('POST', { name: 'X', ownerRole: 'Founder/CEO', size: '1-10' })
+    const put = await send('PUT', { name: 'Renamed' })
+    for (const [label, r] of [['GET', get], ['POST', post], ['PUT', put]] as const) {
+      expect(r._status, label).toBeLessThan(300)
+      expect(JSON.stringify(r._body), label).not.toMatch(secrets)
+    }
+  })
+
+  it('all three give the same view of the plan and the billing state', async () => {
+    await seedPaid()
+    const bodies = [await send('GET'), await send('POST', { name: 'X', ownerRole: 'Founder/CEO', size: '1-10' }), await send('PUT', { name: 'Test Workspace' })]
+      .map(r => r._body as { planTier: string; billing: { status: string; hasBillingAccount: boolean } })
+    for (const b of bodies) {
+      expect(b.planTier).toBe('starter')
+      expect(b.billing).toMatchObject({ status: 'active', hasBillingAccount: true })
+    }
+  })
+
+  it('the rename reply still has the new name', async () => {
+    await seedPaid()
+    expect((await send('PUT', { name: 'Renamed' }))._body).toMatchObject({ name: 'Renamed' })
+  })
+})

@@ -58,7 +58,7 @@ export async function createChart(page: Page, name: string) {
 
 /** Gives a test user's workspace a trial of a paid plan that ends in `days` days (the e2e server turns the automatic new-workspace trial off). */
 export async function setTrialFor(slug: string, days: number, plan: 'starter' | 'growth' = 'growth') {
-  const url = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
+  const url = process.env.E2E_DATABASE_URL
   if (!url) throw new Error('No database URL for setTrialFor')
   if (!slug.startsWith(`e2e${RUN}-`)) throw new Error(`Refusing to change the trial of a user outside this run: ${slug}`)
   const rows = await e2eSql(url)`UPDATE workspaces SET trial_plan = ${plan}, trial_ends_at = now() + (${days} * interval '1 day') WHERE owner_id = ${`dev-${slug}`} RETURNING id`
@@ -70,7 +70,7 @@ export async function setTrialFor(slug: string, days: number, plan: 'starter' | 
  * The workspace must already exist (call after `onboard`). Only ever touches this run's own `dev-e2e<run>-…` users.
  */
 export async function setPlanFor(slug: string, tier: 'free' | 'starter' | 'growth' | 'enterprise') {
-  const url = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL
+  const url = process.env.E2E_DATABASE_URL
   if (!url) throw new Error('No database URL for setPlanFor')
   if (!slug.startsWith(`e2e${RUN}-`)) throw new Error(`Refusing to change the plan of a user outside this run: ${slug}`)
   const rows = await e2eSql(url)`UPDATE workspaces SET plan_tier = ${tier} WHERE owner_id = ${`dev-${slug}`} RETURNING id`

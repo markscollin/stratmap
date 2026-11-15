@@ -7,17 +7,11 @@ import { requireRole, getPermission } from './_lib/access'
 import { parseBody } from './_lib/validate'
 import { WorkspaceCreate, WorkspaceUpdate, WorkspaceDelete } from './_lib/schemas'
 import { db } from './_lib/db'
-import { resolvePlanTier } from './_lib/billing'
+import { publicWorkspace } from './_lib/publicWorkspace'
 import { softDeleteWorkspace, eraseDate } from './_lib/workspaceLifecycle'
 import { reportError } from './_lib/sentry'
 import { getUserIdentity, type UserIdentity } from './_lib/identity'
 import { workspaces, workspaceMembers } from '../src/lib/db/schema'
-
-/** A workspace row without Stripe ids or the trial/billing internals, for replies that go to any member. */
-function withoutBillingIds<T extends { stripeCustomerId?: unknown; stripeSubscriptionId?: unknown }>(ws: T): Omit<T, 'stripeCustomerId' | 'stripeSubscriptionId'> {
-  const { stripeCustomerId: _c, stripeSubscriptionId: _s, ...rest } = ws
-  return rest
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -41,16 +35,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // The caller's own role, so the client gates UI on the real permission.
       const myPermission = await getPermission(auth)
 
-      // Stripe ids stay server-side; the client gets the subscription state it shows.
-      const { stripeCustomerId, stripeSubscriptionId: _sub, subscriptionStatus, planExpiresAt, cancelAtPeriodEnd, ...rest } = ws
-      const billing = {
-        status: subscriptionStatus,
-        planExpiresAt,
-        cancelAtPeriodEnd,
-        hasBillingAccount: stripeCustomerId != null,
-      }
-
-      return res.json({ ...rest, planTier: resolvePlanTier(ws), billing, members, myPermission })
+      // Stripe ids stay server-side (publicWorkspace); the client gets the subscription state it shows.
+      return res.json({ ...publicWorkspace(ws), members, myPermission })
     }
 
     if (req.method === 'POST') {
@@ -77,8 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .where(eq(workspaces.id, existing.workspaceId))
           .limit(1)
         // Say what this person is in it: the client used to assume "owner", wrong for someone who was only invited (R-13).
-        // Billing ids are not part of the reply (R-29).
-        return res.status(200).json({ ...withoutBillingIds(ws), planTier: resolvePlanTier(ws), myPermission: existing.permission })
+        return res.status(200).json({ ...publicWorkspace(ws), myPermission: existing.permission })
       }
 
       // Who this person is comes from the sign-in provider, not from the request body: the stored address receives
@@ -118,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await track('workspace_created', { userId: user.userId, workspaceId, consent: hasAnalyticsConsent(req), props: { plan: 'free' } })
 
-      return res.status(201).json({ ...withoutBillingIds(ws), planTier: resolvePlanTier(ws), myPermission: 'owner' })
+      return res.status(201).json({ ...publicWorkspace(ws), myPermission: 'owner' })
     }
 
     if (req.method === 'PUT') {
@@ -136,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .where(eq(workspaces.id, auth.workspaceId))
         .returning()
 
-      return res.json(updated)
+      return res.json(publicWorkspace(updated))
     }
 
     // Delete the workspace (roadmap 4.2): owner only, and only after typing its name. It is hidden at once, the
