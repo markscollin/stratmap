@@ -23,8 +23,9 @@ const row = (id: string, x: number, y: number) => ({ id, chartId: TEST_CHART_ID,
 
 async function readIds() {
   const res = createRes()
-  await handler(createReq({ method: 'GET', query: { id: TEST_CHART_ID } }), res)
-  return { nodes: res._body.nodes.map((n: { id: string }) => n.id), edges: res._body.edges.map((e: { id: string }) => e.id) }
+  await handler(createReq({ query: { id: TEST_CHART_ID } }) as never, res as never)
+  const body = res._body as { nodes: Array<{ id: string }>; edges: Array<{ id: string }> }
+  return { nodes: body.nodes.map(n => n.id), edges: body.edges.map(e => e.id) }
 }
 
 beforeAll(async () => { await setupSchema() })

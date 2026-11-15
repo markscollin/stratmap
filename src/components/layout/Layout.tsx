@@ -46,7 +46,7 @@ export function Layout({ children }: { children?: ReactNode } = {}) {
       {!isPhone && <Sidebar />}
       {drawerOpen && (
         <>
-          <div
+          <div data-a11y-ok="backdrop of the phone menu; Escape closes it"
             data-testid="nav-backdrop"
             onClick={() => setMobileNavOpen(false)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 90 }}

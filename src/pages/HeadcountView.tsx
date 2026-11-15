@@ -12,6 +12,7 @@ import { downloadText } from '../lib/csvSafe'
 import { BudgetPanel } from '../features/headcount/BudgetPanel'
 import { formatMoney } from '../lib/headcountBudget'
 import type { RoleType } from '../types'
+import { Dialog } from '../components/ui/Dialog'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ function DeptSelect({ value, onChange, placeholder = 'Select department' }: {
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setOpen(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 198 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 199,
             background: 'var(--surface)', border: '1px solid var(--border-hover)',
@@ -426,14 +427,7 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}
-    >
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--surface)', borderRadius: 18, border: '1px solid var(--border-hover)',
-        padding: '24px 24px 20px', width: 420, maxHeight: '80vh', overflowY: 'auto',
-        boxShadow: 'var(--shadow)', animation: 'nodePop .2s cubic-bezier(.34,1.56,.64,1)',
-      }}>
+    <Dialog label="Manage departments" onClose={onClose} zIndex={400} panelStyle={{ borderRadius: 18, padding: '24px 24px 20px', width: 420, maxHeight: '80vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>Manage departments</h2>
           <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><X size={16} /></button>
@@ -497,8 +491,7 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
             cursor: newName.trim() ? 'pointer' : 'default',
           }}>{saving ? '…' : 'Add'}</button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -604,7 +597,7 @@ function ChartFilter({ value, onChange }: { value: Set<string>; onChange: (v: Se
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50, minWidth: 200,
             background: 'var(--surface)', border: '1px solid var(--border)',

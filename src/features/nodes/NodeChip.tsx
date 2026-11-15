@@ -5,26 +5,38 @@ import type { OrgNode } from '../../types'
 /**
  * A role drawn as a plain coloured block, used instead of a full card when a big chart is zoomed out so far that
  * a card would be a few unreadable pixels (roadmap 3.4). One element and no children, so a thousand cost little.
+ * It is a button for the keyboard like a card (R-42): Tab, Enter, F2 and the arrows work the same, so a big chart stays usable zoomed out.
  * Memoised, with handlers that take the id, so dragging one role re-renders one chip, not all of them.
  */
-export const NodeChip = memo(function NodeChip({ node, colour, selected, connecting, isConnectTarget, dimmed, onPointerDown, onClick, onDoubleClick }: {
+export const NodeChip = memo(function NodeChip({ node, colour, selected, connecting, isConnectTarget, dimmed, ariaLabel, onPointerDown, onClick, onDoubleClick, onKeyDown, onFocus }: {
   node: OrgNode
   colour: string
   selected: boolean
   connecting: boolean
   isConnectTarget: boolean
   dimmed?: boolean
+  /** Spoken name, the same sentence a full card carries (name, title, who they report to). */
+  ariaLabel: string
   onPointerDown: (e: React.PointerEvent, id: string) => void
   onClick: (e: React.MouseEvent, id: string) => void
   onDoubleClick: (e: React.MouseEvent, id: string) => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>, id: string) => void
+  onFocus: (e: React.FocusEvent<HTMLDivElement>, id: string) => void
 }) {
   const open = node.status === 'open' || node.status === 'planned'
   return (
     <div
       data-testid="node-chip"
+      data-node-id={node.id}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      aria-pressed={selected}
       onPointerDown={e => onPointerDown(e, node.id)}
       onClick={e => onClick(e, node.id)}
       onDoubleClick={e => onDoubleClick(e, node.id)}
+      onKeyDown={e => onKeyDown(e, node.id)}
+      onFocus={e => onFocus(e, node.id)}
       style={{
         position: 'absolute', left: node.x, top: node.y, width: NODE_W, height: NODE_H, boxSizing: 'border-box',
         borderRadius: 14, cursor: 'pointer',

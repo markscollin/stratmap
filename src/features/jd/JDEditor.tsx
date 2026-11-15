@@ -145,7 +145,7 @@ export function JDEditor({ content, onSave, editable = true, placeholder = 'Star
           )}
         </div>
       )}
-      <div
+      <div data-a11y-ok="a click in the margin focuses the editor, which is itself focusable"
         onClick={() => editor.commands.focus()}
         style={{
           border: '1px solid var(--border)',

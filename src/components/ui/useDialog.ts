@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 // Keyboard and focus behaviour shared by every dialog and panel (launch review R-32):
@@ -35,6 +35,9 @@ export interface UseDialogOptions {
 export function useDialog<T extends HTMLElement>(options: UseDialogOptions): { ref: RefObject<T | null>; tabIndex: -1 } {
   const { active = true, modal = true } = options
   const ref = useRef<T | null>(null)
+  // Who had focus before this dialog rendered. A child with React's `autoFocus` takes focus while the dialog mounts, before the effect
+  // below runs, so reading document.activeElement there would find the dialog's own field and focus could not be given back (R-42).
+  const [openedFrom] = useState<Element | null>(() => (typeof document === 'undefined' ? null : document.activeElement))
   const onCloseRef = useRef(options.onClose)
   useEffect(() => { onCloseRef.current = options.onClose })
 
@@ -43,7 +46,9 @@ export function useDialog<T extends HTMLElement>(options: UseDialogOptions): { r
     if (!active || !panel) return
     const id = Symbol('dialog')
     open.push(id)
-    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const now = document.activeElement
+    const opener = panel.contains(now) ? openedFrom : now
+    const before = opener instanceof HTMLElement ? opener : null
 
     if (!panel.contains(document.activeElement)) {
       // A modal puts you in its first field. A non-modal panel just takes focus itself, so that opening a role from the canvas
@@ -80,7 +85,7 @@ export function useDialog<T extends HTMLElement>(options: UseDialogOptions): { r
       if (at >= 0) open.splice(at, 1)
       if (before && before.isConnected && before !== document.body) before.focus({ preventScroll: true })
     }
-  }, [active, modal])
+  }, [active, modal, openedFrom])
 
   return { ref, tabIndex: -1 }
 }

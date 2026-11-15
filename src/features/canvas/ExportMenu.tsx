@@ -32,7 +32,7 @@ export function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf' | 'cs
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)',
             background: 'var(--surface)', border: '1px solid var(--border)',

@@ -100,7 +100,7 @@ export function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPub
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
           <div
             data-canvas-overlay
             style={{

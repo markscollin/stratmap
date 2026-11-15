@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Dialog } from '../../components/ui/Dialog'
 import { useNavigate } from 'react-router-dom'
 import { X, GitCompare, RotateCcw, GitBranch, Trash2 } from 'lucide-react'
 import { api, ApiError } from '../../lib/apiClient'
@@ -169,10 +170,9 @@ export function HistoryPanel({ chartId, chartName, onClose, onRestored }: { char
   const manualCount = versions.filter(v => v.kind === 'manual').length
 
   return (
-    <div data-export-ignore style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Version history" data-testid="history-panel" onClick={e => e.stopPropagation()}
-        style={{ width: 'min(720px, 100%)', maxHeight: '88vh', overflow: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, boxShadow: 'var(--shadow-lg, 0 10px 40px rgba(0,0,0,.3))' }}>
+    <Dialog label="Version history" onClose={onClose} zIndex={60}
+      panelStyle={{ width: 'min(720px, 100%)', maxHeight: '88vh', overflow: 'auto', borderRadius: 14, border: '1px solid var(--border)' }}>
+      <div data-testid="history-panel" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Version history</h2>
@@ -271,6 +271,6 @@ export function HistoryPanel({ chartId, chartName, onClose, onRestored }: { char
           </div>
         )}
       </div>
-    </div>
+    </Dialog>
   )
 }

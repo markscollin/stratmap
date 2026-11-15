@@ -23,7 +23,7 @@ export function Dialog({ label, onClose, children, zIndex = 300, align = 'center
   // null = no press seen (a programmatic or assistive-technology click), which counts as a dismiss.
   const pressedOnBackdrop = useRef<boolean | null>(null)
   return (
-    <div
+    <div data-a11y-ok="backdrop; Escape closes the dialog"
       data-canvas-overlay
       data-testid="dialog-backdrop"
       onMouseDown={e => { pressedOnBackdrop.current = e.target === e.currentTarget }}

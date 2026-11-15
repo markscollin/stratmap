@@ -79,7 +79,7 @@ function Composer({ members, placeholder, submitLabel, initialText = '', initial
       {options.length > 0 && (
         <ul role="listbox" aria-label="Mention someone" style={{ position: 'absolute', left: 0, right: 0, top: '100%', margin: '-34px 0 0', padding: 4, listStyle: 'none', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'var(--shadow)', zIndex: 5 }}>
           {options.map((m, i) => (
-            <li key={m.id} role="option" aria-selected={i === active} data-testid="mention-option"
+            <li data-a11y-ok="combobox option; the compose box handles arrows and Enter" key={m.id} role="option" aria-selected={i === active} data-testid="mention-option"
               onMouseDown={e => { e.preventDefault(); pick(m) }}
               style={{ padding: '6px 8px', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: 'var(--text)', background: i === active ? 'var(--nav-hover)' : 'transparent' }}>
               {m.name}

@@ -48,8 +48,9 @@ test.describe.serial('version history', () => {
     const row = panel(owner).getByTestId('version-row').first()
     await expect(row).toContainText('Baseline')
     await expect(row).toContainText('1 role')
+    // The panel is a real dialog now (R-42): Escape closes it.
     await owner.keyboard.press('Escape')
-    await panel(owner).getByRole('button', { name: 'Close' }).click()
+    await expect(panel(owner)).toHaveCount(0)
   })
 
   test('add a role, then compare the baseline with today: the new role shows as added', async () => {

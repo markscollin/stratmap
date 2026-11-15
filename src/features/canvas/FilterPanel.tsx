@@ -75,7 +75,7 @@ export function FilterBtn({
       <ToolBtn Icon={Layers} label="Filter (F)" active={hasFilters || open} onClick={() => onOpenChange(!open)} />
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => onOpenChange(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => onOpenChange(false)} />
           <div
             data-canvas-overlay
             style={{

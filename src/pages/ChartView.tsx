@@ -24,6 +24,7 @@ import { APPROVAL_CHART_STATUSES } from '../lib/plans'
 import { PlanBadge, FeatureUpgradeModal } from '../components/ui/FeatureLock'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 import { ImportDialog } from '../features/import/ImportDialog'
+import { Dialog } from '../components/ui/Dialog'
 
 const PERMISSION_RANK: Record<string, number> = { owner: 5, admin: 4, editor: 3, commenter: 2, viewer: 1 }
 
@@ -138,6 +139,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
     >
       {/* Thumbnail */}
       <div
+        data-a11y-ok="mouse shortcut; the chart name below is the button"
         onClick={() => navigate(`/charts/${chart.id}`)}
         style={{ height: 108, background: 'var(--bg)', position: 'relative', borderBottom: '1px solid var(--border)', padding: 10, overflow: 'hidden' }}
       >
@@ -157,11 +159,12 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
       <div style={{ padding: '14px 16px' }}>
         {/* Title + menu */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-          <h3
-            onClick={() => navigate(`/charts/${chart.id}`)}
-            style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}
-          >{chart.name}</h3>
-          <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, flex: 1, margin: 0 }}>
+            {/* The keyboard way into the chart (the thumbnail above is the same link for a mouse). */}
+            <button type="button" onClick={() => navigate(`/charts/${chart.id}`)}
+              style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', borderRadius: 4 }}>{chart.name}</button>
+          </h3>
+          <div data-a11y-ok="stops the click reaching the card" style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
             <button aria-label={`Actions for ${chart.name}`} aria-haspopup="menu"
               data-testid="chart-overflow-btn"
               onClick={() => setMenu(!menu)}
@@ -310,22 +313,16 @@ function NewChartModal({ onClose, onCreate }: {
   ]
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--surface)', borderRadius: 20, border: '1px solid var(--border-hover)', padding: 32, width: 460, boxShadow: 'var(--shadow)', animation: 'nodePop .25s cubic-bezier(.34,1.56,.64,1)' }}
-      >
+    <Dialog label="New org chart" onClose={onClose} zIndex={200} panelStyle={{ borderRadius: 20, padding: 32, width: 460 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.3px' }}>New org chart</h2>
           <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 7 }}>Chart name</label>
+          <label htmlFor="new-chart-name" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 7 }}>Chart name</label>
           <input
+            id="new-chart-name"
             autoFocus
             value={name}
             onChange={e => setName(e.target.value)}
@@ -361,8 +358,7 @@ function NewChartModal({ onClose, onCreate }: {
             Create chart
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -480,6 +476,7 @@ export function ChartView() {
             onChange={e => setSearch(e.target.value)}
             onFocus={() => setFocusSearch(true)}
             onBlur={() => setFocusSearch(false)}
+            aria-label="Search charts"
             placeholder="Search by name or owner…"
             style={{ background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 13, flex: 1, width: '100%' }}
           />

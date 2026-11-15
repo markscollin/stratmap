@@ -522,7 +522,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   const visibleIds = useMemo(() => (view ? visibleNodeIds(nodes, view) : null), [view, nodes])
 
   return (
-    <div
+    <div data-a11y-ok="empty-canvas click deselects; Escape does the same"
       ref={containerRef}
       style={{
         position: 'relative', width: '100%', height: '100%', overflow: exportOverflow ? 'visible' : 'hidden',
@@ -619,7 +619,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           }
           return chips
             ? <NodeChip key={node.id} {...state} colour={deptColourMap[node.departmentId] ?? '#94A3B8'}
-                onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick} />
+                ariaLabel={roleAriaLabel(node, reportingIndex, id => nodeMap[id]?.name ?? '')}
+                onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick}
+                onKeyDown={handleNodeKeyDown} onFocus={handleNodeFocus} />
             : <NodeCard key={node.id} {...state} departments={wsDepts} commentCount={commentCounts?.[node.id] ?? 0}
                 ariaLabel={roleAriaLabel(node, reportingIndex, id => nodeMap[id]?.name ?? '')}
                 onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => handleNodeKeyDown(e, node.id)}

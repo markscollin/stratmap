@@ -75,6 +75,19 @@ test.describe.serial(`${N}-role chart`, () => {
     expect(inDom).toBeLessThanOrEqual(N)
   })
 
+  test('zoomed-out chips are reachable by keyboard like cards (R-42)', async () => {
+    // At the fit-to-view zoom a 1,000-role chart draws chips, not cards. A chip is a button: Tab reaches it, Enter opens the panel.
+    const chip = page.locator('[data-testid="node-chip"]').first()
+    await expect(chip).toBeVisible()
+    await chip.focus()
+    await expect(chip).toBeFocused()
+    await expect(chip).toHaveAttribute('aria-label', /Person \d+/)
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog').first()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
   test('dragging a role stays smooth at the fit-to-view zoom', async () => {
     const first = role(page).first()
     const box = (await first.boundingBox())!

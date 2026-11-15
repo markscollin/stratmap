@@ -59,7 +59,7 @@ export function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
     }}>
-      <svg width={MM_W} height={MM_H} style={{ display: 'block', cursor: 'crosshair' }} onClick={handleClick}>
+      <svg data-a11y-ok="pointer shortcut; the keyboard pans through the roles (arrow keys)" width={MM_W} height={MM_H} style={{ display: 'block', cursor: 'crosshair' }} onClick={handleClick}>
         <MinimapDots nodes={nodes} minX={minX} minY={minY} mmScale={mmScale} />
         <rect x={vpMMX} y={vpMMY} width={vpMMW} height={vpMMH}
           fill="rgba(14,165,233,0.08)" stroke="var(--brand)" strokeWidth={1.5}

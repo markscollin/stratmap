@@ -5,6 +5,7 @@ import { useTemplateStore, type Template } from '../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
 import { JDEditor } from '../features/jd/JDEditor'
 import { api, ApiError } from '../lib/apiClient'
+import { Dialog } from '../components/ui/Dialog'
 
 const FALLBACK_COLOUR = '#94A3B8'
 
@@ -56,25 +57,8 @@ function TemplateModal({ mode, template, onSave, onClose }: {
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        padding: '40px 20px', overflow: 'auto',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 560,
-          background: 'var(--surface)', borderRadius: 16,
-          border: '1px solid var(--border)', boxShadow: 'var(--shadow)',
-          animation: 'nodePop .2s ease-out',
-          overflow: 'hidden',
-        }}
-      >
+    <Dialog label={mode === 'create' ? 'New template' : 'Edit template'} onClose={onClose} zIndex={100}
+      panelStyle={{ width: 560, borderRadius: 16, border: '1px solid var(--border)', maxHeight: '90vh', overflowY: 'auto' }}>
         {/* Modal header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
@@ -161,8 +145,7 @@ function TemplateModal({ mode, template, onSave, onClose }: {
             {mode === 'create' ? 'Create template' : 'Save changes'}
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -192,22 +175,14 @@ const inputStyle: React.CSSProperties = {
 
 function DeleteConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onCancel}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 32px', width: 360, textAlign: 'center', boxShadow: 'var(--shadow)', animation: 'nodePop .2s ease-out' }}
-      >
+    <Dialog label="Delete template?" onClose={onCancel} zIndex={100} panelStyle={{ borderRadius: 14, padding: '28px 32px', width: 360, textAlign: 'center', border: '1px solid var(--border)' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Delete template?</div>
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.5 }}>This cannot be undone. Charts that used this template won't be affected.</div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onCancel} style={{ flex: 1, padding: '9px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={onConfirm} style={{ flex: 1, padding: '9px', background: 'var(--danger)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -228,7 +203,7 @@ function CardMenu({ onEdit, onDuplicate, onDelete }: {
       </button>
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
+          <div data-a11y-ok="click-away scrim behind a menu; its button closes it" style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
             background: 'var(--surface)', border: '1px solid var(--border)',

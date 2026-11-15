@@ -67,8 +67,9 @@ function FocusInput({ id, label, type, placeholder, value, onChange, focus, setF
   const isFocused = focus === id
   return (
     <div style={{ marginBottom: 18 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>{label}</label>
+      <label htmlFor={`settings-${id}`} style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>{label}</label>
       <input
+        id={`settings-${id}`}
         type={type}
         placeholder={placeholder}
         value={value}

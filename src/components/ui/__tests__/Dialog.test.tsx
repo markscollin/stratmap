@@ -42,6 +42,25 @@ describe('Dialog', () => {
     expect(opener).toHaveFocus()
   })
 
+  it('gives focus back to the opener even when a field inside uses React autoFocus (R-42)', async () => {
+    function AutoFocusHarness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <div>
+          <button onClick={() => setOpen(true)}>Open it</button>
+          {open && <Dialog label="New chart" onClose={() => setOpen(false)}><input aria-label="Chart name" autoFocus /></Dialog>}
+        </div>
+      )
+    }
+    render(<AutoFocusHarness />)
+    const opener = screen.getByRole('button', { name: 'Open it' })
+    opener.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(screen.getByLabelText('Chart name')).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(opener).toHaveFocus()
+  })
+
   it('keeps focus inside: Tab wraps from the last control to the first, Shift+Tab from the first to the last', async () => {
     const user = userEvent.setup()
     render(<Harness />)

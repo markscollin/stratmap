@@ -13,6 +13,7 @@ import { useChartLimit } from '../../hooks/useChartLimit'
 import { api, ApiError } from '../../lib/apiClient'
 import { NODE_W } from '../nodes/nodeSize'
 import type { Department, OrgNode } from '../../types'
+import { Dialog } from '../../components/ui/Dialog'
 
 // Roadmap 2.1: import people from a CSV or Excel file.
 //   1. Choose a file (and, from a chart, where it goes).
@@ -130,15 +131,8 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
   }
 
   return (
-    <div
-      role="dialog" aria-modal="true" aria-label="Import people"
-      onClick={() => { if (!submitting) onClose() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--surface)', borderRadius: 20, border: '1px solid var(--border-hover)', padding: 28, width: 620, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow)' }}
-      >
+    <Dialog label="Import people" onClose={() => { if (!submitting) onClose() }} zIndex={200}
+      panelStyle={{ borderRadius: 20, padding: 28, width: 620, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.3px' }}>Import people</h2>
           <button aria-label="Close" onClick={onClose} disabled={submitting} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
@@ -169,8 +163,7 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
             onBack={() => setStep('map')} onImport={() => void runImport()}
           />
         )}
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
