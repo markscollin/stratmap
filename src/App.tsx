@@ -1,30 +1,42 @@
+import { lazy, Suspense } from 'react'
+import type { ComponentType } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Layout } from './components/layout/Layout'
 import { ToastStack } from './components/ui/Toast'
 import { Spotlight } from './components/ui/Spotlight'
 import { CookieConsent } from './components/ui/CookieConsent'
 import { AuthProvider } from './features/auth/AuthProvider'
-import { PrivacyPage, TermsPage } from './pages/LegalPages'
-import { LandingPage }     from './pages/LandingPage'
-import { Dashboard }       from './pages/Dashboard'
-import { ChartView }       from './pages/ChartView'
-import { CanvasView }      from './pages/CanvasView'
-import { RolesView }       from './pages/RolesView'
-import { HeadcountView }   from './pages/HeadcountView'
-import { SettingsView }    from './pages/SettingsView'
-import { OnboardingPage }  from './pages/OnboardingPage'
-import { SignInPage, SignUpPage } from './pages/SignInPage'
-import { PricingRoute }    from './pages/PricingPage'
-import { BillingSuccessPage } from './pages/BillingSuccessPage'
-import { SharePage } from './pages/SharePage'
-import { InvitePage } from './pages/InvitePage'
-import { EmbedPage } from './pages/EmbedPage'
-import { NotFoundPage } from './pages/NotFoundPage'
+import { PageFallback } from './components/ui/PageFallback'
+
+// Every page is its own download (R-24): a visitor to the landing page, a share link or an embed no longer fetches the canvas,
+// the rich-text editor or the settings screens. Pages are named exports, hence the small adapter.
+function page<T extends Record<string, unknown>>(load: () => Promise<T>, name: keyof T) {
+  return lazy(() => load().then(m => ({ default: m[name] as ComponentType })))
+}
+const Layout             = page(() => import('./components/layout/Layout'), 'Layout')
+const PrivacyPage        = page(() => import('./pages/LegalPages'), 'PrivacyPage')
+const TermsPage          = page(() => import('./pages/LegalPages'), 'TermsPage')
+const LandingPage        = page(() => import('./pages/LandingPage'), 'LandingPage')
+const Dashboard          = page(() => import('./pages/Dashboard'), 'Dashboard')
+const ChartView          = page(() => import('./pages/ChartView'), 'ChartView')
+const CanvasView         = page(() => import('./pages/CanvasView'), 'CanvasView')
+const RolesView          = page(() => import('./pages/RolesView'), 'RolesView')
+const HeadcountView      = page(() => import('./pages/HeadcountView'), 'HeadcountView')
+const SettingsView       = page(() => import('./pages/SettingsView'), 'SettingsView')
+const OnboardingPage     = page(() => import('./pages/OnboardingPage'), 'OnboardingPage')
+const SignInPage         = page(() => import('./pages/SignInPage'), 'SignInPage')
+const SignUpPage         = page(() => import('./pages/SignInPage'), 'SignUpPage')
+const PricingRoute       = page(() => import('./pages/PricingPage'), 'PricingRoute')
+const BillingSuccessPage = page(() => import('./pages/BillingSuccessPage'), 'BillingSuccessPage')
+const SharePage          = page(() => import('./pages/SharePage'), 'SharePage')
+const InvitePage         = page(() => import('./pages/InvitePage'), 'InvitePage')
+const EmbedPage          = page(() => import('./pages/EmbedPage'), 'EmbedPage')
+const NotFoundPage       = page(() => import('./pages/NotFoundPage'), 'NotFoundPage')
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Suspense fallback={<PageFallback />}>
         <Routes>
           {/* Public share view — no auth, no layout */}
           <Route path="/share/:token" element={<SharePage />} />
@@ -60,6 +72,7 @@ export default function App() {
           {/* Anything else: a 404 page (public, see isKnownPath in AuthProvider) */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
         <ToastStack />
         <Spotlight />
         <CookieConsent />

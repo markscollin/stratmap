@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { X, Briefcase, MapPin, Clock, FileText, Search } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import type { RoleStatus } from '../../types/chart'
@@ -8,7 +8,6 @@ import { useChartLimit } from '../../hooks/useChartLimit'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
-import { JDEditor } from '../jd/JDEditor'
 import { SalaryBandEditor, type SalaryBandChange } from './SalaryBandEditor'
 import { AIJDDraft } from '../jd/AIJDDraft'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
@@ -32,6 +31,9 @@ const STATUS_LABEL: Record<RoleStatus, string> = {
   published:   'Published',
   hired:       'Hired',
 }
+
+// TipTap is large and only needed once a job description is open, so the editor is a separate download (R-24).
+const JDEditor = lazy(() => import('../jd/JDEditor').then(m => ({ default: m.JDEditor })))
 
 export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, initialTab, commentCount = 0, onCommentsChanged }: {
   node: OrgNode | null
@@ -420,12 +422,14 @@ function JDContentTab({ content, onSave, editable, placeholder, jd }: {
           </span>
         )}
       </div>
-      <JDEditor
-        content={content}
-        onSave={onSave}
-        editable={editable}
-        placeholder={placeholder}
-      />
+      <Suspense fallback={<div style={{ padding: 16, fontSize: 12, color: 'var(--muted)' }}>Loading editor…</div>}>
+        <JDEditor
+          content={content}
+          onSave={onSave}
+          editable={editable}
+          placeholder={placeholder}
+        />
+      </Suspense>
     </div>
   )
 }

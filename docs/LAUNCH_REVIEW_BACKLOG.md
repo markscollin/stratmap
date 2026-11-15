@@ -453,7 +453,7 @@ come from `window.Clerk.session.getToken()` (`src/lib/apiClient.ts:23`), so any 
 works), run report-only for a week, then enforce. Extend `src/lib/__tests__/vercelRewrites.test.ts`.
 
 ### R-24 Main bundle is one 1.5 MB chunk
-- [ ] Open
+- [x] Done 2026-11-15 (landing target met, share/embed 3.6 kB over): every page is a lazy route (`src/App.tsx`, `PageFallback`; the app shell has its own Suspense so the sidebar stays while a page arrives); TipTap's `JDEditor` loads when a job description opens; `html-to-image` and `jsPDF` load on the first export; `NodeModal`, `HistoryPanel` and `ImportDialog` load when opened. **Before:** one 1,548.5 kB chunk, 469.2 kB gzip, downloaded by every page including landing, share and embed. **After (gzip of the JavaScript each page needs at first load, measured from the build's static import graph):** landing 124.9 kB, pricing 137.6, dashboard 127.7, sign-in 119.2, legal 122.8, **share page 153.6, embed 152.8**, canvas 159.3 (the editor, PDF export and dialogs come later, on demand). The shared entry is 118.9 kB gzip and is framework only (react-dom, react-router, Clerk, Sentry core); getting share/embed under 150 would mean lazy-loading Clerk or Sentry, which was judged not worth the risk before launch. No test needed changing.
 
 **Problem (verified from the build).** `dist/assets/index-*.js` is 1,525 kB (463 kB gzipped); the landing,
 share and embed pages download the whole app, including TipTap.

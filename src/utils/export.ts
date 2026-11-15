@@ -1,5 +1,4 @@
-import { toCanvas } from 'html-to-image'
-import jsPDF from 'jspdf'
+// html-to-image and jsPDF are loaded when someone exports, not with the page (R-24).
 
 const BACKGROUND = '#060D18'
 
@@ -10,6 +9,7 @@ function filter(node: HTMLElement): boolean {
 }
 
 async function captureElement(el: HTMLElement, opts: CaptureOptions = {}): Promise<HTMLCanvasElement> {
+  const { toCanvas } = await import('html-to-image')
   return toCanvas(el, {
     backgroundColor: BACKGROUND,
     pixelRatio: 2,
@@ -69,7 +69,7 @@ export async function exportAsPNG(el: HTMLElement, filename: string, opts: PngOp
 }
 
 export async function exportAsPDF(el: HTMLElement, filename: string, opts: CaptureOptions = {}): Promise<void> {
-  const canvas = await captureElement(el, opts)
+  const [canvas, { default: jsPDF }] = await Promise.all([captureElement(el, opts), import('jspdf')])
   const w = canvas.width / 2
   const h = canvas.height / 2
   const pdf = new jsPDF({

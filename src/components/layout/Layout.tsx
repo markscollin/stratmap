@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
@@ -9,6 +9,7 @@ import { TrialBanner } from '../../features/billing/TrialBanner'
 import { ChartLimitBanner } from '../../features/billing/ChartLimitBanner'
 import { useIsPhone } from '../../hooks/useMediaQuery'
 import { useUIStore } from '../../store'
+import { PageFallback } from '../ui/PageFallback'
 
 /** Pages that are built for a desktop-width screen (roadmap 2.8): on a phone they scroll and say so. */
 const DESKTOP_FIRST = ['/roles', '/headcount', '/settings']
@@ -67,7 +68,8 @@ export function Layout({ children }: { children?: ReactNode } = {}) {
         <ChartLimitBanner />
         {isPhone && DESKTOP_FIRST.some(p => pathname.startsWith(p)) && <DesktopHint />}
         <main style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-          {children ?? <Outlet />}
+          {/* Each page is a separate download (R-24); the shell stays put while it arrives. */}
+          <Suspense fallback={<PageFallback inline />}>{children ?? <Outlet />}</Suspense>
         </main>
       </div>
     </div>

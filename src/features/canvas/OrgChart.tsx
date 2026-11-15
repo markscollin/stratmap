@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo, memo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MousePointer2, ZoomIn, Layers, Plus, Minus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Download, Share2, Check, Copy, Lock, Globe, Upload, History } from 'lucide-react'
 import { exportAsPNG, exportAsPDF } from '../../utils/export'
@@ -11,10 +11,8 @@ import { saveHistoryStep, saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeChip } from '../nodes/NodeChip'
 import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
-import { NodeModal } from '../nodes/NodeModal'
 import { JDPanel } from '../panel/JDPanel'
 import { commentDeepLink } from '../comments/deepLink'
-import { HistoryPanel } from '../history/HistoryPanel'
 import { UpgradeModal } from '../../components/ui/UpgradeModal'
 import { PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
@@ -25,11 +23,15 @@ import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStor
 import { calculateLayout } from '../../utils/layout'
 import { api } from '../../lib/apiClient'
 import { failureMessage } from '../../lib/failureMessage'
-import { ImportDialog } from '../import/ImportDialog'
 import { EmptyCanvasCard } from '../onboarding/EmptyCanvasCard'
 import { pinchTransform, midpoint, distance, type Point, type ViewTransform } from './pinch'
 import { buildChartCsv } from '../../lib/exportOrg'
 import { downloadText, fileSlug } from '../../lib/csvSafe'
+
+// Opened on demand, so they are separate downloads (R-24): a share page or embed never fetches them.
+const NodeModal = lazy(() => import('../nodes/NodeModal').then(m => ({ default: m.NodeModal })))
+const HistoryPanel = lazy(() => import('../history/HistoryPanel').then(m => ({ default: m.HistoryPanel })))
+const ImportDialog = lazy(() => import('../import/ImportDialog').then(m => ({ default: m.ImportDialog })))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1346,15 +1348,19 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       )}
 
       {isHistoryOpen && chartId && onVersionRestored && (
-        <HistoryPanel chartId={chartId} chartName={chartName} onClose={() => setIsHistoryOpen(false)} onRestored={onVersionRestored} />
+        <Suspense fallback={null}>
+          <HistoryPanel chartId={chartId} chartName={chartName} onClose={() => setIsHistoryOpen(false)} onRestored={onVersionRestored} />
+        </Suspense>
       )}
 
       {isImportOpen && (
-        <ImportDialog
-          onClose={() => setIsImportOpen(false)}
-          chart={{ id: chartId, name: chartName, nodes, departments }}
-          onImported={onImported}
-        />
+        <Suspense fallback={null}>
+          <ImportDialog
+            onClose={() => setIsImportOpen(false)}
+            chart={{ id: chartId, name: chartName, nodes, departments }}
+            onImported={onImported}
+          />
+        </Suspense>
       )}
 
       {/* Over the node limit after a downgrade (roadmap 1.6): edit and remove, but don't add */}
@@ -1434,35 +1440,41 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       </div>
 
       {/* Add node modal */}
-      <div data-export-ignore>
-        <NodeModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          mode="add"
-          departments={departments}
-          allNodes={nodes}
-          allEdges={edges}
-          onAdd={handleAddSubmit}
-          onUpdate={() => {}}
-          onDelete={() => {}}
-        />
-      </div>
+      {isAddModalOpen && (
+        <div data-export-ignore>
+          <Suspense fallback={null}>
+            <NodeModal
+              isOpen
+              onClose={() => setIsAddModalOpen(false)}
+              mode="add"
+              departments={departments}
+              allNodes={nodes}
+              allEdges={edges}
+              onAdd={handleAddSubmit}
+              onUpdate={() => {}}
+              onDelete={() => {}}
+            />
+          </Suspense>
+        </div>
+      )}
 
       {/* Edit node modal */}
       {editingNode && (
         <div data-export-ignore>
-          <NodeModal
-            isOpen={!!editingNodeId}
-            onClose={() => setEditingNodeId(null)}
-            mode="edit"
-            node={editingNode}
-            departments={departments}
-            allNodes={nodes}
-            allEdges={edges}
-            onAdd={() => {}}
-            onUpdate={handleUpdateSubmit}
-            onDelete={handleDeleteNode}
-          />
+          <Suspense fallback={null}>
+            <NodeModal
+              isOpen={!!editingNodeId}
+              onClose={() => setEditingNodeId(null)}
+              mode="edit"
+              node={editingNode}
+              departments={departments}
+              allNodes={nodes}
+              allEdges={edges}
+              onAdd={() => {}}
+              onUpdate={handleUpdateSubmit}
+              onDelete={handleDeleteNode}
+            />
+          </Suspense>
         </div>
       )}
     </div>
