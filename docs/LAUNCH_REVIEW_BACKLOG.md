@@ -444,7 +444,7 @@ every workspace with a subscription id whose status is not terminal, in small ba
 `charge.refunded` and `charge.dispute.created` at least by reporting to Sentry and emailing the owner address.
 
 ### R-23 CSP is report-only, has no report endpoint, and lists only Clerk dev hosts
-- [ ] Open
+- [x] Code part done 2026-11-15; **the rest waits for O-01/O-03** (production Clerk hosts need the real domain, then a week of reports, then enforce; steps in `docs/CSP.md`). New `POST /api/csp-report` (public, 30 a minute per address, always 204, accepts both the `report-uri` and the Reporting-API shapes, one trimmed `[csp]` log line each, at most 10 per request; URLs are cut to origin + first path segment so invite tokens and share codes never reach a log). Both copies of the policy now carry `report-uri` and `report-to`, and the blocks have a `Reporting-Endpoints` header. Tests: `csp-report.test.ts`, `vercelRewrites.test.ts` (the two copies differ only in `frame-ancestors`).
 
 **Problem (reported).** `vercel.json:46-47`, `71-72`: no `report-uri`/`report-to`, so the policy neither blocks
 nor reports. It allows only `*.clerk.accounts.dev`; production Clerk runs on `clerk.<your-domain>`. API tokens

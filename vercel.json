@@ -51,7 +51,11 @@
         },
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com; connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io https://*.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://*.clerk.accounts.dev https://challenges.cloudflare.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
+          "value": "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com; connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io https://*.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://*.clerk.accounts.dev https://challenges.cloudflare.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; report-uri /api/csp-report; report-to csp"
+        },
+        {
+          "key": "Reporting-Endpoints",
+          "value": "csp=\"/api/csp-report\""
         }
       ]
     },
@@ -76,7 +80,11 @@
         },
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com; connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io https://*.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://*.clerk.accounts.dev https://challenges.cloudflare.com; worker-src 'self' blob:; frame-ancestors *; base-uri 'self'; form-action 'self' https://checkout.stripe.com"
+          "value": "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com; connect-src 'self' https://*.clerk.accounts.dev https://*.ingest.sentry.io https://*.ingest.us.sentry.io; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://*.clerk.accounts.dev https://challenges.cloudflare.com; worker-src 'self' blob:; frame-ancestors *; base-uri 'self'; form-action 'self' https://checkout.stripe.com; report-uri /api/csp-report; report-to csp"
+        },
+        {
+          "key": "Reporting-Endpoints",
+          "value": "csp=\"/api/csp-report\""
         },
         {
           "key": "X-Robots-Tag",

@@ -59,3 +59,32 @@ describe('vercel.json framing headers', () => {
 
   it('the app shell serves /embed/:code', () => expect(spaRegex.test('/embed/abc123')).toBe(true))
 })
+
+// R-23: the policy reports violations to our own endpoint, and the two copies of it differ only in who may frame the page.
+describe('vercel.json Content-Security-Policy', () => {
+  const headers = (JSON.parse(fs.readFileSync('vercel.json', 'utf8')) as { headers: { source: string; headers: { key: string; value: string }[] }[] }).headers
+  const policies = headers.map(h => h.headers.find(x => x.key === 'Content-Security-Policy-Report-Only')?.value).filter((v): v is string => !!v)
+
+  it('there are two copies (everything, and /embed/*)', () => expect(policies).toHaveLength(2))
+
+  it.each([0, 1])('policy %i reports to /api/csp-report both ways', (i) => {
+    expect(policies[i]).toContain('report-uri /api/csp-report')
+    expect(policies[i]).toContain('report-to csp')
+  })
+
+  it('every block that has the policy also names the report endpoint', () => {
+    for (const h of headers.filter(h => h.headers.some(x => x.key === 'Content-Security-Policy-Report-Only'))) {
+      expect(h.headers.find(x => x.key === 'Reporting-Endpoints')?.value).toBe('csp="/api/csp-report"')
+    }
+  })
+
+  it('the copies are identical apart from frame-ancestors', () => {
+    const strip = (p: string) => p.replace(/frame-ancestors [^;]+/, '')
+    expect(strip(policies[0])).toBe(strip(policies[1]))
+  })
+
+  it('the report endpoint is an API route, so the app shell rewrite does not swallow it', () => {
+    expect(fs.existsSync('api/csp-report.ts')).toBe(true)
+    expect(spaRegex.test('/api/csp-report')).toBe(false)
+  })
+})
