@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, X, Zap } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
@@ -42,6 +42,9 @@ export function OnboardingPage() {
   const [ownerRole, setOwnerRole] = useState<WorkspaceRole>('Founder/CEO')
   const [size, setSize] = useState<CompanySize>('11-50')
   const [focus, setFocus] = useState<string | null>(null)
+  // One finish at a time (R-34): a double click used to send the invites and create the starter chart twice.
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
   const [invites, setInvites] = useState<InviteRow[]>(() =>
     Array.from({ length: Math.min(2, MAX_ONBOARDING_INVITES) }, () => ({ email: '', permission: 'editor' as Permission })),
   )
@@ -65,6 +68,18 @@ export function OnboardingPage() {
   }
 
   async function complete(sendInvites: boolean, quickStart = false) {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    try {
+      await finish(sendInvites, quickStart)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
+  }
+
+  async function finish(sendInvites: boolean, quickStart: boolean) {
     const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
     try {
       const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string; myPermission?: Permission; planTier?: PlanTier; trialPlan?: PlanTier | null; trialEndsAt?: string | null }>(
@@ -186,6 +201,7 @@ export function OnboardingPage() {
             onSend={() => complete(true)}
             onQuickStart={() => complete(false, true)}
             canAddMore={invites.length < MAX_ONBOARDING_INVITES}
+            busy={busy}
           />
         )}
       </div>
@@ -306,7 +322,7 @@ function Step1({
 // ── Step 2 ──────────────────────────────────────────────────────────────────
 function Step2({
   invites, updateInvite, addInviteRow, removeInviteRow,
-  onSkip, onSend, onQuickStart, canAddMore,
+  onSkip, onSend, onQuickStart, canAddMore, busy,
 }: {
   invites: InviteRow[]
   updateInvite: (idx: number, field: keyof InviteRow, value: string) => void
@@ -316,6 +332,7 @@ function Step2({
   onSend: () => void
   onQuickStart: () => void
   canAddMore: boolean
+  busy: boolean
 }) {
   return (
     <>
@@ -402,12 +419,13 @@ function Step2({
           <button
             data-testid="quick-start-btn"
             onClick={onQuickStart}
+            disabled={busy}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 14px', flexShrink: 0,
               background: 'var(--brand-bg)', border: '1px solid var(--brand)',
               borderRadius: 8, color: 'var(--brand)',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
             }}
           >
             <Zap size={13} /> Quick start
@@ -419,12 +437,13 @@ function Step2({
         <button
           data-testid="skip-btn"
           onClick={onSkip}
+          disabled={busy}
           style={{
             flex: 1, padding: '10px 16px',
             background: 'transparent',
             border: '1px solid var(--border)',
             borderRadius: 8, color: 'var(--muted)',
-            fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            fontSize: 14, fontWeight: 500, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
           }}
         >
           Skip for now
@@ -432,14 +451,15 @@ function Step2({
         <button
           data-testid="send-invites-btn"
           onClick={onSend}
+          disabled={busy}
           style={{
             flex: 2, padding: '10px 16px',
             background: 'var(--grad-brand)',
             border: 'none', borderRadius: 8,
-            color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            color: '#fff', fontSize: 14, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
           }}
         >
-          Send invites &amp; get started
+          {busy ? 'Setting up…' : 'Send invites & get started'}
         </button>
       </div>
     </>

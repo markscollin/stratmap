@@ -40,7 +40,7 @@ export function SharePage() {
 
   useEffect(() => {
     if (data) document.title = `${data.name} — StratMap`
-  }, [data?.name])
+  }, [data])
 
   if (error) {
     return (

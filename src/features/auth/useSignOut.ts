@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useClerk } from '@clerk/clerk-react'
 import { IS_DEV_BYPASS } from './useAuth'
 import { useUserStore } from '../../store/userStore'
+import { clearAccountBrowserState } from '../../lib/signOutCleanup'
 
 /**
  * Signs the person out: clears the app's own state, then ends the Clerk session (or, in dev-bypass, goes to /sign-in).
@@ -19,6 +20,7 @@ export function useSignOut(): (redirectUrl?: string) => Promise<void> {
   }
   return async (redirectUrl = '/sign-in') => {
     storeSignOut()
+    clearAccountBrowserState()
     if (clerkSignOut) await clerkSignOut(redirectUrl)
     else navigate(redirectUrl)
   }

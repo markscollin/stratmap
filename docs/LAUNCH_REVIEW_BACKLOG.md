@@ -585,18 +585,14 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 - **`sendBillingReceipt`** was unwired and unescaped: deleted.
 
 ### R-34 Small client gaps
-- [ ] Open (all reported)
-- Theme choice is not persisted (`src/store/uiStore.ts:18`, `27-35`).
-- Sign-out leaves `stratmap_plan`, `stratmap_usage` and `stratmap_workspace_id` in localStorage
-  (`src/store/userStore.ts:50-53`, `src/store/billingStore.ts:56-73`): clear them in `useSignOut`.
-- Onboarding buttons have no busy guard (`src/pages/OnboardingPage.tsx:66`): a double click creates twice.
-- A production build without `VITE_CLERK_PUBLISHABLE_KEY` runs as a mock owner in the browser
-  (`src/features/auth/useAuth.ts:5`); the server refuses it, but the build should fail instead. Add a check in
-  `vite.config.ts` for production builds on Vercel.
-- 18 lint warnings, mostly suppressed or missing effect dependencies: review each (`OrgChart.tsx:830`, `880`,
-  `1141` are suppressed with `eslint-disable`).
-- `CLAUDE.md` test counts and the "Common Commands" table are stale (it says 935, 700 and 143 in different
-  places; the real figure is 614 + 638).
+- [x] Done 2026-11-15. Tests: `uiStoreTheme.test.ts`, `signOutCleanup.test.ts`, `buildChecks.test.ts`, `TopNav.test.tsx`, `OnboardingPage.test.tsx` (2 new), `tests/e2e/client-gaps.spec.ts`.
+- **Theme** is saved (`stratmap_theme`) and applied when the store loads, so a saved light theme does not flash dark.
+- **Sign-out** (`clearAccountBrowserState`, `src/lib/signOutCleanup.ts`) resets the in-memory plan, trial and subscription to Free and removes `stratmap_plan`, `stratmap_usage`, `stratmap_workspace`, `stratmap_workspace_id` and the remembered invite token. Theme, cookie choice and hint dismissals stay (they belong to the browser).
+- **Onboarding** finishes once: a ref guard plus disabled buttons ("Setting up…"); after a failure the buttons work again.
+- **Production build** fails on Vercel (`VERCEL_ENV=production`) without a Clerk publishable key, with a placeholder, or with a value that is not `pk_test_`/`pk_live_` (`src/lib/buildChecks.ts`, run by a Vite plugin). Test keys are still allowed until O-01. Previews, CI and local builds are unchecked.
+- **Lint warnings:** 15 → 14. Reviewed each: the `set-state-in-effect`, `static-components` and "refs during render" ones are React Compiler style rules on patterns that are correct (reset a form when a prop changes, fetch once on mount) and are left; `SettingsView`'s missing `wName` dependency is deliberate (adding it would refill the field the moment someone clears it); `SharePage`'s title effect now depends on `data` (fixed).
+- **Found on the way (R-32 follow-up, fixed):** the top bar's theme and search icon buttons had no accessible name (the R-32 scanner reads `<button>` literals and missed a button built inside a helper component), the avatar that signs you out was a clickable `div` with no keyboard access, and the bell did nothing at all. Buttons are named, the avatar is a real button, the bell is removed (there is no inbox to open). `TopNav.test.tsx` renders the real bar and checks every button's computed name.
+- `CLAUDE.md` counts: refreshed in the closing step of this session.
 
 ### R-35 Split `OrgChart.tsx` and centralise persistence
 - [ ] Open

@@ -15,8 +15,24 @@ interface UIStore {
   setSpotlightOpen: (open: boolean) => void
 }
 
+const THEME_KEY = 'stratmap_theme'
+
+/** The theme this browser last chose; dark is the default. Storage can be unavailable (private window), so every access is guarded. */
+function loadIsDark(): boolean {
+  try { return localStorage.getItem(THEME_KEY) !== 'light' } catch { return true }
+}
+
+function applyTheme(isDark: boolean) {
+  if (typeof document === 'undefined') return
+  if (isDark) document.documentElement.removeAttribute('data-theme')   // dark = :root default
+  else document.documentElement.setAttribute('data-theme', 'light')
+}
+
+const initialIsDark = loadIsDark()
+applyTheme(initialIsDark) // before the first paint of anything that reads the store, so a saved light theme does not flash dark
+
 export const useUIStore = create<UIStore>((set, get) => ({
-  isDark: true,
+  isDark: initialIsDark,
   sidebarCollapsed: false,
   activePanelNodeId: null,
   spotlightOpen: false,
@@ -26,11 +42,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   toggleTheme: () => {
     const next = !get().isDark
-    if (next) {
-      document.documentElement.removeAttribute('data-theme')   // dark = :root default
-    } else {
-      document.documentElement.setAttribute('data-theme', 'light')
-    }
+    applyTheme(next)
+    try { localStorage.setItem(THEME_KEY, next ? 'dark' : 'light') } catch { /* the choice just will not be remembered */ }
     set({ isDark: next })
   },
 

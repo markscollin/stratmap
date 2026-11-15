@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import fs from 'node:fs'
 import path from 'node:path'
+import { productionBuildProblem } from './src/lib/buildChecks'
 import { PUBLIC_PAGES, APP_PAGE, renderSeoBlock, injectSeo, sitemapXml, robotsTxt, siteUrl } from './src/lib/seo'
 
 // After the build: one HTML file per public page with its own title, description and social tags, plus
@@ -32,8 +33,20 @@ function seoFiles(): Plugin {
   }
 }
 
+// Fails a Vercel production build that has no usable sign-in key (R-34, src/lib/buildChecks.ts).
+function productionChecks(): Plugin {
+  return {
+    name: 'stratmap-production-checks',
+    apply: 'build',
+    buildStart() {
+      const problem = productionBuildProblem(process.env)
+      if (problem) this.error(problem)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), seoFiles()],
+  plugins: [react(), tailwindcss(), seoFiles(), productionChecks()],
   test: {
     globals: true,
     environment: 'jsdom',

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { ChevronRight, Search, Sun, Moon, Bell, Menu } from 'lucide-react'
+import { ChevronRight, Search, Sun, Moon, Menu } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useUIStore } from '../../store'
 import { useAuth } from '../../features/auth/useAuth'
@@ -21,8 +21,10 @@ function getLabel(pathname: string): string {
   return PAGE_LABELS[pathname] ?? 'Dashboard'
 }
 
-function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
+function IconBtn({ id, label, Icon, onClick, hovBtn, setHovBtn }: {
   id: string
+  /** What a screen reader says: an icon alone has no name (R-32). */
+  label: string
   Icon: LucideIcon
   onClick: () => void
   hovBtn: string | null
@@ -31,6 +33,7 @@ function IconBtn({ id, Icon, onClick, hovBtn, setHovBtn }: {
   const hov = hovBtn === id
   return (
     <button
+      aria-label={label}
       onClick={onClick}
       onMouseEnter={() => setHovBtn(id)}
       onMouseLeave={() => setHovBtn(null)}
@@ -92,7 +95,7 @@ export function TopNav() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {/* Search hint — opens Spotlight */}
         {isPhone ? (
-          <IconBtn id="search" Icon={Search} onClick={() => setSpotlightOpen(true)} hovBtn={hovBtn} setHovBtn={setHovBtn} />
+          <IconBtn id="search" label="Search" Icon={Search} onClick={() => setSpotlightOpen(true)} hovBtn={hovBtn} setHovBtn={setHovBtn} />
         ) : <button onClick={() => setSpotlightOpen(true)} style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--input-bg)', border: '1px solid var(--border)',
@@ -111,42 +114,31 @@ export function TopNav() {
           }}>⌘K</kbd>
         </button>}
 
-        <IconBtn id="theme" Icon={isDark ? Sun : Moon} onClick={toggleTheme} hovBtn={hovBtn} setHovBtn={setHovBtn} />
-        {!isPhone && <IconBtn id="bell"  Icon={Bell}                onClick={() => {}}   hovBtn={hovBtn} setHovBtn={setHovBtn} />}
+        <IconBtn id="theme" label={isDark ? 'Switch to light theme' : 'Switch to dark theme'} Icon={isDark ? Sun : Moon} onClick={toggleTheme} hovBtn={hovBtn} setHovBtn={setHovBtn} />
+        {/* No notification bell: there is no in-app inbox yet, and a button that does nothing is worse than none. */}
 
-        {/* User avatar */}
-        {user?.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt={user.name}
-            onClick={handleSignOut}
-            onMouseEnter={() => setAvatarHov(true)}
-            onMouseLeave={() => setAvatarHov(false)}
-            title={`${user.name} — click to sign out`}
-            style={{
-              width: 32, height: 32, borderRadius: '50%',
-              cursor: 'pointer', flexShrink: 0, objectFit: 'cover',
-              outline: avatarHov ? '2px solid var(--brand)' : 'none',
-              transition: 'outline .15s',
-            }}
-          />
-        ) : (
-          <div
-            onClick={handleSignOut}
-            onMouseEnter={() => setAvatarHov(true)}
-            onMouseLeave={() => setAvatarHov(false)}
-            title={user ? `${user.name} — click to sign out` : ''}
-            style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'var(--grad-brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, color: '#fff',
-              cursor: 'pointer', flexShrink: 0,
-              outline: avatarHov ? '2px solid var(--brand-glow)' : 'none',
-              transition: 'outline .15s',
-            }}
-          >{user?.initials ?? '?'}</div>
-        )}
+        {/* User avatar: a real button, so it can be reached and used from the keyboard */}
+        <button
+          type="button"
+          onClick={handleSignOut}
+          onMouseEnter={() => setAvatarHov(true)}
+          onMouseLeave={() => setAvatarHov(false)}
+          aria-label={user ? `Sign out ${user.name}` : 'Sign out'}
+          title={user ? `${user.name} — click to sign out` : 'Sign out'}
+          style={{
+            width: 32, height: 32, borderRadius: '50%', padding: 0, border: 'none',
+            background: user?.avatarUrl ? 'transparent' : 'var(--grad-brand)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, color: '#fff',
+            cursor: 'pointer', flexShrink: 0, overflow: 'hidden',
+            outline: avatarHov ? '2px solid var(--brand)' : 'none',
+            transition: 'outline .15s',
+          }}
+        >
+          {user?.avatarUrl
+            ? <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : (user?.initials ?? '?')}
+        </button>
       </div>
     </div>
   )
