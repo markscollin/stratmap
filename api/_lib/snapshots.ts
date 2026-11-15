@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from './db'
 import { chunk } from './chunk'
 import { runAtomically } from './atomic'
+import { nodeOrder, edgeOrder } from './order'
 import { charts, chartSnapshots, departments, edges, nodes, workspaceDepartments, type SnapshotData } from '../../src/lib/db/schema'
 
 // Chart version history (roadmap 5): capturing a chart's structure, and putting a saved version back.
@@ -13,8 +14,8 @@ export const MAX_AUTO_SNAPSHOTS = 20
 
 export async function captureChart(chartId: string): Promise<SnapshotData> {
   const [nodeRows, edgeRows, deptRows] = await Promise.all([
-    db.select().from(nodes).where(eq(nodes.chartId, chartId)),
-    db.select().from(edges).where(eq(edges.chartId, chartId)),
+    db.select().from(nodes).where(eq(nodes.chartId, chartId)).orderBy(...nodeOrder),
+    db.select().from(edges).where(eq(edges.chartId, chartId)).orderBy(...edgeOrder),
     db.select().from(departments).where(eq(departments.chartId, chartId)),
   ])
   return {

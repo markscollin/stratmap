@@ -5,6 +5,7 @@ import { requireRole } from '../_lib/access'
 import { enforceRateLimit } from '../_lib/rateLimit'
 import { logAudit } from '../_lib/audit'
 import { db } from '../_lib/db'
+import { nodeOrder, edgeOrder } from '../_lib/order'
 import {
   auditLog, chartSnapshots, charts, departments, edges, headcountPlans, jobDescriptions, nodes, pendingInvites,
   roleComments, roleTemplates, workspaceDepartments, workspaceMembers, workspaces,
@@ -50,8 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const chartIds = chartRows.map(c => c.id)
     const [nodeRows, edgeRows, deptRows, jdRows] = chartIds.length === 0 ? [[], [], [], []] : await Promise.all([
-      db.select().from(nodes).where(inArray(nodes.chartId, chartIds)),
-      db.select().from(edges).where(inArray(edges.chartId, chartIds)),
+      db.select().from(nodes).where(inArray(nodes.chartId, chartIds)).orderBy(...nodeOrder),
+      db.select().from(edges).where(inArray(edges.chartId, chartIds)).orderBy(...edgeOrder),
       db.select().from(departments).where(inArray(departments.chartId, chartIds)),
       db.select().from(jobDescriptions).where(inArray(jobDescriptions.chartId, chartIds)),
     ])

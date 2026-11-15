@@ -6,6 +6,7 @@ import { claimRevision } from '../_lib/revision'
 import { parseBody } from '../_lib/validate'
 import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
+import { nodeOrder, edgeOrder } from '../_lib/order'
 import { logAudit } from '../_lib/audit'
 import { APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 import { statusChangeNeedsAdmin } from '../../src/lib/chartStatus'
@@ -29,8 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       const [nodeList, edgeList, deptList] = await Promise.all([
-        db.select().from(nodes).where(eq(nodes.chartId, chartId)),
-        db.select().from(edges).where(eq(edges.chartId, chartId)),
+        db.select().from(nodes).where(eq(nodes.chartId, chartId)).orderBy(...nodeOrder),
+        db.select().from(edges).where(eq(edges.chartId, chartId)).orderBy(...edgeOrder),
         db.select().from(departments).where(eq(departments.chartId, chartId)),
       ])
 

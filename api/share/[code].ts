@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { db } from '../_lib/db'
+import { nodeOrder, edgeOrder } from '../_lib/order'
 import { getEffectivePlan } from '../_lib/access'
 import { showsBranding } from '../../src/lib/plans'
 import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
@@ -44,8 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!owner || owner.deletedAt) return res.status(404).json({ error: 'Link not found or revoked' })
 
     const [nodeList, edgeList, deptList] = await Promise.all([
-      db.select().from(nodes).where(eq(nodes.chartId, chart.id)),
-      db.select().from(edges).where(eq(edges.chartId, chart.id)),
+      db.select().from(nodes).where(eq(nodes.chartId, chart.id)).orderBy(...nodeOrder),
+      db.select().from(edges).where(eq(edges.chartId, chart.id)).orderBy(...edgeOrder),
       db.select().from(departments).where(eq(departments.chartId, chart.id)),
     ])
 
