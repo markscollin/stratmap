@@ -6,6 +6,7 @@ import { parseBody } from '../../_lib/validate'
 import { MemberUpdate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { workspaceMembers } from '../../../src/lib/db/schema'
+import { revokeInvitesSentBy } from '../../_lib/invites'
 import { logAudit } from '../../_lib/audit'
 
 // Members are managed by admins+. A caller may only act on members ranked
@@ -75,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         eq(workspaceMembers.workspaceId, auth.workspaceId),
         eq(workspaceMembers.userId, targetUserId),
       ))
+    await revokeInvitesSentBy(auth.workspaceId, targetUserId, auth.userId)
     await logAudit({
       workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'member.removed',
       targetType: 'member', targetId: targetUserId, details: { email: member.email, role: member.permission },

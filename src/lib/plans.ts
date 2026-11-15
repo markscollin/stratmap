@@ -106,6 +106,11 @@ export const PAID_FEATURES: Record<PaidFeature, FeatureInfo> = {
 
 const TIER_RANK: Record<PlanTier, number> = { free: 0, starter: 1, growth: 2, enterprise: 3 }
 
+/** The better of two tiers (a trial never lowers what a workspace already pays for). */
+export function higherTier(a: PlanTier, b: PlanTier): PlanTier {
+  return TIER_RANK[b] > TIER_RANK[a] ? b : a
+}
+
 /** True when `tier` includes `feature`. */
 export function tierHasFeature(tier: PlanTier, feature: PaidFeature): boolean {
   return TIER_RANK[tier] >= TIER_RANK[PAID_FEATURES[feature].minTier]

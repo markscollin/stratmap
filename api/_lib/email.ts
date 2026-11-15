@@ -57,8 +57,10 @@ export async function sendWorkspaceInvite(opts: {
   const ws = escapeHtml(opts.workspaceName)
   const inviter = escapeHtml(opts.inviterName)
   const url = escapeHtml(opts.inviteUrl)
-  // Subject is plain text, but strip line breaks so names can't inject headers.
-  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on StratMap`.replace(/[\r\n]+/g, ' ')
+  // The subject carries none of the inviter's or workspace's text: anyone can pick those, and a subject with a stranger's
+  // words in it, sent from our domain, is a phishing line (R-33). They appear escaped in the body, where the recipient
+  // has already chosen to look.
+  const subject = `You've been invited to a workspace on StratMap`
   const html = shell(
     `You've been invited to ${ws}`,
     `<p style="font-size:14px;line-height:1.6">${inviter} has invited you to collaborate on
@@ -69,23 +71,6 @@ export async function sendWorkspaceInvite(opts: {
      <p style="font-size:12px;color:#94a3b8">This link expires in 7 days and can be used once.
        Sign in with this email address (${escapeHtml(opts.to)}) to accept.</p>
      <p style="font-size:12px;color:#94a3b8">Or paste this link into your browser: ${url}</p>`,
-  )
-  return sendEmail({ to: opts.to, subject, html })
-}
-
-// Prepared for the billing-receipt path (wire from the Stripe webhook once live).
-export async function sendBillingReceipt(opts: {
-  to: string
-  planName: string
-  manageUrl: string
-}): Promise<SendResult> {
-  const subject = `Your StratMap ${opts.planName} subscription is active`
-  const html = shell(
-    `Welcome to ${opts.planName}`,
-    `<p style="font-size:14px;line-height:1.6">Your subscription is now active. Thank you for supporting StratMap.</p>
-     <p style="margin:24px 0">
-       <a href="${opts.manageUrl}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">Manage billing</a>
-     </p>`,
   )
   return sendEmail({ to: opts.to, subject, html })
 }

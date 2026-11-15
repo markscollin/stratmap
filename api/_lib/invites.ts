@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from './db'
 import { reportError } from './sentry'
+import { logAudit } from './audit'
 import { sendWorkspaceInvite } from './email'
 import { inviteUrl, isExpired } from './inviteTokens'
 import { workspaces, workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
@@ -43,4 +44,21 @@ export async function sendInviteEmail(opts: {
     console.error('[invites] email send failed for', opts.email, err)
     reportError(err, { route: 'invites', email: opts.email })
   }
+}
+
+/**
+ * Withdraws the invites a person sent when they stop being a member (removed, or they left), so a link they made
+ * cannot be used for a week after they lost the right to invite (R-33). Each one is logged as revoked.
+ */
+export async function revokeInvitesSentBy(workspaceId: string, userId: string, actorUserId: string): Promise<number> {
+  const gone = await db.delete(pendingInvites)
+    .where(and(eq(pendingInvites.workspaceId, workspaceId), eq(pendingInvites.invitedBy, userId)))
+    .returning()
+  for (const invite of gone) {
+    await logAudit({
+      workspaceId, actorUserId, action: 'invite.revoked', targetType: 'invite', targetId: invite.id,
+      details: { email: invite.email, role: invite.permission, reason: 'inviter-left' },
+    })
+  }
+  return gone.length
 }

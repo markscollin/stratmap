@@ -5,7 +5,7 @@ import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
 import { claimRevision } from '../../_lib/revision'
 import { parseBody } from '../../_lib/validate'
-import { ChartImport } from '../../_lib/schemas'
+import { ChartImport, MAX_SAMPLE_NODES } from '../../_lib/schemas'
 import { chunk } from '../../_lib/chunk'
 import { db } from '../../_lib/db'
 import { charts, nodes, edges, departments } from '../../../src/lib/db/schema'
@@ -51,6 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [{ value: nodeCount }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chartId))
     if (!fitsLimit(plan.limits.maxNodesPerChart, nodeCount, body.nodes.length)) {
       return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+    }
+
+    if (chart.isSample && nodeCount + body.nodes.length > MAX_SAMPLE_NODES) {
+      return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
     }
 
     if ((await claimRevision(req, res, chartId)) === null) return

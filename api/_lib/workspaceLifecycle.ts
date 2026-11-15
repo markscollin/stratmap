@@ -144,6 +144,7 @@ export async function deleteAccount(userId: string): Promise<AccountDeletion> {
     await logAudit({ workspaceId: m.workspaceId, actorUserId: userId, action: 'member.left', targetType: 'member', targetId: userId, details: { role: m.permission } })
   }
   await db.delete(workspaceMembers).where(eq(workspaceMembers.userId, userId))
+  await db.delete(pendingInvites).where(eq(pendingInvites.invitedBy, userId)) // links they sent die with their account (R-33)
 
   if (emails.length > 0) {
     await db.delete(pendingInvites).where(inArray(sql`lower(${pendingInvites.email})`, emails))

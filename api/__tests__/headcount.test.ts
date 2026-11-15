@@ -212,11 +212,8 @@ describe('PUT /api/headcount/[id]', () => {
   it('allows admin to approve a plan', async () => {
     await seedGrowthWorkspace()
     await seedHeadcountPlan()
-    // Seed an admin member
-    await testDb.insert(schema.workspaceMembers).values({
-      id: 'wm-admin', workspaceId: TEST_WS_ID, userId: TEST_USER_ID,
-      email: 'admin@example.com', permission: 'admin',
-    })
+    // The seeded member is the owner; make them an admin
+    await testDb.update(schema.workspaceMembers).set({ permission: 'admin' }).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))
     const res = createRes()
     await itemHandler(
       createReq({ method: 'PUT', query: { id: TEST_PLAN_ID }, body: { status: 'approved' } }) as never,
@@ -230,10 +227,7 @@ describe('PUT /api/headcount/[id]', () => {
   it('allows owner to approve a plan', async () => {
     await seedGrowthWorkspace()
     await seedHeadcountPlan()
-    await testDb.insert(schema.workspaceMembers).values({
-      id: 'wm-owner', workspaceId: TEST_WS_ID, userId: TEST_USER_ID,
-      email: 'owner@example.com', permission: 'owner',
-    })
+    // (the seeded member is already the owner)
     const res = createRes()
     await itemHandler(
       createReq({ method: 'PUT', query: { id: TEST_PLAN_ID }, body: { status: 'approved' } }) as never,

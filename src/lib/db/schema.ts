@@ -72,6 +72,8 @@ export const workspaceMembers = pgTable('workspace_members', {
 }, (t) => [
   index('workspace_members_user_id_idx').on(t.userId),
   index('workspace_members_workspace_id_idx').on(t.workspaceId),
+  // One membership per person per workspace (R-33); two accepts racing can no longer both insert.
+  uniqueIndex('workspace_members_workspace_user_uq').on(t.workspaceId, t.userId),
 ])
 
 export const pendingInvites = pgTable('pending_invites', {

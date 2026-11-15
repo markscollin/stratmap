@@ -6,6 +6,7 @@ import { reportError } from './sentry'
 import { getAppUrl } from './url'
 import { workspaces } from '../../src/lib/db/schema'
 import type { PlanTier } from '../../src/types/user'
+import { higherTier } from '../../src/lib/plans'
 
 // Billing life-cycle (roadmap 1.3). Stripe is the source of truth: every webhook
 // re-reads the subscription from Stripe and mirrors it onto the workspace, so
@@ -227,9 +228,9 @@ export interface PlanFields {
  * counts as Free even if Stripe's deletion webhook was lost.
  */
 export function resolvePlanTier(ws: PlanFields, now = new Date()): PlanTier {
-  if (ws.trialPlan && ws.trialEndsAt && ws.trialEndsAt > now) return ws.trialPlan
-  if (ws.cancelAtPeriodEnd && ws.planExpiresAt && ws.planExpiresAt.getTime() + LAPSED_CANCEL_GRACE_MS < now.getTime()) {
-    return 'free'
-  }
-  return ws.planTier
+  const lapsed = !!(ws.cancelAtPeriodEnd && ws.planExpiresAt && ws.planExpiresAt.getTime() + LAPSED_CANCEL_GRACE_MS < now.getTime())
+  const paid: PlanTier = lapsed ? 'free' : ws.planTier
+  // An active trial can raise the plan, never lower it: a Growth subscriber granted a Starter trial stays on Growth (R-33).
+  if (ws.trialPlan && ws.trialEndsAt && ws.trialEndsAt > now) return higherTier(paid, ws.trialPlan)
+  return paid
 }

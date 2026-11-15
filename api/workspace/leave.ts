@@ -4,6 +4,7 @@ import { requireAuth } from '../_lib/auth'
 import { getPermission } from '../_lib/access'
 import { logAudit } from '../_lib/audit'
 import { db } from '../_lib/db'
+import { revokeInvitesSentBy } from '../_lib/invites'
 import { workspaceMembers } from '../../src/lib/db/schema'
 
 // POST /api/workspace/leave — a member leaves the workspace they are acting in, keeping their account and their other
@@ -23,6 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
     await db.delete(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, auth.workspaceId), eq(workspaceMembers.userId, auth.userId)))
+    await revokeInvitesSentBy(auth.workspaceId, auth.userId, auth.userId)
     // No personal data in the entry: the person is shown by id, and as "A former member" once the row is gone.
     await logAudit({
       workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'member.left',

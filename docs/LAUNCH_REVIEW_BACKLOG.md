@@ -574,21 +574,15 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 **Done when.** Delete → no `job_descriptions` row for that role; undo brings the JD back; a test proves a purge leaves none.
 
 ### R-33 Small billing and limit gaps
-- [ ] Open (all reported)
-- An active trial wins even when it is **lower** than the paid tier (`api/_lib/billing.ts:176`): take the higher.
-- The role limit is count-then-insert, so parallel POSTs can exceed it (`api/charts/[id]/nodes.ts:36-42`).
-- The sample chart is capped at 20 roles only at creation and can then grow to the plan limit
-  (`api/charts/index.ts:53-63`): enforce `MAX_SAMPLE_NODES` on node create and import for sample charts.
-- `pdf-export` and `auto-layout` are client-only gates. Accepted for now (no server route exists); note it.
-- Seat cap on accept, chart count, one-sample and one-owned-workspace are check-then-insert; there is no unique
-  index on `workspace_members(workspace_id, user_id)`. Add the unique index (check for duplicates first).
-- Pending invites created by an admin who is later removed stay valid for 7 days: revoke on removal, or accept
-  and document.
-- Invite emails carry the workspace name to arbitrary addresses (`api/_lib/email.ts:62`,
-  `api/workspace/invites.ts:45`): a phishing-text vector from the sending domain. Consider a lower hourly cap
-  for Free workspaces and a neutral subject line.
-- `sendBillingReceipt` interpolates unescaped values (`api/_lib/email.ts:85-93`); unwired today. Escape it or
-  delete it.
+- [x] Done 2026-11-15 (one item accepted, one narrowed). Tests: `billing.test.ts`, `limits-race.test.ts`, `member-unique.test.ts`, `invite-hardening.test.ts`.
+- **Trial vs paid:** `resolvePlanTier` now returns the *higher* of an active trial and the paid tier (`higherTier` in `plans.ts`); a lapsed cancel still counts as Free, so a trial can lift it.
+- **Role limit race:** the add-role route counts again after the insert and takes its own row back out if the chart is over the limit (so parallel requests at the edge may all be refused rather than one accepted; Retry then works). **Narrowed:** the import route is still check-then-insert (it adds many rows in chunks, so a post-check could not roll back cleanly); an import racing another add can overshoot by one import.
+- **Sample chart:** `MAX_SAMPLE_NODES` (20) is enforced on add-role (with the same post-check) and on import, `400 sample-too-large`.
+- **`pdf-export` and `auto-layout` are client-only gates: accepted**, there is no server route to guard (they run in the browser on data the person can already read).
+- **Unique index** `workspace_members_workspace_user_uq` (migration 0015). The migration first removes existing duplicates, keeping the highest role, then the earliest join, then the lowest id. The invite-accept insert uses `onConflictDoNothing`. Seat cap, chart count, one-sample and one-owned-workspace remain check-then-insert (accepted: the worst case is one extra seat or chart, never a data leak).
+- **Invites by a departed member** are revoked and logged (`invite.revoked`, `reason: 'inviter-left'`) when the member is removed, leaves, or deletes their account (`revokeInvitesSentBy`).
+- **Invite email:** the subject is fixed text ("You've been invited to a workspace on StratMap"), so neither the inviter nor the workspace can put their words in it; they stay in the (escaped) body. Free workspaces get 3 invite requests an hour, paid ones 10.
+- **`sendBillingReceipt`** was unwired and unescaped: deleted.
 
 ### R-34 Small client gaps
 - [ ] Open (all reported)

@@ -4,7 +4,7 @@ import { requireAuth } from '../../_lib/auth'
 import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
 import { parseBody } from '../../_lib/validate'
-import { NodeCreate, NodePositions } from '../../_lib/schemas'
+import { NodeCreate, NodePositions, MAX_SAMPLE_NODES } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { charts, nodes } from '../../../src/lib/db/schema'
 import { claimRevision } from '../../_lib/revision'
@@ -51,6 +51,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
       }
 
+      // A sample chart stays small for good, not only when it is created (R-33).
+      if (chart.isSample && nodeCount >= MAX_SAMPLE_NODES) {
+        return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+      }
+
       // The client generates the id so it can draw edges optimistically; it is
       // validated (charset/length) and always scoped to this chart.
       if ((await claimRevision(req, res, chartId)) === null) return
@@ -58,6 +63,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert(nodes)
         .values({ ...body, id: body.id ?? crypto.randomUUID(), chartId })
         .returning()
+
+      // The count above and the insert are separate statements, so parallel requests can all pass the check.
+      // Count again now that the row is in: if the chart is over the limit, take this one back out (R-33). Requests
+      // that raced at the edge may all be refused rather than one accepted; the client's Retry then succeeds.
+      const [{ value: after }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chartId))
+      const sampleFull = chart.isSample && after > MAX_SAMPLE_NODES
+      if (sampleFull || !fitsLimit(plan.limits.maxNodesPerChart, after - 1)) {
+        await db.delete(nodes).where(and(eq(nodes.id, node.id), eq(nodes.chartId, chartId)))
+        if (sampleFull) return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+        return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+      }
 
       // Funnel: a chart reaches 10 roles through people adding them (not template seeding).
       if (!chart.isSample && nodeCount < 10 && nodeCount + 1 >= 10) {

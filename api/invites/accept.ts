@@ -107,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: identity.name,
         avatarUrl: identity.avatarUrl,
         permission: claimed.permission,
-      })
+      }).onConflictDoNothing() // already a member through a racing request: the end result is the same (R-33)
     } catch (err) {
       // Put the invite back so the user can retry.
       await db.insert(pendingInvites).values(claimed).catch(() => {})

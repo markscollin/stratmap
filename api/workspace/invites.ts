@@ -17,6 +17,10 @@ import { fitsLimit } from '../../src/lib/plans'
 // GET  /api/workspace/invites  — pending invites (admin+)
 // POST /api/workspace/invites  — create invites and email single-use links (admin+)
 
+/** Invite requests a workspace may make per hour (each can name several people). */
+export const INVITE_REQUESTS_PER_HOUR = 10
+export const INVITE_REQUESTS_PER_HOUR_FREE = 3
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -42,8 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'You can only invite people with a role below your own' })
     }
 
-    // Invites send email — throttle per workspace to prevent spam relaying.
-    if (!(await enforceRateLimit(res, `invites:${auth.workspaceId}`, 10, 60 * 60))) return
+    // Invites send email from our domain to any address — throttle per workspace to prevent spam relaying. A Free
+    // workspace (which anyone can create) gets a lower hourly allowance than a paying one (R-33).
+    const plan = await getEffectivePlan(auth.workspaceId)
+    if (!plan) return res.status(404).json({ error: 'Workspace not found' })
+    if (!(await enforceRateLimit(res, `invites:${auth.workspaceId}`, plan.tier === 'free' ? INVITE_REQUESTS_PER_HOUR_FREE : INVITE_REQUESTS_PER_HOUR, 60 * 60))) return
 
     // Skip addresses that are already members or already invited.
     const [existingMembers, existingInvites] = await Promise.all([
@@ -61,8 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     // Seat limit: members + live (unexpired) pending invites + new invites.
-    const plan = await getEffectivePlan(auth.workspaceId)
-    if (!plan) return res.status(404).json({ error: 'Workspace not found' })
     const seats = await getSeatUsage(auth.workspaceId)
     if (!fitsLimit(plan.limits.seats, seats.members + seats.invites, fresh.length)) {
       return sendPlanLimit(res, 'seats', plan, plan.limits.seats)

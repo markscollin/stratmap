@@ -35,6 +35,18 @@ describe('resolvePlanTier', () => {
     expect(resolvePlanTier({ ...base, planTier: 'free', trialPlan: 'starter', trialEndsAt: new Date(NOW.getTime() - 1000) }, NOW)).toBe('free')
   })
 
+  it('a trial never lowers the plan: a Growth subscriber with a Starter trial stays on Growth (R-33)', () => {
+    const trial = { trialPlan: 'starter' as const, trialEndsAt: new Date(NOW.getTime() + 1000) }
+    expect(resolvePlanTier({ ...base, planTier: 'growth', ...trial }, NOW)).toBe('growth')
+    expect(resolvePlanTier({ ...base, planTier: 'enterprise', ...trial }, NOW)).toBe('enterprise')
+    expect(resolvePlanTier({ ...base, planTier: 'starter', trialPlan: 'growth', trialEndsAt: trial.trialEndsAt }, NOW)).toBe('growth')
+  })
+
+  it('a trial still lifts a lapsed cancellation, which counts as Free', () => {
+    const lapsed = { ...base, planTier: 'growth' as const, cancelAtPeriodEnd: true, planExpiresAt: new Date(NOW.getTime() - LAPSED_CANCEL_GRACE_MS - 1000) }
+    expect(resolvePlanTier({ ...lapsed, trialPlan: 'starter', trialEndsAt: new Date(NOW.getTime() + 1000) }, NOW)).toBe('starter')
+  })
+
   it('keeps a scheduled cancellation on the paid tier until shortly after it ends', () => {
     const justEnded = { ...base, cancelAtPeriodEnd: true, planExpiresAt: new Date(NOW.getTime() - 1000) }
     expect(resolvePlanTier(justEnded, NOW)).toBe('growth')

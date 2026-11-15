@@ -104,6 +104,7 @@ describe('creating invites', () => {
     await invite('a@co.com')
     await invite('b@co.com')
     expect((await call(invitesHandler, { method: 'POST', body: { invites: [{ email: 'c@co.com' }] } }))._status).toBe(402)
+    await testDb.delete(schema.rateLimits) // this test is about seats; Free's hourly invite allowance (R-33) is tested on its own
     await testDb.update(schema.pendingInvites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.pendingInvites.email, 'a@co.com'))
     expect((await call(invitesHandler, { method: 'POST', body: { invites: [{ email: 'c@co.com' }] } }))._status).toBe(201)
   })
