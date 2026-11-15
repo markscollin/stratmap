@@ -33,7 +33,7 @@ describe('EmbedPage', () => {
     expect(screen.queryByTestId('embed-branding')).toBeNull()
   })
 
-  it.each([[404, 'no longer shared'], [410, 'expired'], [429, 'Too many']])('%i shows a plain message and no chart', async (status, text) => {
+  it.each([[404, 'no longer shared'], [429, 'Too many']])('%i shows a plain message and no chart', async (status, text) => {
     vi.stubGlobal('fetch', reply(status))
     show('abc123')
     expect(await screen.findByTestId('embed-message')).toHaveTextContent(text)

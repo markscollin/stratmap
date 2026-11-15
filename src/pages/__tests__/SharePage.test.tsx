@@ -88,3 +88,36 @@ describe('SharePage on a phone (roadmap 2.8)', () => {
     expect((await screen.findByTestId('share-footer')).style.position).toBe('absolute')
   })
 })
+
+describe('SharePage links (R-25, R-26)', () => {
+  function renderAt(token: string) {
+    return render(
+      <MemoryRouter initialEntries={[`/share/${token}`]}>
+        <Routes><Route path="/share/:token" element={<SharePage />} /></Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('a long legacy URL token is refused without being decoded or sent anywhere', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    renderAt('H4sIAAAAAAAAA' + 'x'.repeat(400))
+    expect(await screen.findByText(/no longer supported/i)).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('canvas')).toBeNull()
+  })
+
+  it('an unknown, private, revoked or expired link shows one message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
+    renderAt('abcdefghij123456')
+    expect(await screen.findByText(/not available/i)).toBeInTheDocument()
+  })
+
+  it('isShareCode accepts the codes the server issues and nothing else', async () => {
+    const { isShareCode } = await import('../../lib/shareCode')
+    expect(isShareCode('abcDEF1234567890')).toBe(true)
+    expect(isShareCode('a'.repeat(33))).toBe(false)
+    expect(isShareCode('has space')).toBe(false)
+    expect(isShareCode('')).toBe(false)
+  })
+})

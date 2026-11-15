@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { OrgChart } from '../features/canvas/OrgChart'
-import { decodeSharePayload } from '../utils/shareLink'
+import { isShareCode } from '../lib/shareCode'
 import { useIsPhone } from '../hooks/useMediaQuery'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
@@ -23,28 +23,19 @@ export function SharePage() {
   useEffect(() => {
     if (!token) { setError('Invalid link'); return }
 
-    // Short codes (≤ 20 chars) are server-side shared links; longer strings are legacy URL tokens
-    if (token.length <= 20) {
-      fetch(`/api/share/${token}`)
-        .then(async r => {
-          if (r.status === 404) throw new Error('Link not found or revoked')
-          if (r.status === 410) throw new Error('This link has expired')
-          if (r.status === 429) throw new Error('Too many requests — please try again in a minute')
-          if (!r.ok) throw new Error('Failed to load')
-          return r.json() as Promise<SharedChartData>
-        })
-        .then(setData)
-        .catch(e => setError((e as Error).message))
-    } else {
-      decodeSharePayload(token)
-        .then(payload => setData({
-          name: payload.name,
-          nodes: payload.nodes,
-          edges: payload.edges,
-          departments: payload.departments,
-        }))
-        .catch(() => setError('This share link is invalid or could not be decoded'))
-    }
+    // Only server-side share codes work (R-25). The old links that carried the whole chart inside the URL could not be
+    // revoked and are no longer read at all: a long token is refused without being decoded or sent anywhere.
+    if (!isShareCode(token)) { setError('This link is no longer supported. Ask the owner for a new share link.'); return }
+    fetch(`/api/share/${token}`)
+      .then(async r => {
+        // The server answers 404 for unknown, private, revoked and expired links alike (R-26), so the page cannot tell them apart either.
+        if (r.status === 404) throw new Error('This link is not available. It may have been turned off or may have expired.')
+        if (r.status === 429) throw new Error('Too many requests — please try again in a minute')
+        if (!r.ok) throw new Error('Failed to load')
+        return r.json() as Promise<SharedChartData>
+      })
+      .then(setData)
+      .catch(e => setError((e as Error).message))
   }, [token])
 
   useEffect(() => {
@@ -75,7 +66,6 @@ export function SharePage() {
   }
 
   const depts = data.departments
-  // Legacy URL-token shares carry no workspace, so they keep the mark.
   const branding = data.branding !== false
 
   const chips = (

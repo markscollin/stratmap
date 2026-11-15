@@ -462,7 +462,7 @@ chunks); lazy-load TipTap with the JD panel and the export libraries on first us
 under 150 kB gzipped of JS. Record before and after here.
 
 ### R-25 Legacy URL-token share links cannot be revoked
-- [ ] Open
+- [x] Done 2026-11-15: `src/utils/shareLink.ts` (the decoder) is deleted; `SharePage` accepts only server codes (`isShareCode`, `src/lib/shareCode.ts`) and shows 'This link is no longer supported' for anything else, without fetching or decoding. Old URL-token links are therefore dead for good (nothing had generated them for a long time). Tests: `SharePage.test.tsx` (3 new).
 
 **Problem (reported).** `src/pages/SharePage.tsx:27-46` decodes any token longer than 20 characters in the
 browser (`src/utils/shareLink.ts:69`). Old links survive `isPublic: false`, and anyone can craft
@@ -471,7 +471,7 @@ browser (`src/utils/shareLink.ts:69`). Old links survive `isPublic: false`, and 
 these links any more. Update `SharePage.test.tsx` and the share-link note in `CLAUDE.md`.
 
 ### R-26 Share API returns node fields by deny-list
-- [ ] Open
+- [x] Done 2026-11-15 (**D-5: location, startDate and avatarUrl are public**): `api/_lib/sharedFields.ts` holds `SHARED_NODE_FIELDS` and `publicNode()`; the share API sends exactly those fields. `share-fields.test.ts` fails when a `nodes` column is in neither `SHARED_NODE_FIELDS` nor `PRIVATE_NODE_FIELDS`. An expired link now answers the same 404 as private, revoked and unknown ones (it was 410, which revealed that the code had existed); the pages' 410 branches are gone and `SharePage` shows one message for all of them.
 
 **Problem (reported).** `api/share/[code].ts:61` returns every node column except `chartId` (today including
 `managerId`, `location`, `startDate`, `avatarUrl`). A future column such as email or notes would be published

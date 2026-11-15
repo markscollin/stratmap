@@ -26,7 +26,6 @@ export function EmbedPage() {
     fetch(`/api/share/${code}`)
       .then(async (r) => {
         if (r.status === 404) throw new Error('This chart is no longer shared')
-        if (r.status === 410) throw new Error('This link has expired')
         if (r.status === 429) throw new Error('Too many requests, please try again in a minute')
         if (!r.ok) throw new Error('This chart could not be loaded')
         return r.json() as Promise<EmbeddedChart>

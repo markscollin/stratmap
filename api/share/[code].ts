@@ -4,6 +4,7 @@ import { db } from '../_lib/db'
 import { getEffectivePlan } from '../_lib/access'
 import { showsBranding } from '../../src/lib/plans'
 import { enforceRateLimit, clientIp } from '../_lib/rateLimit'
+import { publicNode } from '../_lib/sharedFields'
 import { sharedLinks, charts, nodes, edges, departments, workspaces } from '../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,9 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!link) return res.status(404).json({ error: 'Link not found or revoked' })
 
-    if (link.expiresAt && link.expiresAt < new Date()) {
-      return res.status(410).json({ error: 'This link has expired' })
-    }
+    // Expired, private, revoked and unknown all answer the same 404 (R-26), so a stranger cannot learn that a code once existed.
+    if (link.expiresAt && link.expiresAt < new Date()) return res.status(404).json({ error: 'Link not found or revoked' })
 
     const [chart] = await db
       .select()
@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'no-store')
     return res.json({
       name: chart.name,
-      nodes: nodeList.map(({ chartId: _c, ...n }) => n),
+      nodes: nodeList.map(publicNode),
       edges: edgeList.map(({ id, sourceId, targetId }) => ({ id, sourceId, targetId })),
       departments: deptList.map(({ id, name, colour }) => ({ id, name, colour })),
       exportedAt: chart.updatedAt,
