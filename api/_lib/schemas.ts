@@ -1,3 +1,4 @@
+import { sanitizeRichText } from './sanitizeHtml'
 import { z } from 'zod'
 import {
   nodeStatusEnum, employmentTypeEnum, roleTypeEnum, roleStatusEnum,
@@ -20,7 +21,8 @@ const OptionalRef = z.union([Id, z.literal(''), z.null()])
 
 const Name = z.string().trim().min(1).max(200)
 const ShortText = z.string().max(200)
-const LongText = z.string().max(100_000)      // JD bodies are HTML from TipTap
+// JD and template bodies are HTML from TipTap. They are cleaned on the way in (api/_lib/sanitizeHtml.ts, R-37).
+const LongText = z.string().max(100_000).transform(sanitizeRichText)
 const Coord = z.number().finite().min(-1_000_000).max(1_000_000)
 
 const enumOf = <T extends [string, ...string[]]>(e: { enumValues: T }) => z.enum(e.enumValues)

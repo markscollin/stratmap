@@ -612,12 +612,11 @@ pointer/gesture handling into their own files. No behaviour change; the existing
 - Also fixed on the way: `tests/e2e/performance.spec.ts` assumed the first card on screen is "Person 0". The server lists roles in storage order, which changes after earlier specs delete rows, so the "only the moved role changed" case failed in full runs (never alone). It now asserts that exactly one role moved.
 
 ### R-37 Server-side JD HTML sanitisation (before any new renderer)
-- [ ] Open
-
-JD and template HTML is stored unsanitised (`api/_lib/schemas.ts:23`). It is safe today only because the single
-renderer is TipTap, whose schema drops scripts and event handlers (`src/features/jd/JDEditor.tsx:22-29`).
-**Before** rendering JD content anywhere else (email, PDF, share page, export), sanitise on write with an
-allow-list matching the TipTap schema. Add a test with `<img onerror>` and `<script>` payloads.
+- [x] Done 2026-11-15. Tests: `api/__tests__/sanitize-html.test.ts` (12), `src/features/jd/__tests__/sanitizeRoundTrip.test.ts` (9, real TipTap).
+- `api/_lib/sanitizeHtml.ts` (`sanitize-html`, a parser-based allow-list; not a hand-written regex) cleans JD and template text on write. It is applied in the zod schema (`LongText` in `schemas.ts`), so every route that takes `responsibilities` or `requirements` (JD update, template create/update) gets it and a new route using the schema gets it too.
+- **Allow-list = what TipTap 3's StarterKit writes:** `p br hr h1-h6 strong b em i s u code pre blockquote ul ol li a`; `href` (http, https, mailto only; `javascript:`, `data:`, `file:`, protocol-relative are dropped, the text stays), `rel` forced to `noopener noreferrer nofollow`, `target` only `_blank`, `ol start`, and a `language-xxx` class on `code`. Everything else is removed; the content of `script`/`style` goes with the tag.
+- **The round trip is tested with the real editor:** each kind of document the editor can write (headings, marks, nested lists, quotes, code with a language, links, line breaks, entities) is run through the sanitiser and reopened; the editor's JSON must be identical. A TipTap upgrade that starts writing a new element fails that test instead of silently losing formatting. Known cosmetic difference: the library writes `<br />` and `<hr />`; TipTap reads both.
+- **Existing rows are not rewritten** (no migration). They were written by a browser running TipTap, and the only renderer is still TipTap. Any new renderer must clean on read too, or the rows must be run through `sanitizeRichText` once first.
 
 ---
 
