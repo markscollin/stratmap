@@ -40,7 +40,9 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 - **Success page (R-06):** `/billing/success` polls `/api/workspace` for about 10 s. If the plan has not changed it says "Payment received, your plan
   has not updated yet" with a **Check again** button, never "Your upgrade is complete". Set `VITE_SUPPORT_EMAIL` (build time) to show a support address there.
 - **Handled events:** `checkout.session.completed`, `customer.subscription.created|updated|deleted|paused|resumed`,
-  `invoice.paid` and `invoice.payment_failed`. Other event types are acknowledged and not recorded.
+  `invoice.paid`, `invoice.payment_failed`, `charge.refunded` and `charge.dispute.created`. Other event types are acknowledged and not recorded.
+  The last two (R-22) change nothing: they go to Sentry and, if `BILLING_ALERT_EMAIL` is set, to that address (amounts and opaque ids only), so a human decides.
+- **Daily reconciliation (R-22):** `GET /api/cron/daily-maintenance` (Vercel cron 03:41 UTC, same `CRON_SECRET` rule as the purge) re-reads up to 100 workspaces' subscriptions from Stripe, oldest-synced first, through `syncSubscription`. Anything it corrects is reported to Sentry ("a Stripe webhook was probably missed"). The same job prunes `rate_limits` (R-27) and sends the trial-ending emails (R-40).
 - **Checkout:** if a workspace already has a subscription, Checkout returns a **Customer Portal** URL instead
   (`{ url, portal: true }`), so nobody ends up with two parallel subscriptions. Checkout reuses an existing Stripe customer.
 - **Portal:** `POST /api/billing/portal` (admin only) returns to `/settings?tab=billing`. It returns 409 `no-billing-account`
@@ -49,7 +51,7 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 
 ## Stripe dashboard setup (owner, do this in test mode first, then live)
 
-1. **Webhook endpoint** `https://<domain>/api/webhooks/stripe`. Subscribe it to the eight events listed above.
+1. **Webhook endpoint** `https://<domain>/api/webhooks/stripe`. Subscribe it to the ten events listed above.
 2. **Customer Portal** (Settings → Billing → Customer portal):
    - Allow updating the payment method, viewing invoices, and cancelling. For cancellation, choose **at end of billing period**.
    - Allow switching plans between the Starter and Growth products (monthly and annual prices).
@@ -74,7 +76,7 @@ and again after any change to `api/webhooks/stripe.ts`, `api/_lib/rawBody.ts` or
 2. **Let Stripe reach the preview.** Previews sit behind Vercel Authentication, which would answer Stripe with 401/403. Either turn off
    Deployment Protection for this one test, or use *Protection Bypass for Automation* and add `?x-vercel-protection-bypass=<secret>` to the endpoint URL in step 3.
 3. **Endpoint.** Stripe dashboard (**test mode** switch on) → Developers → Webhooks → *Add endpoint*: `https://<preview-url>/api/webhooks/stripe`, subscribe the
-   eight events listed above. Copy its *Signing secret* (`whsec_…`) into the preview's `STRIPE_WEBHOOK_SECRET`, then **redeploy** (env vars only apply to new deployments).
+   ten events listed above. Copy its *Signing secret* (`whsec_…`) into the preview's `STRIPE_WEBHOOK_SECRET`, then **redeploy** (env vars only apply to new deployments).
 4. **Quick check (1 minute).** The script does this for you: `npm run check:webhook -- https://<preview-url> whsec_...` (see `docs/OWNER_CHECKLIST.md`) and prints PASS or what is wrong. By hand: Endpoint page → *Send test webhook* → `customer.subscription.updated` → Send. Open the delivery and read the response:
    - `400 {"error":"Invalid signature"}` → wrong `STRIPE_WEBHOOK_SECRET` (step 3), not a code problem.
    - `400 {"error":"Could not read raw body"}` → **the problem this check exists for**: production does not replay the body the way the tests assume. Stop and tell whoever maintains this;

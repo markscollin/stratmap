@@ -1,11 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { sql } from 'drizzle-orm'
 import { db } from './db'
+import { reportError } from './sentry'
 import { rateLimits } from '../../src/lib/db/schema'
 
 // Postgres-backed fixed-window rate limiter. No extra vendor: one upserted row
 // per bucket key. Good enough for abuse protection at launch scale; swap for
 // Upstash/Vercel KV if this table ever becomes hot.
+
+/** Share of limiter failures sent to Sentry. */
+export const LIMITER_FAILURE_REPORT_RATE = 0.1
 
 export interface RateLimitResult {
   allowed: boolean
@@ -24,13 +28,14 @@ export async function hitRateLimit(
 
   const [row] = await db
     .insert(rateLimits)
-    .values({ key, windowId, count: 1 })
+    .values({ key, windowId, count: 1, windowSeconds })
     .onConflictDoUpdate({
       target: rateLimits.key,
       set: {
         // Same window → increment; new window → reset to 1.
         count: sql`CASE WHEN ${rateLimits.windowId} = ${windowId} THEN ${rateLimits.count} + 1 ELSE 1 END`,
         windowId,
+        windowSeconds,
       },
     })
     .returning({ count: rateLimits.count })
@@ -66,6 +71,23 @@ export async function enforceRateLimit(
     return false
   } catch (err) {
     console.error('[rateLimit] limiter failed, allowing request:', key, err)
+    // Fails open on purpose, but a broken limiter must not go unnoticed (R-27). Sampled so an outage is one alert, not thousands.
+    if (Math.random() < LIMITER_FAILURE_REPORT_RATE) reportError(err, { route: 'rateLimit', note: 'rate limiter failed open' })
     return true
   }
+}
+
+/**
+ * Deletes limiter rows whose window ended more than an hour ago (R-27). A row is only ever read in its own window, so
+ * nothing that is deleted could still count. Rows written before `window_seconds` existed use the fact that 60 s window
+ * ids are above 10 million and 3600 s ones are far below it. Returns how many were removed.
+ */
+export async function pruneRateLimits(nowMs = Date.now()): Promise<number> {
+  const nowSec = Math.floor(nowMs / 1000)
+  const result = await db.execute(sql`
+    delete from rate_limits
+    where (window_id + 1) * coalesce(window_seconds, case when window_id > 10000000 then 60 else 3600 end) < ${nowSec - 3600}
+    returning 1
+  `)
+  return (result as unknown as { rows: unknown[] }).rows.length
 }

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { timingSafeEqual } from 'node:crypto'
+import { cronAuthorised } from '../_lib/cron'
 import { reportError } from '../_lib/sentry'
 import { purgeExpiredWorkspaces } from '../_lib/workspaceLifecycle'
 import { purgeExpiredTrash, purgeOrphanJobDescriptions } from '../_lib/nodeTrash'
@@ -7,19 +7,10 @@ import { purgeExpiredTrash, purgeOrphanJobDescriptions } from '../_lib/nodeTrash
 // Daily job (vercel.json "crons"): erases workspaces that were deleted more than 30 days ago (roadmap 4.2).
 // Vercel calls it with `Authorization: Bearer $CRON_SECRET`. Without CRON_SECRET set it refuses to run, so it can
 // never be triggered by a stranger.
-function authorised(req: VercelRequest): boolean {
-  const expected = process.env.CRON_SECRET
-  const header = req.headers.authorization
-  if (!expected || typeof header !== 'string') return false
-  const a = Buffer.from(header)
-  const b = Buffer.from(`Bearer ${expected}`)
-  return a.length === b.length && timingSafeEqual(a, b)
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.CRON_SECRET) return res.status(503).json({ error: 'not-configured' })
-  if (!authorised(req)) return res.status(401).json({ error: 'Unauthorized' })
+  if (!cronAuthorised(req)) return res.status(401).json({ error: 'Unauthorized' })
   try {
     const purged = await purgeExpiredWorkspaces()
     // Also the kept copies of deleted roles past their few days (R-02); deleting a role tidies its own chart too.

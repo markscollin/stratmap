@@ -11,6 +11,7 @@ import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 import { track } from '../_lib/analytics'
 import { readRawBody } from '../_lib/rawBody'
 import { isDevBypassAllowed } from '../_lib/devBypass'
+import { handleChargeRefunded, handleDisputeCreated } from '../_lib/billingAlerts'
 
 // The signature is computed over the raw bytes, which `readRawBody` gets without depending on any framework config
 // (Next.js's `config.api.bodyParser` does nothing under @vercel/node; see api/_lib/rawBody.ts and docs/BILLING.md, R-05).
@@ -84,6 +85,9 @@ const HANDLED_EVENTS = new Set<string>([
   'customer.subscription.resumed',
   'invoice.paid',
   'invoice.payment_failed',
+  // Money events a human must hear about (R-22): reported, never acted on automatically.
+  'charge.refunded',
+  'charge.dispute.created',
 ])
 
 // Every handler re-reads the subscription from Stripe (syncSubscription), so the
@@ -119,6 +123,14 @@ async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
       }
       return
     }
+
+    case 'charge.refunded':
+      await handleChargeRefunded(event.data.object)
+      return
+
+    case 'charge.dispute.created':
+      await handleDisputeCreated(stripe, event.data.object)
+      return
 
     case 'invoice.paid':
     case 'invoice.payment_failed': {

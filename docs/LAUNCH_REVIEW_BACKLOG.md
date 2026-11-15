@@ -434,7 +434,7 @@ window. Document the choice in `docs/BILLING.md` and the Terms.
 ## P2: fix soon after launch
 
 ### R-22 No reconciliation when a billing webhook is lost
-- [ ] Open
+- [x] Done 2026-11-15: new daily job `api/cron/daily-maintenance.ts` (03:41 UTC, same `CRON_SECRET` rule; shared `cronAuthorised` in `api/_lib/cron.ts`) re-reads up to 100 subscriptions a day through `syncSubscription`, oldest-synced first (so everyone comes round), reports every correction to Sentry as a probable missed webhook, and counts failures without stopping. `charge.refunded` and `charge.dispute.created` are now handled events: reported to Sentry and emailed to `BILLING_ALERT_EMAIL` (new optional env var, warned about by `check:env`), amounts and opaque ids only, and **no automatic action** (a refund does not drop the plan; that is a human call). Tests: `daily-maintenance.test.ts`.
 
 **Problem (reported).** The safety net in `resolvePlanTier` covers only `cancelAtPeriodEnd`
 (`api/_lib/billing.ts:175-181`). A `past_due` subscription that Stripe later cancels, with the event lost,
@@ -482,7 +482,7 @@ and `startDate` be public?). Make expired, private and unknown all return the sa
 fails when a new `nodes` column appears in the share response without being added to the list.
 
 ### R-27 `rate_limits` table is never pruned
-- [ ] Open
+- [x] Done 2026-11-15: `rate_limits.window_seconds` (migration 0014, additive) is recorded on every hit so the daily job (`pruneRateLimits`) can tell which windows ended over an hour ago; old rows without it are classified by the size of their window id. A limiter failure (still fails open) is sent to Sentry, sampled at 10%. Tests in `daily-maintenance.test.ts`.
 
 **Problem (reported).** `api/_lib/rateLimit.ts:26-37`: rows keyed by IP are written on every anonymous share,
 invite-preview and admin hit and never deleted. The limiter also fails open (`:66-69`), which is acceptable but
@@ -553,7 +553,7 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 **Suggested fix.** Remember "has had a trial" somewhere that outlives the workspace: a `trial_used_at` column on a small per-user table, or a salted hash of the user id kept after the erase. Keep it opaque (no email), mention it in the privacy text, and make account deletion remove it. Do this only if abuse shows up; the cost is a few days of Growth.
 
 ### R-40 Nothing warns by email before a trial ends
-- [ ] Open (found 2026-11-14)
+- [x] Done 2026-11-15: the daily job emails owners and admins once 3 days before `trialEndsAt` and once after it ended (not for trials over a week old, paying or deleted workspaces), with the real Free limits from `plans.ts` and the pricing link; stamps `trial_warned_at` / `trial_ended_notice_at` (migration 0014) and `grant-trial` clears them so a new trial warns again. A failed address is reported and does not repeat the notice. Tests in `daily-maintenance.test.ts`.
 
 **Problem.** The trial banner says what happens when 14 days end, but only to people who open the app. A workspace that is over the Free limits at that moment turns view-only without a message in their inbox.
 **Suggested fix.** In the daily cron (same `CRON_SECRET` pattern as the purge), email owners and admins 3 days before `trialEndsAt` and on the day it ends, once each (a `trial_notified_at` column, additive migration). Include the Free limits and the link to /pricing. Skip workspaces that already pay.

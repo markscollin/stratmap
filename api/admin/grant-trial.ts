@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [updated] = await db
       .update(workspaces)
-      .set({ trialPlan: planTier, trialEndsAt, updatedAt: new Date() })
+      .set({ trialPlan: planTier, trialEndsAt, trialWarnedAt: null, trialEndedNoticeAt: null, updatedAt: new Date() })
       .where(eq(workspaces.id, workspaceId))
       .returning()
 

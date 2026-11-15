@@ -48,6 +48,9 @@ export const workspaces = pgTable('workspaces', {
   // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)
   trialPlan: planTierEnum('trial_plan'),
   trialEndsAt: timestamp('trial_ends_at'),
+  // Trial-ending emails (R-40): each is sent once per trial; granting a new trial clears both.
+  trialWarnedAt: timestamp('trial_warned_at'),
+  trialEndedNoticeAt: timestamp('trial_ended_notice_at'),
   // Soft delete (roadmap 4.2): set when the owner deletes the workspace. It is hidden from every route
   // at once (api/_lib/auth.ts, share links) and can be restored by the owner until WORKSPACE_RESTORE_DAYS
   // have passed, when a daily job erases it for good (api/cron/purge-deleted.ts).
@@ -227,6 +230,8 @@ export const rateLimits = pgTable('rate_limits', {
   key: text('key').primaryKey(),
   windowId: bigint('window_id', { mode: 'number' }).notNull(),
   count: integer('count').notNull().default(0),
+  // Length of the window in seconds, so the daily job can tell which rows are over (R-27). Null on rows written before it existed.
+  windowSeconds: integer('window_seconds'),
 })
 
 // Server-side AI drafting quota — one row per workspace per calendar month (UTC).

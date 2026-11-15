@@ -44,6 +44,7 @@ const RULES = [
   ['warn', 'VITE_SENTRY_DSN', startsWith('https://'), 'browser errors are not reported without it (build-time variable)'],
   ['warn', 'EMAIL_FROM', (v) => v.includes('@') || 'should contain an address', 'sender of every email; the default may not be on your verified domain'],
   ['warn', 'VITE_SUPPORT_EMAIL', (v) => v.includes('@') || 'should be an email address', 'shown on the payment-received page when the plan has not changed'],
+  ['warn', 'BILLING_ALERT_EMAIL', (v) => v.includes('@') || 'should be an email address', 'your own address: refunds and disputes in Stripe are emailed here (they are always sent to Sentry too)'],
   ['info', 'POSTHOG_KEY', () => true, 'product analytics (only for people who accept cookies)'],
 ]
 

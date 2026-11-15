@@ -163,3 +163,49 @@ export async function sendCommentNotification(opts: {
   )
   return sendEmail({ to: opts.to, subject, html })
 }
+
+/** Tells owners and admins a paid trial is about to end, or has ended (R-40). The Free limits come from plans.ts. */
+export async function sendTrialEnding(opts: {
+  to: string
+  workspaceName: string
+  /** Name of the trial plan, e.g. "Growth". */
+  planName: string
+  /** The day the trial ends. */
+  endsOn: Date
+  /** true: it has already ended. */
+  ended: boolean
+  limits: { charts: number; rolesPerChart: number; members: number }
+  pricingUrl: string
+}): Promise<SendResult> {
+  const ws = escapeHtml(opts.workspaceName)
+  const plan = escapeHtml(opts.planName)
+  const url = escapeHtml(opts.pricingUrl)
+  const date = opts.endsOn.toISOString().slice(0, 10)
+  const { charts, rolesPerChart, members } = opts.limits
+  const subject = (opts.ended
+    ? `Your ${opts.planName} trial for ${opts.workspaceName} has ended`
+    : `Your ${opts.planName} trial for ${opts.workspaceName} ends on ${date}`).replace(/[\r\n]+/g, ' ')
+  const free = `The Free plan includes ${charts} chart, ${rolesPerChart} roles per chart and ${members} members. Nothing is deleted, but any chart over those limits is view-only until you upgrade.`
+  const lead = opts.ended
+    ? `The free <strong>${plan}</strong> trial for <strong>${ws}</strong> ended on ${date}, so the workspace is now on the Free plan.`
+    : `The free <strong>${plan}</strong> trial for <strong>${ws}</strong> ends on <strong>${date}</strong>, after which the workspace moves to the Free plan.`
+  const html = shell(
+    opts.ended ? 'Your trial has ended' : 'Your trial is ending soon',
+    `<p style="font-size:14px;line-height:1.6">${lead} ${free}</p>
+     <p style="margin:24px 0">
+       <a href="${url}" style="background:#0EA5E9;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600">See plans</a>
+     </p>
+     <p style="font-size:12px;color:#94a3b8">Or paste this link into your browser: ${url}</p>`,
+  )
+  return sendEmail({ to: opts.to, subject, html })
+}
+
+/** A plain note to the StratMap owner about something in Stripe a human must look at (refund, dispute, lost webhook). No customer personal data. */
+export async function sendBillingAlert(opts: { to: string; subject: string; lines: string[] }): Promise<SendResult> {
+  const items = opts.lines.map(l => `<li style="margin:4px 0">${escapeHtml(l)}</li>`).join('')
+  return sendEmail({
+    to: opts.to,
+    subject: opts.subject.replace(/[\r\n]+/g, ' '),
+    html: shell(escapeHtml(opts.subject), `<ul style="font-size:14px;line-height:1.6;padding-left:18px">${items}</ul>`),
+  })
+}
