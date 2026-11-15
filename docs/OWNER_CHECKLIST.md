@@ -37,6 +37,8 @@ To make a long random secret (CRON_SECRET, ADMIN_SECRET): `openssl rand -hex 32`
 | 10 | **Database safety (O-06).** In Neon turn on point-in-time recovery and do one restore drill into a scratch branch. Make sure **Preview** deployments use a separate database from Production (Vercel → Environment Variables: `DATABASE_URL` must differ). | A preview running unreviewed code against the production database is the most likely way to lose data. |
 | 11 | **Monitoring (O-08).** Follow `docs/MONITORING.md`: Sentry alerts, two uptime monitors (`/` and `/api/health`), a status page, and a support address. | You find out about an outage from a monitor, not a customer. |
 | 12 | **Branch protection (O-09).** GitHub → repo Settings → Branches → add a rule for `main` requiring the CI check to pass. | Keeps a red build off production. |
+| 13 | **Dependabot (R-36).** GitHub → repo Settings → Code security → switch on "Dependabot alerts" and "Dependabot security updates". The weekly update config is already in `.github/dependabot.yml`. | Security fixes arrive as pull requests; without the switch only the weekly ones do. |
+| 14 | **Before the next production deploy:** the deploy applies migrations 0015 (unique membership index; removes duplicate memberships first) and 0016 (`trial_grants`) by itself. A production build now **fails** if `VITE_CLERK_PUBLISHABLE_KEY` is missing in Vercel Production (R-34): check it is set. | A failed build is the safe outcome, but better to know. |
 
 ## C. Local development
 
