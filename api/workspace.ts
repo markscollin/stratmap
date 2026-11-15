@@ -11,7 +11,7 @@ import { publicWorkspace } from './_lib/publicWorkspace'
 import { softDeleteWorkspace, eraseDate } from './_lib/workspaceLifecycle'
 import { reportError } from './_lib/sentry'
 import { getUserIdentity, type UserIdentity } from './_lib/identity'
-import { workspaces, workspaceMembers } from '../src/lib/db/schema'
+import { workspaces, workspaceMembers, trialGrants } from '../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -79,18 +79,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const workspaceId = crypto.randomUUID()
 
-      // A first workspace gets the new-workspace trial (R-18, D-3). Not for someone who has owned one before, deleted or not:
-      // otherwise delete-and-recreate would be a free Growth plan for ever.
+      // A first workspace gets the new-workspace trial (R-18, D-3). Not for someone who has owned one before, deleted or not,
+      // and not for someone who has had the trial before: `trial_grants` outlives the 30-day erase of a deleted workspace (R-39),
+      // so delete, wait and recreate is not a free Growth plan every month. The claim is one insert that only one request can
+      // win, so two sign-ups racing cannot both get it.
       const [owned] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.ownerId, user.userId)).limit(1)
       const trialDays = Number(process.env.NEW_WORKSPACE_TRIAL_DAYS ?? DEFAULT_NEW_WORKSPACE_TRIAL_DAYS)
-      const trial = !owned && trialDays > 0
-        ? { trialPlan: NEW_WORKSPACE_TRIAL_PLAN, trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000) }
-        : {}
+      let trial: { trialPlan?: typeof NEW_WORKSPACE_TRIAL_PLAN; trialEndsAt?: Date } = {}
+      let trialClaimed = false
+      if (!owned && trialDays > 0) {
+        const [claimed] = await db.insert(trialGrants).values({ userId: user.userId }).onConflictDoNothing().returning()
+        trialClaimed = !!claimed
+        if (claimed) trial = { trialPlan: NEW_WORKSPACE_TRIAL_PLAN, trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000) }
+      }
 
-      const [ws] = await db
-        .insert(workspaces)
-        .values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size, ...trial })
-        .returning()
+      let ws: typeof workspaces.$inferSelect
+      try {
+        ;[ws] = await db
+          .insert(workspaces)
+          .values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size, ...trial })
+          .returning()
+      } catch (err) {
+        // The workspace was not made, so the trial was not used: give it back, or a failed request would cost it.
+        if (trialClaimed) await db.delete(trialGrants).where(eq(trialGrants.userId, user.userId)).catch(() => {})
+        throw err
+      }
 
       await db.insert(workspaceMembers).values({
         id: crypto.randomUUID(),

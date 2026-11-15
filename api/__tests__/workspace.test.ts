@@ -243,6 +243,55 @@ describe('POST /api/workspace', () => {
       expect(res._body).toMatchObject({ planTier: 'free' })
     })
 
+    // R-39: the rule used to read the workspaces table, which the 30-day erase empties.
+    it('does not get a new trial after the old workspace has been erased for good', async () => {
+      expect((await create())._status).toBe(201)
+      expect((await stored()).trialPlan).toBe('growth')
+      await testDb.delete(schema.workspaces) // what the purge does 30 days after a delete (cascades to the member row)
+      expect(await testDb.select().from(schema.workspaces)).toHaveLength(0)
+      const again = await create()
+      expect(again._status).toBe(201)
+      expect((await stored()).trialPlan).toBeNull()
+      expect(again._body).toMatchObject({ planTier: 'free' })
+    })
+
+    it('records the trial per person, with nothing else attached', async () => {
+      await create()
+      const rows = await testDb.select().from(schema.trialGrants)
+      expect(rows).toHaveLength(1)
+      expect(Object.keys(rows[0]).sort()).toEqual(['grantedAt', 'userId'])
+    })
+
+    it('two sign-ups racing for the first workspace cannot both get the trial', async () => {
+      const [a, b] = await Promise.all([create(), create()])
+      expect([a._status, b._status].every(s => s === 201 || s === 200)).toBe(true)
+      const granted = (await testDb.select().from(schema.workspaces)).filter(w => w.trialPlan === 'growth')
+      expect(granted.length).toBeLessThanOrEqual(1)
+      expect(await testDb.select().from(schema.trialGrants)).toHaveLength(1)
+    })
+
+    it('a trial of 0 days records nothing, so turning trials on later still offers one', async () => {
+      process.env.NEW_WORKSPACE_TRIAL_DAYS = '0'
+      await create()
+      expect(await testDb.select().from(schema.trialGrants)).toHaveLength(0)
+    })
+
+    it('a workspace that could not be created gives the trial back', async () => {
+      const real = testDb.insert.bind(testDb)
+      let failed = false
+      const spy = vi.spyOn(testDb, 'insert').mockImplementation(((table: unknown) => {
+        if (table === schema.workspaces && !failed) { failed = true; throw new Error('database down') }
+        return real(table as never)
+      }) as never)
+      const res = await create()
+      spy.mockRestore()
+      expect(res._status).toBe(500)
+      expect(await testDb.select().from(schema.trialGrants)).toHaveLength(0)
+      const retry = await create()
+      expect(retry._status).toBe(201)
+      expect((await stored()).trialPlan).toBe('growth')
+    })
+
     it('the existing-workspace reply shows the effective plan too', async () => {
       await seedWorkspace()
       await testDb.update(schema.workspaces).set({ trialPlan: 'growth', trialEndsAt: new Date(Date.now() + 86_400_000) })

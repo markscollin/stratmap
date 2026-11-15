@@ -108,7 +108,8 @@ export function PrivacyPage() {
         account in Settings: you leave every workspace, your sign-in account is deleted, and a workspace you own is
         deleted with you under the same 30-day rule. When you delete a single role, we keep a copy of it, its comments, its job description
         (including any salary band) and its reporting lines for 3 days so that Undo can bring it back, and then erase it. The activity log records who changed members, sharing and
-        salary bands (never salary amounts) and is kept with the workspace it belongs to.
+        salary bands (never salary amounts) and is kept with the workspace it belongs to. To offer the free trial once per person, we keep a record that your account has had it (your
+        account's random identifier and a date, no email or name) after a workspace is erased; it is removed when you delete your account.
       </p>
 
       <H2>5. Your rights</H2>

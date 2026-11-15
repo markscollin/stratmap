@@ -277,6 +277,12 @@ describe('the daily purge', () => {
 describe('deleting an account', () => {
   const remove = (body: unknown = { confirm: 'DELETE' }) => call(accountHandler, { method: 'DELETE', body })
 
+  it('forgets that the person had a trial, with the rest of their account (R-39)', async () => {
+    await testDb.insert(schema.trialGrants).values([{ userId: TEST_USER_ID }, { userId: 'someone-else' }])
+    expect((await remove())._status).toBe(200)
+    expect((await testDb.select().from(schema.trialGrants)).map(r => r.userId)).toEqual(['someone-else'])
+  })
+
   it('needs the word DELETE', async () => {
     expect((await remove({}))._status).toBe(400)
     expect((await remove({ confirm: 'delete' }))._status).toBe(400)

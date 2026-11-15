@@ -113,6 +113,13 @@
       "when": 1794754034125,
       "tag": "0015_shiny_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794755758840,
+      "tag": "0016_ambiguous_moon_knight",
+      "breakpoints": true
     }
   ]
 }

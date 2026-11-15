@@ -325,6 +325,14 @@ export const userNotificationPrefs = pgTable('user_notification_prefs', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
+// Who has already had the new-workspace trial (R-39). Per person and deliberately NOT tied to a workspace: the 30-day erase
+// of a deleted workspace used to wipe the only evidence, so delete-wait-recreate gave a fresh trial about once a month.
+// An opaque user id and a date, nothing else. Removed when the person deletes their account.
+export const trialGrants = pgTable('trial_grants', {
+  userId: text('user_id').primaryKey(),            // Clerk userId
+  grantedAt: timestamp('granted_at').notNull().defaultNow(),
+})
+
 // ─── Chart version history (roadmap 5) ──────────────────────────────────────
 // A saved version of a chart's structure: its roles, reporting lines and departments (NOT job-description text or
 // salary bands, so history never exposes pay). Used to compare two versions, restore one, or branch a scenario into

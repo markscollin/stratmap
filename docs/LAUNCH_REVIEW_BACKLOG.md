@@ -547,10 +547,10 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 ## P3: later and housekeeping
 
 ### R-39 Trial can be farmed once the 30-day erase has run
-- [ ] Open (found 2026-11-14 while building R-18)
-
-**Problem.** The new-workspace trial (D-3) is refused to anyone who has ever owned a workspace, but the check reads the `workspaces` table, and the purge erases a deleted workspace after 30 days. Someone who deletes their workspace, waits for the erase and creates a new one gets another 14 days of Growth, about once a month.
-**Suggested fix.** Remember "has had a trial" somewhere that outlives the workspace: a `trial_used_at` column on a small per-user table, or a salted hash of the user id kept after the erase. Keep it opaque (no email), mention it in the privacy text, and make account deletion remove it. Do this only if abuse shows up; the cost is a few days of Growth.
+- [x] Done 2026-11-15. Migration 0016 (`trial_grants`, additive). Tests in `workspace.test.ts` (5 new), `data-rights.test.ts`, `member-unique.test.ts` (backfill).
+- New table `trial_grants(user_id pk, granted_at)`: an opaque account id and a date, no email, no workspace link, so the purge does not touch it. `POST /api/workspace` claims it with one `INSERT … ON CONFLICT DO NOTHING RETURNING` (which also closes a two-requests-at-once race that the old read-then-write check had), and only the winner gets the trial. If the workspace insert then fails, the claim is released, so an error never costs someone their trial. With `NEW_WORKSPACE_TRIAL_DAYS=0` nothing is recorded.
+- **The migration backfills every current workspace owner**, so today's rule ("never owned a workspace") keeps holding after their workspace is erased.
+- **Account deletion removes the row** (`deleteUserAccount` path) and the privacy text (section 4) says what is kept and why. **Limit that remains, by design:** someone who deletes their *account* and signs up again gets a new account id and a new trial; closing that needs the email address, which is worse for privacy and was not asked for.
 
 ### R-40 Nothing warns by email before a trial ends
 - [x] Done 2026-11-15: the daily job emails owners and admins once 3 days before `trialEndsAt` and once after it ended (not for trials over a week old, paying or deleted workspaces), with the real Free limits from `plans.ts` and the pricing link; stamps `trial_warned_at` / `trial_ended_notice_at` (migration 0014) and `grant-trial` clears them so a new trial warns again. A failed address is reported and does not repeat the notice. Tests in `daily-maintenance.test.ts`.

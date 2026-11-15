@@ -46,3 +46,17 @@ describe('workspace_members uniqueness', () => {
     await expect(db.exec(`INSERT INTO workspace_members VALUES ('a9','w','u','viewer','2026-03-01')`)).rejects.toThrow()
   })
 })
+
+describe('trial_grants migration (R-39)', () => {
+  it('records everyone who owns a workspace today, so the rule keeps holding after an erase', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs')
+    const dir = new URL('../../drizzle/', import.meta.url)
+    const sqlText = readFileSync(new URL(readdirSync(dir).find(f => f.startsWith('0016_'))!, dir), 'utf8')
+    const db = new PGlite()
+    await db.exec(`CREATE TABLE workspaces (id text PRIMARY KEY, owner_id text NOT NULL);
+      INSERT INTO workspaces VALUES ('w1','alice'), ('w2','alice'), ('w3','bob');`)
+    for (const stmt of sqlText.split('--> statement-breakpoint')) await db.exec(stmt)
+    const ids = (await db.query<{ user_id: string }>('SELECT user_id FROM trial_grants ORDER BY user_id')).rows.map(r => r.user_id)
+    expect(ids).toEqual(['alice', 'bob'])
+  })
+})

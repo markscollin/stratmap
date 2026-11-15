@@ -34,6 +34,7 @@ export async function cleanDb() {
   await testDb.delete(schema.deletedNodes)
   await testDb.delete(schema.roleComments)
   await testDb.delete(schema.userNotificationPrefs)
+  await testDb.delete(schema.trialGrants)
   await testDb.delete(schema.stripeEvents)
   await testDb.delete(schema.rateLimits)
   await testDb.delete(schema.aiUsage)
