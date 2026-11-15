@@ -58,10 +58,15 @@ export function NodeCard({
   dimmed,
   departments = [],
   commentCount = 0,
+  ariaLabel,
   onPointerDown,
   onClick,
   onDoubleClick,
+  onKeyDown,
+  onFocus,
 }: {
+  /** What a screen reader says: who, what, status and where the role sits in the reporting lines. */
+  ariaLabel?: string
   /** Open comment threads on this role (roadmap 5). */
   commentCount?: number
   node: OrgNode
@@ -73,6 +78,9 @@ export function NodeCard({
   onPointerDown: (e: React.PointerEvent) => void
   onClick: (e: React.MouseEvent) => void
   onDoubleClick: (e: React.MouseEvent) => void
+  /** Keyboard access (R-32): Enter / Space open, arrows move along the reporting lines. */
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void
+  onFocus?: (e: React.FocusEvent<HTMLDivElement>) => void
 }) {
   const [hov, setHov] = useState(false)
 
@@ -102,6 +110,11 @@ export function NodeCard({
   return (
     <div
       data-testid="node-card"
+      data-node-id={node.id}
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel ?? `${label}, ${node.title}`}
+      aria-pressed={selected}
       style={{
         position: 'absolute', left: node.x, top: node.y,
         width: NODE_W, height: NODE_H,
@@ -119,6 +132,8 @@ export function NodeCard({
       onPointerDown={onPointerDown}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
+      onFocus={onFocus}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >

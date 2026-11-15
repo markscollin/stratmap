@@ -77,6 +77,9 @@ html, body, #root {
 
 input, textarea, select, button { font-family: 'DM Sans Variable', sans-serif; }
 input, select { outline: none; }
+/* A role card is a button on the canvas (R-32): show where the keyboard is, but not after a mouse click. */
+[data-node-id]:focus { outline: none; }
+[data-node-id]:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

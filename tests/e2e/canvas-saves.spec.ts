@@ -13,7 +13,7 @@ async function addRole(p: Page, name: string, reportsTo?: string) {
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
   if (reportsTo) {
     await p.getByRole('button', { name: /None \(root node\)/ }).click()
-    await p.getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
+    await p.getByRole('dialog').getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
   }
   await p.getByRole('button', { name: 'Create node' }).click()
   await expect(p.getByTestId('node-card').filter({ hasText: name })).toBeVisible()
@@ -50,8 +50,8 @@ test.describe.serial('canvas saves', () => {
 
     // Same session, no reload: change who Carol reports to.
     await page.getByTestId('node-card').filter({ hasText: 'Carol Report' }).dblclick()
-    await page.getByRole('button', { name: /Alpha Boss/ }).click()
-    await page.getByRole('button', { name: /^Bravo Boss/ }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /Alpha Boss/ }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /^Bravo Boss/ }).click()
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page.getByRole('alert')).toHaveCount(0)
     // Let the queued writes land (a person cannot reload within milliseconds), then prove it from a fresh page load.

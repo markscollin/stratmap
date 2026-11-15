@@ -12,7 +12,7 @@ async function addRole(p: Page, name: string, reportsTo?: string) {
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
   if (reportsTo) {
     await p.getByRole('button', { name: /None \(root node\)/ }).click()
-    await p.getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
+    await p.getByRole('dialog').getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
   }
   const saved = p.waitForResponse(r => /\/(nodes|edges)$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
   await p.getByRole('button', { name: 'Create node' }).click()

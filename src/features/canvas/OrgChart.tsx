@@ -10,6 +10,7 @@ import { useCanvasState } from './useCanvasState'
 import { saveHistoryStep, saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine, saveLineDelete, savePositions } from './canvasSync'
 import { NodeCard } from '../nodes/NodeCard'
 import { NodeChip } from '../nodes/NodeChip'
+import { buildReportingIndex, navTarget, isNavKey, panToReveal, readingOrder, roleAriaLabel } from './keyboardNav'
 import { viewRect, visibleNodeIds, edgeInView, shouldVirtualize, shouldUseChips, movedPositions } from './viewport'
 import { JDPanel } from '../panel/JDPanel'
 import { commentDeepLink } from '../comments/deepLink'
@@ -1084,6 +1085,74 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     }, 220)
   }, [activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
 
+  // ── Keyboard on the canvas (R-32 item 4) ───────────────────────────────────
+  // Tab walks the roles in reading order, Enter or Space opens one (or finishes a connection), F2 edits it, and
+  // the arrows follow the reporting lines (keyboardNav.ts). A role that is off screen is panned into view.
+
+  const reportingIndex = useMemo(() => buildReportingIndex(nodes, edges), [nodes, edges])
+  // A role we asked to focus that is off screen is drawn by the render after the pan; the effect then focuses it.
+  const pendingFocus = useRef<string | null>(null)
+
+  // preventScroll: the container is overflow:hidden but a browser would still scroll it to the focused element.
+  const focusRole = useCallback((nodeId: string) => {
+    containerRef.current?.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(nodeId)}"]`)?.focus({ preventScroll: true })
+  }, [])
+
+  /** Bring a role on screen. Returns true when the canvas had to pan (so it is not drawn where it will be yet). */
+  const revealNode = useCallback((nodeId: string): boolean => {
+    const n = nodesRef.current.find(x => x.id === nodeId)
+    const next = n && panToReveal(n, transform, vpSize)
+    if (next) setTransform(next)
+    return !!next
+  }, [nodesRef, transform, vpSize, setTransform])
+
+  useEffect(() => {
+    if (!pendingFocus.current) return
+    focusRole(pendingFocus.current)
+    pendingFocus.current = null
+  }, [transform, focusRole])
+
+  const connectTo = useCallback((nodeId: string): boolean => {
+    if (activeTool !== 'connect' && !connectingFrom) return false
+    if (!connectingFrom) {
+      setConnectingFrom(nodeId)
+    } else if (connectingFrom !== nodeId) {
+      const line = addEdge(connectingFrom, nodeId)
+      if (line) saveNewLine(chartId, line)
+      setConnectingFrom(null)
+      setActiveTool('select')
+    }
+    return true
+  }, [activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setActiveTool])
+
+  const handleNodeKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>, nodeId: string) => {
+    if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      if (connectTo(nodeId)) return
+      setSelectedId(nodeId) // opens the role's panel (unlike a click, a key press never toggles it shut)
+      setSelectedEdgeId(null)
+    } else if (e.key === 'F2' && !readOnly) {
+      e.preventDefault()
+      setSelectedId(null)
+      setEditingNodeId(nodeId)
+    } else if (isNavKey(e.key)) {
+      const to = navTarget(reportingIndex, nodeId, e.key)
+      e.preventDefault()
+      if (!to) return
+      if (revealNode(to)) pendingFocus.current = to
+      else focusRole(to)
+    }
+  }, [connectTo, readOnly, reportingIndex, revealNode, focusRole, setSelectedId, setSelectedEdgeId])
+
+  // Tabbing to an off-screen role brings it into view; clicking one with the mouse does not move the canvas.
+  const handleNodeFocus = useCallback((e: React.FocusEvent<HTMLDivElement>, nodeId: string) => {
+    if (e.target !== e.currentTarget) return
+    let byKeyboard = true
+    try { byKeyboard = e.currentTarget.matches(':focus-visible') } catch { /* an old engine: treat as keyboard */ }
+    if (byKeyboard) revealNode(nodeId)
+  }, [revealNode])
+
   const handleNodeDoubleClick = useCallback((e: React.MouseEvent, nodeId: string) => {
     if (interactionRef.current.hasMoved || readOnly) return
     e.stopPropagation()
@@ -1221,6 +1290,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Exports render everything, because they capture the whole chart rather than the screen.
   const virtualize = !exportOverflow && shouldVirtualize(nodes.length)
   const chips = virtualize && shouldUseChips(nodes.length, transform.scale)
+  // Tab order = DOM order, so draw in reading order. Big charts keep their own order (re-sorting 1,000 roles on every drag frame is not free).
+  const drawOrder = useMemo(() => (nodes.length > 300 ? nodes : readingOrder(nodes)), [nodes])
   const view = useMemo(() => (virtualize ? viewRect(transform, vpSize) : null), [virtualize, transform, vpSize])
   const visibleIds = useMemo(() => (view ? visibleNodeIds(nodes, view) : null), [view, nodes])
 
@@ -1233,6 +1304,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         touchAction: 'none', // the canvas handles pan and pinch itself; the page must not scroll or zoom under it
         cursor: activeTool === 'pan' ? 'grab' : activeTool === 'zoom' ? 'zoom-in' : connectingFrom ? 'crosshair' : 'default',
       }}
+      role="group"
+      aria-label="Org chart. Tab moves between roles, Enter opens one, arrow keys follow reporting lines, F2 edits."
       onPointerDownCapture={handlePointerDownCapture}
       onPointerMoveCapture={handlePointerMoveCapture}
       onPointerUpCapture={handlePointerEndCapture}
@@ -1308,7 +1381,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           willChange: 'transform',
         }}
       >
-        {nodes.map(node => {
+        {drawOrder.map(node => {
           // Off-screen roles are skipped on big charts; the one being selected or connected always stays.
           if (visibleIds && !visibleIds.has(node.id) && node.id !== selectedId && node.id !== connectingFrom) return null
           const state = {
@@ -1322,6 +1395,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
             ? <NodeChip key={node.id} {...state} colour={deptColourMap[node.departmentId] ?? '#94A3B8'}
                 onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick} />
             : <NodeCard key={node.id} {...state} departments={wsDepts} commentCount={commentCounts?.[node.id] ?? 0}
+                ariaLabel={roleAriaLabel(node, reportingIndex, id => nodeMap[id]?.name ?? '')}
+                onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => handleNodeKeyDown(e, node.id)}
+                onFocus={(e: React.FocusEvent<HTMLDivElement>) => handleNodeFocus(e, node.id)}
                 onPointerDown={(e: React.PointerEvent) => handleNodePointerDown(e, node.id)}
                 onClick={(e: React.MouseEvent) => handleNodeClick(e, node.id)}
                 onDoubleClick={(e: React.MouseEvent) => handleNodeDoubleClick(e, node.id)} />
