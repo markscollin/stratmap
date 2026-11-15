@@ -36,7 +36,7 @@ export function useDialog<T extends HTMLElement>(options: UseDialogOptions): { r
   const { active = true, modal = true } = options
   const ref = useRef<T | null>(null)
   const onCloseRef = useRef(options.onClose)
-  onCloseRef.current = options.onClose
+  useEffect(() => { onCloseRef.current = options.onClose })
 
   useEffect(() => {
     const panel = ref.current

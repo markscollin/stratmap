@@ -99,16 +99,16 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
 
   // A slide-out beside the canvas, so not modal (people keep using the canvas): focus moves in when a role opens, Escape closes it
   // while focus is inside, and focus goes back to where it was (R-32). Off-screen it is `inert`, so Tab cannot reach its buttons.
-  const dialog = useDialog<HTMLDivElement>({ active: !!node, onClose, modal: false })
+  const { ref: dialogRef, tabIndex: dialogTabIndex } = useDialog<HTMLDivElement>({ active: !!node, onClose, modal: false })
 
   return (
     <div
-      ref={dialog.ref}
-      tabIndex={dialog.tabIndex}
+      ref={dialogRef}
+      tabIndex={dialogTabIndex}
       role="dialog"
       aria-label={node ? `Job description: ${node.title}` : 'Job description'}
       aria-hidden={node ? undefined : true}
-      {...(node ? {} : { inert: '' } as object)}
+      inert={!node}
       onPointerDown={e => e.stopPropagation()}
       onClick={e => e.stopPropagation()}
       style={{

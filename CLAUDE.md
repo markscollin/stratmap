@@ -49,7 +49,7 @@ content reviewed by a lawyer.
 
 **e2e (roadmap 3.3, 2026-11-06):** `npm run test:e2e` runs Playwright against `scripts/e2e-server.mjs`
 (Vite in dev-bypass mode plus every `api/**/*.ts` mounted; no Clerk/Stripe/AI/email keys). It uses
-`E2E_DATABASE_URL`, else `DATABASE_URL`.
+`E2E_DATABASE_URL` only; **`DATABASE_URL` is never used and the server listens on 127.0.0.1 only (R-28, `scripts/e2e-guard.mjs`)**. `npm run test:e2e` IS the emulator run now (`test:e2e:local` is the same; `test:e2e:remote` is plain `playwright test` and needs an explicit throwaway `E2E_DATABASE_URL`).
 - **Preferred: no database account at all.** `npm run test:e2e:local` (optionally `-- tests/e2e/x.spec.ts`) starts `scripts/neon-http-emulator.mjs`, a PGlite (in-process Postgres) server that speaks Neon's
   HTTP protocol with the real migrations applied, points the app and the test helpers at it (`NEON_HTTP_ENDPOINT`, ignored on production deploys) and removes `DATABASE_URL` from the child's environment so a real database
   can never be reached. **CI does the same**, so the `e2e` job needs **no secret** and never touches a shared database. The emulator is proved against the real Neon driver and the app's Drizzle code by
@@ -61,7 +61,7 @@ content reviewed by a lawyer.
   preview/production like the rest of the bypass.
 - Invite mail is appended to `E2E_EMAIL_OUTBOX` (JSON lines) when `RESEND_API_KEY` is unset. Tests use
   `testUser()` (unique per run) and `global-teardown.ts` deletes the run's workspaces.
-- CI job `e2e` runs against the local emulator (no secret; it used to need `E2E_DATABASE_URL`, whose password Neon started rejecting on 2026-11-07). Not covered: Clerk sign-up UI, Stripe checkout.
+- CI job `e2e` runs `npm run test:e2e`, i.e. the local emulator (no secret; it used to need `E2E_DATABASE_URL`, whose password Neon started rejecting on 2026-11-07). Not covered: Clerk sign-up UI, Stripe checkout.
 - **The emulator is a test tool, not a database server:** one connection, requests run one at a time, no authentication, 127.0.0.1 only, in-memory. It returns values as raw Postgres text exactly like Neon, so keep new SQL ordinary Postgres; if a query behaves differently on real Neon, add a case to `neon-emulator.test.ts`.
 
 **Done:** Stripe webhook idempotency (`stripe_events`), shipped with the billing life-cycle (see below).
@@ -76,6 +76,15 @@ and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is h
 - **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
 - Real test counts (2026-11-14): **799 frontend (+2 skipped launch-gate) + 804 API**, 102 e2e, after R-01 to R-14, R-16 to R-21, R-38 (726 + 733 + 85 at the end of 2026-11-13; 614 + 638 + 74 at the review). The counts elsewhere in this file are older. Typecheck clean, lint 0 errors (15 warnings), build OK.
+
+### Daily maintenance, share fields, references, bundle, CSP, a11y (P2 band, 2026-11-15)
+- **`GET /api/cron/daily-maintenance`** (Vercel cron 03:41 UTC, `CRON_SECRET` like the purge; auth in `api/_lib/cron.ts`): (R-22) re-reads up to 100 workspaces' Stripe subscriptions through `syncSubscription`, oldest-synced first, and reports each correction to Sentry as a probable missed webhook (`api/_lib/reconcile.ts`); (R-27) `pruneRateLimits` deletes limiter rows whose window ended over an hour ago (`rate_limits.window_seconds`, migration 0014; a limiter failure is still fail-open but sampled to Sentry); (R-40) `sendTrialNotices` emails owners/admins 3 days before and after a trial ends, once each (`workspaces.trial_warned_at` / `trial_ended_notice_at`, cleared by `grant-trial`). One step failing never stops the others. The webhook also handles `charge.refunded` and `charge.dispute.created`: Sentry plus an email to the optional `BILLING_ALERT_EMAIL`, never an automatic action (`api/_lib/billingAlerts.ts`). Tests: `daily-maintenance.test.ts`.
+- **Share API fields (R-26, D-5):** `api/_lib/sharedFields.ts` (`SHARED_NODE_FIELDS`, `publicNode`); `share-fields.test.ts` fails if a `nodes` column is in neither the shared nor the private list. **Add a column to `nodes` and you must decide there.**
+- **One workspace serializer (R-29):** `api/_lib/publicWorkspace.ts` for GET, POST and PUT `/api/workspace`; never return a raw `workspaces` row.
+- **Reference ids (R-30):** `api/_lib/references.ts` (`checkRoleReferences`, `checkHeadcountReferences`, 400 `invalid-reference`); on an edit an unchanged value is not re-checked. A new route that takes a department, manager or chart id from the body must use it. Snapshot restore re-keys roles/lines/departments whose id another chart has taken (`freeSquattedIds`, R-31).
+- **Bundle (R-24):** every page is a lazy route in `src/App.tsx`; TipTap, `html-to-image`, jsPDF, `NodeModal`, `HistoryPanel`, `ImportDialog` load on demand. Entry 354 kB / 109 kB gzip (was 1,548 / 469). **New page = `page(() => import(...), 'Name')` in `App.tsx` and an entry in `KNOWN_ROUTES`; do not import a page statically.** Do not import jspdf or html-to-image at the top of a module.
+- **CSP (R-23, code part):** both policies in `vercel.json` carry `report-uri /api/csp-report` (`api/csp-report.ts`, logs `[csp]` lines with URLs cut to origin + first path segment). Still to do after the domain exists: add the production Clerk host, watch a week, enforce (`docs/CSP.md`).
+- **Accessibility (R-32 items 1 to 3):** modals use `Dialog` (`src/components/ui/Dialog.tsx`, `useDialog.ts`): focus trap, Escape (top-most only), focus restore, labelled. A side panel uses `useDialog({ modal: false })`. New overlay = `Dialog`, not a hand-made `position: fixed` div. Every icon-only button needs `aria-label`: `src/test/iconButtonNames.test.ts` (source scan) and `accessibleNames.test.tsx` (rendered) fail otherwise, and form fields need a real label (`htmlFor`/`useId`). `--muted` and `--dim` are at least 4.5:1 on bg, surface and raised in both themes (`src/styles/__tests__/contrast.test.ts`); do not use a lighter or darker grey for text. **Item 4 (keyboard on the canvas) is open.**
 
 ### Canvas persistence (R-01 + R-03, 2026-11-13)
 - **Every canvas write goes through `src/features/canvas/canvasSync.ts`** (`saveNewRole`, `saveRoleEdit`, `saveRoleDelete`, `saveNewLine`, `saveLineDelete`, `savePositions`, all built on `saveChange`). Do not call `api.*` for chart content from `OrgChart.tsx`.
@@ -628,7 +637,7 @@ src/
 - `src/store/billingStore.ts` — plan tier + usage + AI draft limits
 - `src/hooks/usePlanLimits.ts` — feature gates + upgrade detection
 - `src/pages/Dashboard.tsx` — dashboard with API-backed role type breakdown
-- `src/pages/SharePage.tsx` — public share view; detects short codes vs legacy URL tokens
+- `src/pages/SharePage.tsx` — public share view; short codes only (`isShareCode`), old URL-token links are refused (R-25)
 - `api/charts/[id]/share.ts` — POST (create link), DELETE (revoke)
 - `api/share/[code].ts` — GET (public, no auth) returns chart snapshot
 - `src/pages/PricingPage.tsx` — pricing cards + FAQ
@@ -643,7 +652,7 @@ src/
 1. ~~**JD store API sync**~~ ✅ Done (2026-05-20)
 2. ~~**Template store API sync**~~ ✅ Done (2026-05-20)
 3. **Sprint 6 end-to-end verification** — verify Anthropic billing, add `ANTHROPIC_API_KEY` (server-side) to Vercel env, test AI drafting in production
-4. ~~**Share Link (basic)**~~ ✅ Done (2026-05-20) — URL-encoded snapshot via `src/utils/shareLink.ts` + `/share/:token` route + `SharePage.tsx`
+4. ~~**Share Link (basic)**~~ ✅ Done (2026-05-20) — superseded by server-side short codes; the URL-token decoder (`src/utils/shareLink.ts`) was deleted in R-25
 5. **Stripe webhooks** — handle payment completion + automatic plan upgrade [Phase 1 launch gate]
 6. ~~**Filter tool**~~ ✅ Done (2026-05-20) — dept/status/role-type filter panel with opacity dimming on canvas
 7. ~~**Salary band**~~ ✅ Done (2026-05-20) — editable min/max/currency inputs for admin/owner in JDPanel OverviewTab; locked for others
@@ -864,6 +873,6 @@ Font: **DM Sans** (400–800 weight) + **JetBrains Mono** (code)
 - **Auth in dev** — `CLERK_SECRET_KEY` in `.env.local` enables real Clerk auth. Without it, API requests fall back to the `u-dev`/`ws-dev` identity **only if `ALLOW_DEV_BYPASS=1` is also set** (R-16); otherwise they are 401.
 - **Sprint 6 AI drafting** — Runs server-side via `api/ai/draft.ts` (plan-gated, streams). Add `ANTHROPIC_API_KEY=sk-ant-...` (server-side, no `VITE_` prefix) to `.env.local`/Vercel after verifying billing balance at console.anthropic.com
 - **Schema changes** — Edit `src/lib/db/schema.ts`, run `npm run db:generate`, and commit the SQL. Production deploys apply it. `npm run db:migrate` applies it to a dev DB.
-- **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth). `SharePage` handles both 10-char short codes and legacy URL tokens.
+- **Share links** — `isPublic` on charts controls the toggle; `shared_links` table stores the short code. `api/share/[code].ts` is public (no auth) and sends role fields from the allow-list in `api/_lib/sharedFields.ts` only; unknown, private, revoked and expired links all answer the same 404 (R-26). `SharePage` takes short codes only; the old URL-token links are dead (R-25).
 - **Salary band** — Stored on `job_descriptions` table (`salary_band_min`, `salary_band_max`, `salary_currency`). Visible/editable only to `admin`/`owner` permission in JDPanel OverviewTab. Locked placeholder shown to others.
 - **PGlite test schema** — Built from the real migrations in `drizzle/` (`setupSchema()` runs the drizzle migrator). Nothing to keep in sync by hand; `api/__tests__/migrations.test.ts` fails if `schema.ts` has changes with no migration.
