@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import * as Sentry from '@sentry/react'
-import { initMonitoring } from './lib/monitoring'
+import { startCrashReporting } from './lib/crashReporting'
+import { CrashBoundary } from './components/CrashBoundary'
 import './styles/globals.css'
 import App from './App.tsx'
 import { useUserStore } from './store/userStore'
@@ -9,8 +9,9 @@ import { useBillingStore, PLAN_BY_TIER } from './store/billingStore'
 import type { Permission } from './types/user'
 import type { PlanTier } from './types'
 
-// Error monitoring — no-op unless VITE_SENTRY_DSN is configured (see lib/monitoring.ts for what is sent).
-initMonitoring()
+// Error monitoring — no-op unless VITE_SENTRY_DSN is configured. Sentry itself loads on demand (lib/crashReporting.ts);
+// lib/monitoring.ts says what is sent.
+startCrashReporting()
 
 if (import.meta.env.DEV) {
   (window as Window & { __devTools?: unknown }).__devTools = {
@@ -41,8 +42,8 @@ const crashFallback = (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Sentry.ErrorBoundary fallback={crashFallback}>
+    <CrashBoundary fallback={crashFallback}>
       <App />
-    </Sentry.ErrorBoundary>
+    </CrashBoundary>
   </StrictMode>,
 )

@@ -7,7 +7,7 @@ vi.mock('../../lib/apiClient', () => {
   class ApiError extends Error {
     status: number
     body: Record<string, unknown>
-    constructor(message: string, status = 500, body: Record<string, unknown> = {}) { super(message); this.status = status; this.body = body }
+    constructor(status: number, body: Record<string, unknown>) { super(typeof body.error === 'string' ? body.error : `API error ${status}`); this.status = status; this.body = body }
     get userMessage() { return this.message }
   }
   return { ApiError, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }
@@ -45,7 +45,7 @@ describe('renaming the workspace', () => {
   })
 
   it('a refused rename (403) toasts the reason and keeps the old name', async () => {
-    vi.mocked(api.put).mockRejectedValue(new ApiError('Forbidden', 403))
+    vi.mocked(api.put).mockRejectedValue(new ApiError(403, { error: 'Forbidden' }))
     rename('New name')
     await waitFor(() => expect(toasts()).toEqual(["error: You don't have permission to rename the workspace."]))
     expect(useUserStore.getState().workspace?.name).toBe('Old name')
