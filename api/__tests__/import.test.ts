@@ -1,7 +1,7 @@
 // Roadmap 2.1: POST /api/charts/:id/import adds people from a spreadsheet import to
 // an existing chart. Importing into a NEW chart reuses POST /api/charts (also covered
 // here for large imports).
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../src/lib/db/index', async () => {
   const { testDb } = await import('./helpers/db')
@@ -16,7 +16,7 @@ import importHandler from '../charts/[id]/import'
 import chartsHandler from '../charts/index'
 import {
   setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, seedMember, testDb,
-  TEST_USER_ID, TEST_WS_ID, TEST_CHART_ID,
+  TEST_USER_ID, TEST_WS_ID, TEST_CHART_ID, TEST_NODE_ID,
 } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes, type MockRes } from './helpers/res'
@@ -184,4 +184,47 @@ describe('importing into a new chart (POST /api/charts) at scale', () => {
     expect(await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, chartId))).toHaveLength(N)
     expect(await testDb.select().from(schema.edges).where(eq(schema.edges.chartId, chartId))).toHaveLength(N - 1)
   }, 60_000)
+})
+
+// R-44: the limit is checked, then the roles are inserted. A role added in between (another request) must not let an import overshoot.
+describe('an import racing another add (R-44)', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  /** Makes the first insert of roles also insert `extra` roles first, as a request that slipped in after the limit check. */
+  function raceWith(extra: number) {
+    const realInsert = testDb.insert.bind(testDb)
+    let raced = false
+    vi.spyOn(testDb, 'insert').mockImplementation(((table: unknown) => {
+      if (table === schema.nodes && !raced) {
+        raced = true
+        return { values: async (rows: never) => {
+          await realInsert(schema.nodes).values(Array.from({ length: extra }, (_, i) => ({ id: `rival-${i}`, chartId: TEST_CHART_ID, name: `Rival ${i}`, title: 'x', x: 0, y: 0 })))
+          return realInsert(table as never).values(rows)
+        } }
+      }
+      return realInsert(table as never)
+    }) as never)
+  }
+
+  it('over the limit by the race: 402, only the existing role and the rival remain, no edges or departments left behind', async () => {
+    raceWith(6) // 1 existing + 6 rivals + 24 imported = 31 > 30
+    const res = await doImport({
+      departments: [{ id: 'd0', name: 'New dept', colour: '#0EA5E9' }],
+      nodes: Array.from({ length: 24 }, (_, i) => node(`i${i}`, { departmentId: 'd0' })),
+      edges: [{ sourceId: 'i0', targetId: 'i1' }],
+    })
+    expect(res._status).toBe(402)
+    expect(res._body).toMatchObject({ error: 'plan-limit', limit: 'nodes', max: 30 })
+    const left = await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))
+    expect(left.map(n => n.id).sort()).toEqual([TEST_NODE_ID, ...Array.from({ length: 6 }, (_, i) => `rival-${i}`)].sort())
+    expect(await testDb.select().from(schema.edges).where(eq(schema.edges.chartId, TEST_CHART_ID))).toHaveLength(0)
+    expect(await testDb.select().from(schema.departments).where(eq(schema.departments.chartId, TEST_CHART_ID))).toHaveLength(0)
+  })
+
+  it('an import that fits after the race still succeeds', async () => {
+    raceWith(2) // 1 + 2 + 20 = 23 <= 30
+    const res = await doImport({ nodes: Array.from({ length: 20 }, (_, i) => node(`i${i}`)) })
+    expect(res._status).toBe(201)
+    expect(await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))).toHaveLength(23)
+  })
 })

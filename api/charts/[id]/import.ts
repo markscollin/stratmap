@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and, count } from 'drizzle-orm'
+import { eq, and, count, inArray } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
@@ -97,6 +97,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
     for (const part of chunk(newEdges)) await db.insert(edges).values(part)
+
+    // The count above and the inserts are separate statements, so an import racing another add can overshoot the limit (R-44).
+    // Count again now that the roles are in; if the chart is over, take this import back out (nothing else of ours is in the chart)
+    // and refuse it, as the add-role route does (R-33). Racing requests at the edge may all be refused; Retry then succeeds.
+    const [{ value: after }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chartId))
+    const sampleFull = chart.isSample && after > MAX_SAMPLE_NODES
+    if (sampleFull || !fitsLimit(plan.limits.maxNodesPerChart, after, 0)) {
+      const newIds = newNodes.map(n => n.id)
+      for (const part of chunk(newIds)) await db.delete(nodes).where(and(eq(nodes.chartId, chartId), inArray(nodes.id, part)))
+      for (const part of chunk(newEdges.map(e => e.id))) await db.delete(edges).where(and(eq(edges.chartId, chartId), inArray(edges.id, part)))
+      if (newDepts.length) await db.delete(departments).where(and(eq(departments.chartId, chartId), inArray(departments.id, newDepts.map(d => d.id as string))))
+      if (sampleFull) return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+      return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+    }
 
     if (!chart.isSample && nodeCount < 10 && nodeCount + newNodes.length >= 10) {
       await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier, via: 'import' } })
