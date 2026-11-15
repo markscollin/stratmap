@@ -595,11 +595,10 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 - `CLAUDE.md` counts: refreshed in the closing step of this session.
 
 ### R-35 Split `OrgChart.tsx` and centralise persistence
-- [ ] Open
-
-`src/features/canvas/OrgChart.tsx` is 1,483 lines holding the toolbar, share panel, pointer handling and all
-persistence. After R-01 moves persistence out, split the rest: toolbar, share settings, keyboard shortcuts and
-pointer/gesture handling into their own files. No behaviour change; the existing tests and e2e are the guard.
+- [x] Done 2026-11-15 (persistence was centralised earlier, in R-01 `canvasSync.ts`). `OrgChart.tsx` **1,561 → 788 lines**, no behaviour change: the moved code was compared with the original and is byte-identical apart from `export`, and every test and e2e case that covered it is unchanged and green.
+- New files in `src/features/canvas/`: `canvasTypes.ts` (Transform, ActiveFilters, ActiveTool, `toScreen`, `hexToRgba`), `EdgeLayers.tsx` (EdgeLine, EdgePath, ConnectingLine), `Minimap.tsx`, `Toolbar.tsx`, `ToolBtn.tsx` (shared by the toolbar and the filter button, so neither imports the other), `ExportMenu.tsx`, `ShareSettings.tsx`, `FilterPanel.tsx`, `ZoomControls.tsx`, and the hook `useRoleKeyboard.ts` (Tab, Enter, F2 and the arrow keys from R-32 item 4).
+- **Not split, on purpose:** the pointer and gesture handling (drag, pan, pinch, connect) and the global shortcut effect stay in `OrgChart.tsx`. They share one `interactionRef` and a dozen setters, so a hook would take twenty parameters and move the complexity rather than remove it. If this is revisited, introduce a small interaction reducer first, then move it.
+- **New rule:** a new toolbar button or canvas overlay is its own file next to these, not another function in `OrgChart.tsx`.
 
 ### R-36 Dependency audit triage
 - [x] Done 2026-11-15. **`npm audit --omit=dev`: 62 advisories (1 critical, 17 high) → 0.** Tests: `src/lib/__tests__/dependencies.test.ts`.
