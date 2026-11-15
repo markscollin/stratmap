@@ -9,6 +9,7 @@ import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
 import { SalaryBandEditor, type SalaryBandChange } from './SalaryBandEditor'
+import { useDialog } from '../../components/ui/useDialog'
 import { AIJDDraft } from '../jd/AIJDDraft'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
 import { LockedFeatureCard, PlanBadge, FeatureUpgradeModal } from '../../components/ui/FeatureLock'
@@ -96,8 +97,18 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
 
   const currentContent = jd && tab === 'responsibilities' ? jd.responsibilities : jd?.requirements ?? ''
 
+  // A slide-out beside the canvas, so not modal (people keep using the canvas): focus moves in when a role opens, Escape closes it
+  // while focus is inside, and focus goes back to where it was (R-32). Off-screen it is `inert`, so Tab cannot reach its buttons.
+  const dialog = useDialog<HTMLDivElement>({ active: !!node, onClose, modal: false })
+
   return (
     <div
+      ref={dialog.ref}
+      tabIndex={dialog.tabIndex}
+      role="dialog"
+      aria-label={node ? `Job description: ${node.title}` : 'Job description'}
+      aria-hidden={node ? undefined : true}
+      {...(node ? {} : { inert: '' } as object)}
       onPointerDown={e => e.stopPropagation()}
       onClick={e => e.stopPropagation()}
       style={{
@@ -110,6 +121,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
         transition: 'transform .25s cubic-bezier(.4,0,.2,1)',
         zIndex: 30,
         boxShadow: isVisible ? 'var(--shadow)' : 'none',
+        outline: 'none',
       }}>
       {node && (
         <>
@@ -364,7 +376,7 @@ function TemplatePicker({ templates, onApply, onClose }: {
             fontFamily: 'inherit',
           }}
         />
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex', padding: 0 }}>
+        <button aria-label="Close template list" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex', padding: 0 }}>
           <X size={12} />
         </button>
       </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, Network, LayoutDashboard, GitBranch, Users, BarChart2, Settings } from 'lucide-react'
 import { useChartStore } from '../../store'
 import { useUIStore } from '../../store/uiStore'
+import { Dialog } from './Dialog'
 
 interface Result {
   id: string
@@ -44,7 +45,6 @@ export function Spotlight() {
         e.preventDefault()
         setSpotlightOpen(true)
       }
-      if (e.key === 'Escape') setSpotlightOpen(false)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -169,23 +169,19 @@ export function Spotlight() {
   }
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '14vh' }}
-      onClick={() => setSpotlightOpen(false)}
+    <Dialog
+      label="Search"
+      onClose={() => setSpotlightOpen(false)}
+      zIndex={500}
+      align="top"
+      panelStyle={{ width: 560, borderRadius: 16, overflow: 'hidden', animation: 'nodePop .18s cubic-bezier(.34,1.56,.64,1)' }}
     >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: 560, background: 'var(--surface)', borderRadius: 16,
-          border: '1px solid var(--border-hover)', boxShadow: 'var(--shadow)',
-          overflow: 'hidden', animation: 'nodePop .18s cubic-bezier(.34,1.56,.64,1)',
-        }}
-      >
         {/* Search input */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
           <Search size={16} color="var(--muted)" />
           <input
             ref={inputRef}
+            aria-label="Search people, charts and pages"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -222,7 +218,6 @@ export function Spotlight() {
             </div>
           ))}
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }

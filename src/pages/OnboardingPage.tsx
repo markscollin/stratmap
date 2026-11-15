@@ -355,7 +355,7 @@ function Step2({
             ))}
           </select>
           {invites.length > 1 && (
-            <button
+            <button aria-label="Remove this invitation"
               onClick={() => removeInviteRow(idx)}
               style={{
                 width: 28, height: 28, borderRadius: 6, flexShrink: 0,

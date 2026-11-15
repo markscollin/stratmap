@@ -436,7 +436,7 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>Manage departments</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><X size={16} /></button>
+          <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><X size={16} /></button>
         </div>
 
         {/* Existing departments */}
@@ -467,7 +467,7 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
                   <span style={{ width: 12, height: 12, borderRadius: '50%', background: d.colour, flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--text)' }}>{d.name}</span>
                   <button onClick={() => startEdit(d)} style={{ padding: '3px 8px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><Pencil size={10} /> Edit</button>
-                  <button onClick={() => remove(d.id)} style={{ padding: '3px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}
+                  <button aria-label={`Delete ${d.name}`} onClick={() => remove(d.id)} style={{ padding: '3px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}
                     onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)' }}
                     onMouseLeave={e => { e.currentTarget.style.color = 'var(--dim)' }}
                   ><Trash2 size={13} /></button>
@@ -769,9 +769,9 @@ export function HeadcountView() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         {/* Year picker */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          <button onClick={() => setYear(y => y - 1)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><ChevronLeft size={14} /></button>
+          <button aria-label="Previous year" onClick={() => setYear(y => y - 1)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><ChevronLeft size={14} /></button>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', padding: '6px 8px', minWidth: 48, textAlign: 'center' }}>{year}</span>
-          <button onClick={() => setYear(y => y + 1)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><ChevronRight size={14} /></button>
+          <button aria-label="Next year" onClick={() => setYear(y => y + 1)} style={{ padding: '6px 10px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><ChevronRight size={14} /></button>
         </div>
 
         <ChartFilter value={chartFilter} onChange={setChartFilter} />

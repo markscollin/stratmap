@@ -1,18 +1,25 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId, createContext, useContext } from 'react'
 import { X, ChevronDown, MapPin, Plus, Check } from 'lucide-react'
 import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus, RoleType } from '../../types'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
+import { Dialog } from '../../components/ui/Dialog'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+// A field's label is tied to its input (by id), so a screen reader announces "Job title" and clicking the label focuses the input (R-32).
+const FieldId = createContext<string | undefined>(undefined)
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId()
   return (
+    <FieldId.Provider value={id}>
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 7, textTransform: 'uppercase', letterSpacing: '.4px' }}>
+      <label htmlFor={id} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 7, textTransform: 'uppercase', letterSpacing: '.4px' }}>
         {label}
       </label>
       {children}
     </div>
+    </FieldId.Provider>
   )
 }
 
@@ -21,8 +28,10 @@ function TextInput({ value, onChange, placeholder, autoFocus, hasError }: {
   placeholder?: string; autoFocus?: boolean; hasError?: boolean
 }) {
   const [focused, setFocused] = useState(false)
+  const id = useContext(FieldId)
   return (
     <input
+      id={id}
       autoFocus={autoFocus}
       value={value}
       onChange={e => onChange(e.target.value)}
@@ -250,9 +259,9 @@ function ReportsToSelect({ nodes, value, onChange }: {
   )
 }
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <button type="button" onClick={() => onChange(!value)} style={{
+    <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={() => onChange(!value)} style={{
       width: 42, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
       background: value ? 'var(--brand)' : 'var(--raised)',
       position: 'relative', transition: 'background .2s', flexShrink: 0,
@@ -406,29 +415,17 @@ export function NodeModal({
   const reportingOptions = allNodes.filter(n => n.id !== node?.id)
 
   return (
-    <div
-      data-canvas-overlay
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}
+    <Dialog
+      label={mode === 'add' ? 'Add node' : 'Edit role'}
+      onClose={onClose}
+      panelStyle={{ borderRadius: 20, padding: '28px 28px 24px', width: 480, maxHeight: '90vh', overflowY: 'auto' }}
     >
-      <div
-        onClick={e => e.stopPropagation()}
-        onWheel={e => e.stopPropagation()}
-        style={{
-          background: 'var(--surface)', borderRadius: 20,
-          border: '1px solid var(--border-hover)',
-          padding: '28px 28px 24px',
-          width: 480, maxHeight: '90vh', overflowY: 'auto',
-          boxShadow: 'var(--shadow)',
-          animation: 'nodePop .22s cubic-bezier(.34,1.56,.64,1)',
-        }}
-      >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
           <h2 style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.3px' }}>
             {mode === 'add' ? 'Add node' : 'Edit role'}
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}>
+          <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}>
             <X size={18} />
           </button>
         </div>
@@ -479,6 +476,7 @@ export function NodeModal({
           <div style={{ position: 'relative' }}>
             <MapPin size={13} color="var(--dim)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input
+              aria-label="Location"
               value={location}
               onChange={e => setLocation(e.target.value)}
               placeholder="e.g. London, Remote"
@@ -497,7 +495,7 @@ export function NodeModal({
             <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>New role</p>
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>Shows ★ NEW badge on the node card</p>
           </div>
-          <Toggle value={isNew} onChange={setIsNew} />
+          <Toggle value={isNew} onChange={setIsNew} label="New role" />
         </div>
 
         {/* Actions */}
@@ -553,7 +551,6 @@ export function NodeModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }

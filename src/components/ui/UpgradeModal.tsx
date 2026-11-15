@@ -1,5 +1,6 @@
 import { X, Zap, Lock } from 'lucide-react'
 import type { PlanTier } from '../../types'
+import { Dialog } from './Dialog'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -38,25 +39,15 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, description,
   const Icon = tierInfo.icon
 
   return (
-    <div
-      data-canvas-overlay
-      style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}
+    <Dialog
+      label={`Unlock ${feature}`}
+      onClose={onClose}
+      zIndex={400}
+      panelStyle={{ position: 'relative', borderRadius: 16, padding: '32px 28px', width: 460 }}
     >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--surface)',
-          borderRadius: 16,
-          border: '1px solid var(--border-hover)',
-          padding: '32px 28px',
-          width: 460,
-          boxShadow: 'var(--shadow)',
-          animation: 'nodePop .22s cubic-bezier(.34,1.56,.64,1)',
-        }}
-      >
         {/* Close button */}
         <button
+          aria-label="Close"
           onClick={onClose}
           style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}
         >
@@ -146,6 +137,7 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, description,
 
         {/* Upgrade button */}
         <button
+          data-autofocus
           onClick={() => {
             onClose()
             onUpgrade?.()
@@ -189,7 +181,6 @@ export function UpgradeModal({ isOpen, onClose, onUpgrade, feature, description,
         >
           Maybe later
         </button>
-      </div>
-    </div>
+    </Dialog>
   )
 }

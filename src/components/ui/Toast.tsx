@@ -33,7 +33,7 @@ export function ToastStack() {
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.dot, flexShrink: 0 }} />
             {toast.message}
-            <button onClick={() => removeToast(toast.id)} style={{
+            <button aria-label="Dismiss notification" onClick={() => removeToast(toast.id)} style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
               color: 'var(--dim)', display: 'flex', padding: 0, marginLeft: 2,
             }}>

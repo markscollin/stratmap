@@ -80,7 +80,7 @@ function TemplateModal({ mode, template, onSave, onClose }: {
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
             {mode === 'create' ? 'New template' : 'Edit template'}
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}>
+          <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}>
             <X size={16} />
           </button>
         </div>
@@ -220,7 +220,7 @@ function CardMenu({ onEdit, onDuplicate, onDelete }: {
 
   return (
     <div style={{ position: 'relative' }}>
-      <button
+      <button aria-label="Template actions"
         onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
         style={{ padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex', borderRadius: 6 }}
       >
@@ -466,7 +466,7 @@ export function RolesView() {
                 style={{ background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 14, flex: 1, width: '100%' }}
               />
               {searchInput && (
-                <button onClick={() => { setInput(''); setSearch(''); setShowResults(false) }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}>
+                <button aria-label="Clear search" onClick={() => { setInput(''); setSearch(''); setShowResults(false) }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}>
                   <X size={12} />
                 </button>
               )}

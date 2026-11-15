@@ -162,7 +162,7 @@ function ChartCard({ chart, index, onAction, canEdit: _canEdit, canAdmin }: {
             style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}
           >{chart.name}</h3>
           <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-            <button
+            <button aria-label={`Actions for ${chart.name}`} aria-haspopup="menu"
               data-testid="chart-overflow-btn"
               onClick={() => setMenu(!menu)}
               style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${menu ? 'var(--border-hover)' : 'transparent'}`, background: menu ? 'var(--raised)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--muted)' }}
@@ -320,7 +320,7 @@ function NewChartModal({ onClose, onCreate }: {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.3px' }}>New org chart</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
+          <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><X size={18} /></button>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -484,7 +484,7 @@ export function ChartView() {
             style={{ background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 13, flex: 1, width: '100%' }}
           />
           {search && (
-            <button onClick={() => setSearch('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}>
+            <button aria-label="Clear search" onClick={() => setSearch('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)', display: 'flex' }}>
               <X size={12} />
             </button>
           )}

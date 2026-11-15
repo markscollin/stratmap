@@ -227,6 +227,9 @@ function ExportBtn({ onExport }: { onExport: (format: 'png' | 'pdf' | 'csv') => 
     <div style={{ position: 'relative' }}>
       <button
         title="Export"
+        aria-label="Export"
+        aria-haspopup="menu"
+        aria-expanded={open}
         onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
@@ -701,7 +704,7 @@ function ToolBtn({ Icon, label, active, disabled, onClick }: {
 }) {
   const [hov, setHov] = useState(false)
   return (
-    <button onClick={onClick} title={label} disabled={disabled}
+    <button onClick={onClick} title={label} aria-label={label} aria-pressed={active || undefined} disabled={disabled}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
