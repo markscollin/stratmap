@@ -1,0 +1,25 @@
+# Weekly dependency updates (launch review R-36). Security advisories open their own pull requests immediately.
+# Updates are grouped so there is one pull request a week per ecosystem, not forty; CI decides whether each is safe.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      tiptap:
+        patterns: ['@tiptap/*', 'prosemirror-*']
+      clerk:
+        patterns: ['@clerk/*']
+      sentry:
+        patterns: ['@sentry/*']
+      testing:
+        patterns: ['vitest', '@vitest/*', '@testing-library/*', '@playwright/*', 'jsdom']
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

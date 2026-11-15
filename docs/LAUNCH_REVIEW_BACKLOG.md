@@ -602,12 +602,14 @@ persistence. After R-01 moves persistence out, split the rest: toolbar, share se
 pointer/gesture handling into their own files. No behaviour change; the existing tests and e2e are the guard.
 
 ### R-36 Dependency audit triage
-- [ ] Open
-
-`npm audit --omit=dev` reported 62 advisories (1 critical in `tar`, 17 high). The ones inspected sit under
-`@vercel/node`'s build tooling, not in code that serves requests, but the list was **not fully triaged**. Run
-`npm audit fix` (no `--force`), re-run all checks, and list anything left that is reachable at runtime.
-Consider moving `@vercel/node` to `devDependencies` if only its types are used. Add Dependabot or Renovate.
+- [x] Done 2026-11-15. **`npm audit --omit=dev`: 62 advisories (1 critical, 17 high) → 0.** Tests: `src/lib/__tests__/dependencies.test.ts`.
+- **`npm audit fix` itself crashes** here (`Cannot read properties of null (reading 'edgesOut')`, an npm bug triggered by the TipTap peer pins), so the backlog's suggestion could not be followed as written. Done by hand instead:
+  1. **`@vercel/node` moved to devDependencies.** Every import of it in `api/` and `src/` is `import type`; Vercel builds the functions with its own copy. This alone removed the critical `tar` advisory and the other build-tool chains (`undici`, `path-to-regexp`, `@vercel/build-utils`, 40-odd more). A test fails if a runtime import of it ever appears.
+  2. **`npm update`** of the packages that do ship to browsers or run in functions: `react-router`/`react-router-dom` (high: CSRF/open redirect in features this app does not use, but cheap to close), `prosemirror-view` (**high: XSS in paste handling**, used by the JD editor), `dompurify` via jsPDF, `js-cookie` via Clerk, the OpenTelemetry packages under `@sentry/node`, `minimatch`, `brace-expansion`.
+  3. **TipTap 3.23.4 → 3.34.0** (`@tiptap/core` high: prototype-key handling in `mergeAttributes`). npm would not move one package at a time (stale optional peer pins in the lock file), so the `@tiptap/*` lock entries were dropped and re-resolved together; a test requires all `@tiptap/*` versions to match. JD editor tests and e2e pass.
+- **What is left (`npm audit` including dev): 33, all dev-only** (`vite` dev-server advisories, `vitest`, `esbuild` under `drizzle-kit`, and `@vercel/node`'s own tree). None of it is installed in the functions' runtime or in the browser bundle. `vite`/`vitest` major upgrades are not worth the risk before launch; Dependabot will propose them.
+- **Dependabot** (`.github/dependabot.yml`): weekly, grouped (TipTap, Clerk, Sentry, test tools, everything else minor/patch), plus GitHub Actions. Security advisories open their own pull requests. Needs "Dependabot alerts/security updates" switched on in the repo settings (owner action, one click).
+- Also fixed on the way: `tests/e2e/performance.spec.ts` assumed the first card on screen is "Person 0". The server lists roles in storage order, which changes after earlier specs delete rows, so the "only the moved role changed" case failed in full runs (never alone). It now asserts that exactly one role moved.
 
 ### R-37 Server-side JD HTML sanitisation (before any new renderer)
 - [ ] Open

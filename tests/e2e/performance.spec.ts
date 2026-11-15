@@ -89,7 +89,8 @@ test.describe.serial(`${N}-role chart`, () => {
   })
 
   test('the drag was saved: only the moved role changed on the server', async () => {
-    // The bulk UPDATE runs against the real database here. Person 0 was dragged first; the rest must be where they started.
+    // The bulk UPDATE runs against the real database here. One role was dragged; every other one must be where it started.
+    // Which one is not fixed: the server lists roles in storage order, so the first card on screen is not always "Person 0".
     await expect.poll(async () => {
       const chart = await (await page.request.get(`/api/charts/${chartId}`, { headers: { 'X-Dev-User': slug } })).json()
       // The server gives template roles fresh ids, so identify them by name ("Person 12").
@@ -98,7 +99,7 @@ test.describe.serial(`${N}-role chart`, () => {
         return n.x !== (i % 40) * 260 || n.y !== Math.floor(Math.log(i * 4 + 1) / Math.log(5)) * 180 + Math.floor(i / 40) * 40
       })
       return moved.map(n => n.name)
-    }, { timeout: 15_000 }).toEqual(['Person 0'])
+    }, { timeout: 15_000 }).toHaveLength(1)
   })
 
   test('dragging a role stays smooth zoomed in, where only nearby roles are drawn', async () => {
