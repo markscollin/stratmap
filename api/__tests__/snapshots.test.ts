@@ -286,6 +286,31 @@ describe('restoring a version', () => {
     expect({ nodes: await chartNodes(), edges: await chartEdges() }).toEqual(before)
   })
 
+  it('R-31: a role whose id was taken by another chart meanwhile is still restored, under a fresh id, with its lines and manager following', async () => {
+    const v1 = idOf(await save('v1'))
+    const names = async () => (await chartNodes()).map(n => n.name).sort()
+    const before = await names()
+    // Someone else creates a role with the id of one deleted from this chart (ids are shown on share pages).
+    await testDb.delete(schema.edges).where(eq(schema.edges.chartId, TEST_CHART_ID))
+    await testDb.delete(schema.nodes).where(eq(schema.nodes.id, 'n-dev'))
+    await testDb.insert(schema.workspaces).values({ id: 'ws-evil', name: 'Evil', ownerId: 'evil', ownerRole: 'CEO', size: '1-10' })
+    await testDb.insert(schema.charts).values({ id: 'chart-evil', workspaceId: 'ws-evil', name: 'Evil', ownerId: 'evil', creatorId: 'evil', version: 1 })
+    await testDb.insert(schema.nodes).values({ id: 'n-dev', chartId: 'chart-evil', name: 'Squatter', title: 'X', x: 0, y: 0 })
+
+    const res = await restore(v1)
+    expect(res._status).toBe(200)
+    expect(await names()).toEqual(before)
+    const now = await chartNodes()
+    const restored = now.find(n => n.name === 'Cy Dev')!
+    expect(restored.id).not.toBe('n-dev')
+    // The squatter's role is untouched, and every line of the chart ends at a role that exists in it.
+    const [squatter] = await testDb.select().from(schema.nodes).where(eq(schema.nodes.id, 'n-dev'))
+    expect(squatter).toMatchObject({ chartId: 'chart-evil', name: 'Squatter' })
+    const ids = new Set(now.map(n => n.id))
+    for (const e of await chartEdges()) { expect(ids.has(e.sourceId)).toBe(true); expect(ids.has(e.targetId)).toBe(true) }
+    expect((await chartEdges()).some(e => e.targetId === restored.id)).toBe(true)
+  })
+
   it('does not fail if a department was linked to a workspace department that has since been deleted', async () => {
     await testDb.insert(schema.workspaceDepartments).values({ id: 'wd1', workspaceId: TEST_WS_ID, name: 'Eng', colour: '#000' })
     await testDb.update(schema.departments).set({ workspaceDepartmentId: 'wd1' }).where(eq(schema.departments.id, 'd-eng'))

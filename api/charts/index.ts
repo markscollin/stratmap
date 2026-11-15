@@ -10,6 +10,7 @@ import { chunk } from '../_lib/chunk'
 import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 import { fitsLimit, APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 import { statusChangeNeedsAdmin } from '../../src/lib/chartStatus'
+import { liveWorkspaceDepartmentIds } from '../_lib/references'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -92,6 +93,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const deptIdMap = new Map<string, string>()
       const nodeIdMap = new Map<string, string>()
 
+      // A template may name workspace departments; only this workspace's own are linked, the rest become unlinked (R-30).
+      const liveWsDepts = await liveWorkspaceDepartmentIds(auth.workspaceId, templateDepts.map(d => d.workspaceDepartmentId))
       if (templateDepts.length) {
         const newDepts = templateDepts.map((d) => {
           const newId = crypto.randomUUID()
@@ -101,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             chartId,
             name: d.name,
             colour: d.colour,
-            workspaceDepartmentId: d.workspaceDepartmentId ?? null,
+            workspaceDepartmentId: d.workspaceDepartmentId && liveWsDepts.has(d.workspaceDepartmentId) ? d.workspaceDepartmentId : null,
           }
         })
         await db.insert(departments).values(newDepts)

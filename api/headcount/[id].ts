@@ -5,6 +5,7 @@ import { requireRole, atLeast, requireFeature } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { HeadcountUpdate, HEADCOUNT_SALARY_FIELDS } from '../_lib/schemas'
 import { logAudit } from '../_lib/audit'
+import { checkHeadcountReferences } from '../_lib/references'
 import { db } from '../_lib/db'
 import { headcountPlans } from '../../src/lib/db/schema'
 
@@ -38,6 +39,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Only admins+ can approve
       if (status === 'approved' && !atLeast(permission, 'admin')) {
         return res.status(403).json({ error: 'Only admins can approve headcount' })
+      }
+
+      // A department or chart that is being changed must belong to this workspace (R-30); an unchanged value is not re-checked.
+      if (departmentId || chartId) {
+        const [stored] = await db.select({ departmentId: headcountPlans.departmentId, chartId: headcountPlans.chartId }).from(headcountPlans)
+          .where(and(eq(headcountPlans.id, id), eq(headcountPlans.workspaceId, auth.workspaceId))).limit(1)
+        if (!stored) return res.status(404).json({ error: 'Not found' })
+        if (!(await checkHeadcountReferences(res, auth.workspaceId, { departmentId, chartId }, stored))) return
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() }

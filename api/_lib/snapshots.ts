@@ -49,12 +49,44 @@ export async function countManualSnapshots(chartId: string): Promise<number> {
 }
 
 /**
+ * Role, line and department ids are primary keys across every workspace, and share pages show them. Someone could therefore
+ * create a role with the id of one that was deleted from your chart, and a later restore would skip that role or fail on the
+ * clash (R-31). Anything in the version whose id now belongs to another chart gets a fresh id here, with every reference to
+ * it (manager, department, line ends) following. The role is restored; only its comments and job description, which are keyed
+ * by the old id, do not come with it.
+ */
+export async function freeSquattedIds(chartId: string, data: SnapshotData): Promise<SnapshotData> {
+  const taken = async (table: typeof nodes | typeof edges | typeof departments, ids: string[]) => {
+    const found = new Set<string>()
+    for (const part of chunk(ids)) {
+      const rows = await db.select({ id: table.id }).from(table).where(and(inArray(table.id, part), sql`${table.chartId} <> ${chartId}`))
+      for (const r of rows) found.add(r.id)
+    }
+    return found
+  }
+  const [nodeClash, edgeClash, deptClash] = await Promise.all([
+    taken(nodes, data.nodes.map(n => n.id)), taken(edges, data.edges.map(e => e.id)), taken(departments, data.departments.map(d => d.id)),
+  ])
+  if (nodeClash.size + edgeClash.size + deptClash.size === 0) return data
+  const fresh = (clash: Set<string>) => new Map([...clash].map(id => [id, crypto.randomUUID()]))
+  const nodeIds = fresh(nodeClash), edgeIds = fresh(edgeClash), deptIds = fresh(deptClash)
+  const n = (id: string) => nodeIds.get(id) ?? id
+  const nn = (id: string | null) => (id ? n(id) : id)
+  return {
+    nodes: data.nodes.map(x => ({ ...x, id: n(x.id), managerId: nn(x.managerId), departmentId: x.departmentId ? (deptIds.get(x.departmentId) ?? x.departmentId) : x.departmentId })),
+    edges: data.edges.map(e => ({ ...e, id: edgeIds.get(e.id) ?? e.id, sourceId: n(e.sourceId), targetId: n(e.targetId) })),
+    departments: data.departments.map(d => ({ ...d, id: deptIds.get(d.id) ?? d.id })),
+  }
+}
+
+/**
  * Puts a saved version back onto the chart, all or nothing. Roles that exist in both are UPDATED in place (so their
  * comments and job descriptions stay attached); roles only in the chart are removed; roles only in the version are
  * brought back (a job description written for them earlier re-attaches, since it is keyed by role id). Reporting lines
  * are replaced. The chart's name, status and sharing are not touched.
  */
-export async function applySnapshot(chartId: string, workspaceId: string, data: SnapshotData): Promise<void> {
+export async function applySnapshot(chartId: string, workspaceId: string, snapshotData: SnapshotData): Promise<void> {
+  const data = await freeSquattedIds(chartId, snapshotData)
   const [currentNodes, currentDepts, workspaceDepts] = await Promise.all([
     db.select({ id: nodes.id }).from(nodes).where(eq(nodes.chartId, chartId)),
     db.select({ id: departments.id }).from(departments).where(eq(departments.chartId, chartId)),

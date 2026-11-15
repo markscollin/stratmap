@@ -8,6 +8,7 @@ import { NodeCreate, NodePositions } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { charts, nodes } from '../../../src/lib/db/schema'
 import { claimRevision } from '../../_lib/revision'
+import { checkRoleReferences } from '../../_lib/references'
 import { fitsLimit } from '../../../src/lib/plans'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -37,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const [existing] = await db.select().from(nodes).where(eq(nodes.id, body.id)).limit(1)
         if (existing) return existing.chartId === chartId ? res.status(200).json(existing) : res.status(409).json({ error: 'id-taken' })
       }
+
+      if (!(await checkRoleReferences(res, { workspaceId: auth.workspaceId, chartId }, body))) return
 
       const plan = await getEffectivePlan(auth.workspaceId)
       if (!plan) return res.status(404).json({ error: 'Workspace not found' })

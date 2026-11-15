@@ -509,7 +509,7 @@ PUT does the same for admins (`:104-110`, reported). GET strips them.
 `stripe` in any response from this route.
 
 ### R-30 Body-supplied reference ids not checked against the workspace
-- [ ] Open
+- [x] Done 2026-11-15: `api/_lib/references.ts`: `checkRoleReferences` (a role's department must be one of the workspace's or this chart's own, its manager a role in this chart) and `checkHeadcountReferences` (department and chart of this workspace) answer 400 `invalid-reference` with the field. **On an edit a value that did not change is not checked again**, otherwise a role whose old manager was deleted could never be edited. Template seeding (`POST /api/charts`) drops, rather than refuses, a workspace-department link that is not the workspace's (as snapshots already did). The headcount list join now also requires the department to belong to the workspace. The job-description `nodeId` check was already added by R-38. Tests: `references.test.ts` (7).
 
 **Problem (reported; low risk, ids are unguessable UUIDs).** Headcount `departmentId`/`chartId`
 (`api/headcount.ts:65,68`, `api/headcount/[id].ts:45,48`), and the list joins `workspace_departments` by id
@@ -520,7 +520,7 @@ only (`headcount.ts:42`). Same pattern: node `departmentId`/`managerId` (`api/ch
 returns 400 otherwise; add the workspace condition to the headcount join.
 
 ### R-31 Client-chosen node ids are global primary keys
-- [ ] Open
+- [x] Done 2026-11-15 for the short-term fix, which is all the backlog asked for now: UUID ids and the clean 409 `id-taken` shipped with R-01/R-03; new here: a restore of a version no longer skips or fails on a role, line or department whose id another chart has taken in the meantime (`freeSquattedIds` in `api/_lib/snapshots.ts` gives it a fresh id, with managers, departments and line ends following; only its comments and job description, keyed by the old id, stay behind). **Not done on purpose:** composite uniqueness on `(chart_id, id)`, which needs its own expand/contract migration and a look at every id reference; do it only if squatting becomes a real concern. Test: `snapshots.test.ts`.
 
 **Problem (reported).** Node ids are `n-${Date.now()}` (`src/features/canvas/useCanvasState.ts:88`) and are the
 table's primary key across all workspaces (`api/charts/[id]/nodes.ts:47-50`). Two people adding a role in the

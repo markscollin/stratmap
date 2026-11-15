@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { requireAuth } from './_lib/auth'
 import { requireRole, requireFeature, getPermission, atLeast } from './_lib/access'
 import { logAudit } from './_lib/audit'
+import { checkHeadcountReferences } from './_lib/references'
 import { parseBody } from './_lib/validate'
 import { HeadcountCreate, HEADCOUNT_SALARY_FIELDS } from './_lib/schemas'
 import { db } from './_lib/db'
@@ -39,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           departmentColour: workspaceDepartments.colour,
         })
         .from(headcountPlans)
-        .leftJoin(workspaceDepartments, eq(headcountPlans.departmentId, workspaceDepartments.id))
+        .leftJoin(workspaceDepartments, and(eq(headcountPlans.departmentId, workspaceDepartments.id), eq(workspaceDepartments.workspaceId, auth.workspaceId)))
         .where(eq(headcountPlans.workspaceId, auth.workspaceId))
       return res.json(plans)
     }
@@ -55,6 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (setsSalary && !atLeast(permission, 'admin')) {
         return res.status(403).json({ error: 'forbidden', required: 'admin', message: 'Only admins can set salary ranges' })
       }
+
+      if (!(await checkHeadcountReferences(res, auth.workspaceId, { departmentId, chartId }))) return
 
       const [plan] = await db
         .insert(headcountPlans)

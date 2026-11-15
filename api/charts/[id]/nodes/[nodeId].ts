@@ -8,6 +8,7 @@ import { NodeUpdate } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
 import { runAtomically } from '../../../_lib/atomic'
 import { purgeExpiredTrash } from '../../../_lib/nodeTrash'
+import { checkRoleReferences } from '../../../_lib/references'
 import { charts, nodes, edges, roleComments, deletedNodes, jobDescriptions } from '../../../../src/lib/db/schema'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -33,6 +34,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const updates = parseBody(NodeUpdate, req, res)
       if (!updates) return
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No updatable fields' })
+      if (updates.departmentId !== undefined || updates.managerId !== undefined) {
+        const [current] = await db.select({ departmentId: nodes.departmentId, managerId: nodes.managerId }).from(nodes)
+          .where(and(eq(nodes.id, nodeId), eq(nodes.chartId, chartId))).limit(1)
+        if (!(await checkRoleReferences(res, { workspaceId: auth.workspaceId, chartId }, updates, current))) return
+      }
       if ((await claimRevision(req, res, chartId)) === null) return
       const [updated] = await db
         .update(nodes)
