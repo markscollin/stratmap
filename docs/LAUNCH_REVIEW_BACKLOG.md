@@ -71,6 +71,7 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-43 | Chart reads return roles in storage order | P3 | S | code |
 | R-44 | Dev-tooling advisories (vite, vitest, esbuild) and role-limit race on import | P3 | S | code |
 | R-45 | Reporting lines cannot be selected or deleted from the keyboard | P3 | S | code |
+| R-46 | A failed load of dashboard stats, headcount plans, templates or departments reads as "empty" | P2 | S | code |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -643,6 +644,18 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 - [ ] Open (found 2026-11-15 by the R-42 scanner; marked `data-a11y-ok="known gap R-45"` in `EdgeLayers.tsx`)
 
 **Problem.** A reporting line is selected by clicking it, and then Delete (or the small bubble) removes it. A keyboard-only person can add a line (Connect tool, Enter on two roles) and change who a role reports to in the role's edit form, but cannot select a drawn line. **Suggested fix.** Make the reporting lines of the focused role reachable from the keyboard (for example `Shift+Arrow` cycles through the lines touching it, `Delete` removes the selected one), or document that the edit form is the keyboard way and add a "Remove reporting line" control there. Needs a short decision on which; the edit form is the smaller change.
+
+### R-46 A failed load of dashboard stats, headcount plans, templates or departments reads as "empty"
+- [ ] Open (found 2026-11-16 by the end-to-end review for "never treat a failed load as no data"; reported only, not fixed)
+
+**Problem.** Four reads catch the error, log to the console and leave the store at its empty default, so the person sees "nothing" instead of "couldn't load", with no Retry. Charts, workspace, JDs, comments, audit, share and role search already do this right (`LoadError` / `loadErrors` / visible error).
+1. `Dashboard.tsx` `GET /api/workspace/stats`: on failure the KPIs, pipeline and department breakdown show 0 as if the workspace had no people.
+2. `headcountStore.fetch` (`GET /api/headcount`): on failure the Headcount board is empty, the Dashboard "Planned" count is 0 and the `BudgetPanel` totals are 0. The riskiest one: a person could add a duplicate plan believing none exist.
+3. `templateStore.fetchTemplates`: Roles shows an empty template library (and the JD template picker offers none).
+4. `workspaceDepartmentStore.fetch`: department pickers (new chart, headcount form, Manage departments) show none.
+Lower: `DeletedWorkspaceNotice` stays silent when `/api/workspaces` fails (deliberate, an optional notice), but an owner who deleted a workspace and then sees onboarding would not learn that a restore exists.
+
+**Suggested fix.** Same pattern as `chartStore.error` + `LoadError`: add `error` to the three stores (cleared on a successful fetch), keep the previous data on a failed refresh, show `LoadError` with Retry on Headcount, Roles and the Dashboard stats block, and make the fetch effects check `!error` so a failure does not retry in a loop. For the department and template pickers a small inline "Couldn't load departments, Retry" is enough. Tests: store tests for the error state, a page test per surface, and one e2e (stub the route to 500, expect Retry, then recover) for Headcount, the riskiest.
 
 ### Share/embed first load (R-24 leftover)
 Loading Sentry on demand (R-44, `src/lib/crashReporting.ts`: a small stand-in buffers errors until Sentry has loaded, `CrashBoundary` replaces Sentry's `ErrorBoundary`) saves **5.0 kB gzip on every page** (same static-import-graph method before and after: entry 120.4 to 115.4, landing 126.6 to 121.6, **share 156.8 to 151.8, embed 156.0 to 151.0**). That script is not the one the 153.6 figure came from, so compare like with like: the saving is 5.0 kB, taking share from 153.6 to about 148.6 by the older method. What remains is Clerk and react-dom. Not worth more risk before launch.
