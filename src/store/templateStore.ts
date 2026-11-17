@@ -19,6 +19,10 @@ export interface Template {
 interface TemplateStore {
   templates: Record<string, Template>
   loading: boolean
+  /** The first load succeeded at least once. A failed refresh keeps what was loaded (R-46). */
+  loaded: boolean
+  /** The last load failed (R-46). The library shows an error with Retry, never an empty library. */
+  error: boolean
   fetchTemplates: () => Promise<void>
   addTemplate: (t: Omit<Template, 'id' | 'createdBy' | 'updatedAt'>) => Promise<void>
   updateTemplate: (id: string, updates: Partial<Omit<Template, 'id'>>) => void
@@ -44,17 +48,20 @@ function rawToTemplate(raw: Record<string, unknown>): Template {
 export const useTemplateStore = create<TemplateStore>((set, get) => ({
   templates: {},
   loading: false,
+  loaded: false,
+  error: false,
 
   async fetchTemplates() {
     if (get().loading) return
-    set({ loading: true })
+    set({ loading: true, error: false })
     try {
       const raw = await api.get<Record<string, unknown>[]>('/api/templates')
       const map: Record<string, Template> = {}
       raw.forEach(r => { map[String(r.id)] = rawToTemplate(r) })
-      set({ templates: map })
+      set({ templates: map, loaded: true, error: false })
     } catch (err) {
       console.error('[templateStore] fetchTemplates failed:', err)
+      set({ error: true })
     } finally {
       set({ loading: false })
     }

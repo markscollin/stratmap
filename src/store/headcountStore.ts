@@ -30,6 +30,10 @@ export interface HeadcountPlan {
 interface HeadcountStore {
   plans: HeadcountPlan[]
   loading: boolean
+  /** The first load succeeded at least once. A failed refresh keeps what was loaded (R-46). */
+  loaded: boolean
+  /** The last load failed (R-46). Pages show an error with Retry; "failed to load" must never look like "no plans". */
+  error: boolean
   fetch: () => Promise<void>
   create: (data: {
     title: string
@@ -73,15 +77,18 @@ function rawToPlan(raw: Record<string, unknown>): HeadcountPlan {
 export const useHeadcountStore = create<HeadcountStore>((set, get) => ({
   plans: [],
   loading: false,
+  loaded: false,
+  error: false,
 
   async fetch() {
     if (get().loading) return
-    set({ loading: true })
+    set({ loading: true, error: false })
     try {
       const raw = await api.get<Record<string, unknown>[]>('/api/headcount')
-      set({ plans: raw.map(rawToPlan) })
+      set({ plans: raw.map(rawToPlan), loaded: true, error: false })
     } catch (err) {
       console.error('[headcountStore] fetch failed:', err)
+      set({ error: true })
     } finally {
       set({ loading: false })
     }

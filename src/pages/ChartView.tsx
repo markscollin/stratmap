@@ -23,6 +23,7 @@ import { formatUpdated } from '../utils/formatUpdated'
 import { APPROVAL_CHART_STATUSES } from '../lib/plans'
 import { PlanBadge, FeatureUpgradeModal } from '../components/ui/FeatureLock'
 import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
+import { useToastStore } from '../store/toastStore'
 import { ImportDialog } from '../features/import/ImportDialog'
 import { Dialog } from '../components/ui/Dialog'
 
@@ -403,6 +404,15 @@ export function ChartView() {
     // A blank chart starts with the workspace's own departments; templates bring the ones they use.
     const deptStore = useWorkspaceDepartmentStore.getState()
     if (template === 'blank' && deptStore.departments.length === 0) await deptStore.fetch()
+    // A blank chart starts with the workspace's departments. If they could not be loaded, do not create it without them (R-46):
+    // the modal stays open and the person can try again.
+    if (template === 'blank') {
+      const after = useWorkspaceDepartmentStore.getState()
+      if (after.error && !after.loaded) {
+        useToastStore.getState().addToast("Couldn't load your departments, so the chart was not created. Check your connection and try again.", 'error')
+        return
+      }
+    }
     const { nodes, edges, departments } = buildChartTemplate(
       template as ChartTemplateId,
       useWorkspaceDepartmentStore.getState().departments,

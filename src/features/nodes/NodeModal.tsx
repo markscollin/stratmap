@@ -1,8 +1,9 @@
 import { useState, useEffect, useId, createContext, useContext } from 'react'
 import { X, ChevronDown, MapPin, Plus, Check } from 'lucide-react'
 import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus, RoleType } from '../../types'
-import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
+import { useWorkspaceDepartmentStore, useDepartmentsLoad } from '../../store/workspaceDepartmentStore'
 import { Dialog } from '../../components/ui/Dialog'
+import { InlineLoadError } from '../../components/ui/InlineLoadError'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ function DeptSelect({ value, onChange }: {
   value: string; onChange: (id: string) => void
 }) {
   const { departments, create } = useWorkspaceDepartmentStore()
+  const deptLoad = useDepartmentsLoad()
   const [open, setOpen]         = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName]   = useState('')
@@ -129,6 +131,7 @@ function DeptSelect({ value, onChange }: {
           borderRadius: 9, boxShadow: 'var(--shadow)', overflow: 'hidden',
           animation: 'slideDown .12s ease-out',
         }}>
+          {deptLoad.failed && <InlineLoadError what="departments" onRetry={deptLoad.retry} busy={deptLoad.loading} />}
           {/* Existing departments */}
           {departments.map(dept => (
             <button key={dept.id} type="button"

@@ -38,17 +38,33 @@ export function Dashboard() {
   const { charts, loaded, error: chartsFailed, loading: chartsLoading, fetchCharts } = useChartStore()
   const isPhone = useIsPhone()
   const pad = isPhone ? '16px' : '28px 32px'
-  const { plans, fetch: fetchPlans } = useHeadcountStore()
+  const { plans, fetch: fetchPlans, error: plansError, loaded: plansLoaded, loading: plansLoading } = useHeadcountStore()
 
   const [stats, setStats] = useState<WorkspaceStats | null>(null)
+  // The figures (stats and planned hires) could not be loaded: say so, never show zeros or dashes forever (R-46).
+  const [statsFailed, setStatsFailed] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(true)
+
+  const fetchStats = () => {
+    api.get<WorkspaceStats>('/api/workspace/stats')
+      .then(s => { setStats(s); setStatsFailed(false) })
+      .catch(err => { console.error('[Dashboard] stats fetch failed:', err); setStatsFailed(true) })
+      .finally(() => setStatsLoading(false))
+  }
+  const loadFigures = () => {
+    setStatsFailed(false)
+    setStatsLoading(true)
+    void fetchPlans()
+    fetchStats()
+  }
 
   useEffect(() => {
     document.title = 'StratMap — Dashboard'
-    fetchPlans()
-    api.get<WorkspaceStats>('/api/workspace/stats')
-      .then(setStats)
-      .catch(err => console.error('[Dashboard] stats fetch failed:', err))
+    void fetchPlans()
+    fetchStats()
   }, []) // eslint-disable-line
+
+  const figuresFailed = (statsFailed && !stats) || (plansError && !plansLoaded)
 
   const totalHeadcount = stats?.totalHeadcount ?? 0
   const totalOpen      = stats?.totalOpen ?? 0
@@ -82,7 +98,8 @@ export function Dashboard() {
     { label: 'View headcount',  Icon: BarChart2, color: 'var(--warn)',    bg: 'var(--warn-bg)',    path: '/headcount' },
   ]
 
-  const isLoading = !stats
+  // Until both the stats and the plans have arrived the figures show a dash, not a 0 that looks like an empty workspace (R-46).
+  const isLoading = !stats || !plansLoaded
 
   // The chart list could not be loaded: say so, instead of a page of zeros that looks like an empty workspace (R-14).
   if (chartsFailed && !loaded && charts.length === 0) {
@@ -117,6 +134,12 @@ export function Dashboard() {
 
       <OnboardingChecklist />
 
+      {figuresFailed ? (
+        <div style={{ marginBottom: 24 }}>
+          <LoadError what="your dashboard figures" onRetry={loadFigures} busy={statsLoading || plansLoading} />
+        </div>
+      ) : (
+        <>
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: isPhone ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
         {kpis.map(({ label, value, sub, color, bg, Icon }) => (
@@ -260,6 +283,9 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Quick actions */}
       <QuickActions actions={quickActions} onNavigate={navigate} />

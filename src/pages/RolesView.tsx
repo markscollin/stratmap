@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, Search, Plus, FileText, X, MoreHorizontal, Copy, Trash2 } from 'lucide-react'
 import { useTemplateStore, type Template } from '../store/templateStore'
-import { useWorkspaceDepartmentStore } from '../store/workspaceDepartmentStore'
+import { useWorkspaceDepartmentStore, useDepartmentsLoad } from '../store/workspaceDepartmentStore'
 import { JDEditor } from '../features/jd/JDEditor'
 import { api, ApiError } from '../lib/apiClient'
 import { Dialog } from '../components/ui/Dialog'
+import { LoadError } from '../components/ui/LoadError'
+import { InlineLoadError } from '../components/ui/InlineLoadError'
 
 const FALLBACK_COLOUR = '#94A3B8'
 
@@ -40,6 +42,7 @@ function TemplateModal({ mode, template, onSave, onClose }: {
   onClose: () => void
 }) {
   const { departments: wsDepts } = useWorkspaceDepartmentStore()
+  const deptLoad = useDepartmentsLoad()
   const deptNames = wsDepts.map(d => d.name)
 
   const [title,            setTitle]    = useState(template?.title ?? '')
@@ -84,10 +87,11 @@ function TemplateModal({ mode, template, onSave, onClose }: {
           <Field label="Department">
             <select value={department} onChange={e => setDept(e.target.value)} style={inputStyle}>
               {deptNames.length === 0
-                ? <option value="">No departments yet</option>
+                ? <option value="">{deptLoad.failed ? 'Departments unavailable' : 'No departments yet'}</option>
                 : deptNames.map(d => <option key={d} value={d}>{d}</option>)
               }
             </select>
+            {deptLoad.failed && <div style={{ marginTop: 8 }}><InlineLoadError what="departments" onRetry={deptLoad.retry} busy={deptLoad.loading} /></div>}
           </Field>
 
           <Field label="Tags" hint="comma-separated">
@@ -252,7 +256,9 @@ export function RolesView() {
   const [editingId,    setEditingId]    = useState<string | null>(null)
   const [deletingId,   setDeletingId]   = useState<string | null>(null)
 
-  const { templates, loading, fetchTemplates, addTemplate, updateTemplate, deleteTemplate, duplicateTemplate } = useTemplateStore()
+  const { templates, loading, error: templatesError, loaded: templatesLoaded, fetchTemplates, addTemplate, updateTemplate, deleteTemplate, duplicateTemplate } = useTemplateStore()
+  // The library could not be loaded: say so, never an empty library (R-46).
+  const templatesFailed = templatesError && !templatesLoaded
   const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const templateList = Object.values(templates)
 
@@ -343,6 +349,8 @@ export function RolesView() {
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--dim)', fontSize: 13 }}>Loading templates…</div>
+          ) : templatesFailed ? (
+            <LoadError what="your template library" onRetry={() => { void fetchTemplates() }} busy={loading} />
           ) : templateList.length === 0 ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '56px 40px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--brand-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>

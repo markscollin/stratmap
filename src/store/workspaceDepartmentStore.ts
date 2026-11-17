@@ -11,6 +11,10 @@ export interface WorkspaceDepartment {
 interface WorkspaceDepartmentStore {
   departments: WorkspaceDepartment[]
   loading: boolean
+  /** The first load succeeded at least once. A failed refresh keeps what was loaded (R-46). */
+  loaded: boolean
+  /** The last load failed (R-46). Pickers say so and offer Retry, so "no departments" is never guessed. */
+  error: boolean
   fetch: () => Promise<void>
   create: (name: string, colour: string) => Promise<WorkspaceDepartment | null>
   update: (id: string, updates: { name?: string; colour?: string }) => Promise<void>
@@ -29,15 +33,18 @@ function rawToDept(raw: Record<string, unknown>): WorkspaceDepartment {
 export const useWorkspaceDepartmentStore = create<WorkspaceDepartmentStore>((set, get) => ({
   departments: [],
   loading: false,
+  loaded: false,
+  error: false,
 
   async fetch() {
     if (get().loading) return
-    set({ loading: true })
+    set({ loading: true, error: false })
     try {
       const raw = await api.get<Record<string, unknown>[]>('/api/workspace/departments')
-      set({ departments: raw.map(rawToDept) })
+      set({ departments: raw.map(rawToDept), loaded: true, error: false })
     } catch (err) {
       console.error('[workspaceDepartmentStore] fetch failed:', err)
+      set({ error: true })
     } finally {
       set({ loading: false })
     }
@@ -75,3 +82,13 @@ export const useWorkspaceDepartmentStore = create<WorkspaceDepartmentStore>((set
     }
   },
 }))
+
+/**
+ * True while the department list could not be loaded and nothing was loaded before (R-46). A picker then says so with a Retry
+ * instead of showing an empty list, which would invite people to re-create departments that already exist.
+ */
+export function useDepartmentsLoad() {
+  const failed = useWorkspaceDepartmentStore(s => s.error && !s.loaded)
+  const loading = useWorkspaceDepartmentStore(s => s.loading)
+  return { failed, loading, retry: () => { void useWorkspaceDepartmentStore.getState().fetch() } }
+}

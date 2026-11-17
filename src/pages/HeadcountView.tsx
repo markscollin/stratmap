@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash2, Pencil, Download } from 'lucide-react'
 import { useHeadcountStore, type HeadcountPlan, type HeadcountStatus } from '../store/headcountStore'
-import { useWorkspaceDepartmentStore, type WorkspaceDepartment } from '../store/workspaceDepartmentStore'
+import { useWorkspaceDepartmentStore, useDepartmentsLoad, type WorkspaceDepartment } from '../store/workspaceDepartmentStore'
 import { useChartStore } from '../store'
 import { usePlanLimits } from '../hooks/usePlanLimits'
 import { LockedFeatureCard } from '../components/ui/FeatureLock'
@@ -13,6 +13,8 @@ import { BudgetPanel } from '../features/headcount/BudgetPanel'
 import { formatMoney } from '../lib/headcountBudget'
 import type { RoleType } from '../types'
 import { Dialog } from '../components/ui/Dialog'
+import { LoadError } from '../components/ui/LoadError'
+import { InlineLoadError } from '../components/ui/InlineLoadError'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,7 @@ function DeptSelect({ value, onChange, placeholder = 'Select department' }: {
   value: string; onChange: (id: string) => void; placeholder?: string
 }) {
   const { departments, create } = useWorkspaceDepartmentStore()
+  const deptLoad = useDepartmentsLoad()
   const [open, setOpen]         = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName]   = useState('')
@@ -106,6 +109,7 @@ function DeptSelect({ value, onChange, placeholder = 'Select department' }: {
             background: 'var(--surface)', border: '1px solid var(--border-hover)',
             borderRadius: 9, boxShadow: 'var(--shadow)', overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
           }}>
+            {deptLoad.failed && <InlineLoadError what="departments" onRetry={deptLoad.retry} busy={deptLoad.loading} />}
             {departments.map(d => (
               <button key={d.id} type="button" onClick={() => { onChange(d.id); setOpen(false); setCreating(false) }} style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 8,
@@ -400,6 +404,7 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly
 
 function DeptManagerModal({ onClose }: { onClose: () => void }) {
   const { departments, create, update, remove } = useWorkspaceDepartmentStore()
+  const deptLoad = useDepartmentsLoad()
   const [newName, setNewName]     = useState('')
   const [newColour, setNewColour] = useState(DEPT_COLOURS[0])
   const [saving, setSaving]       = useState(false)
@@ -435,7 +440,8 @@ function DeptManagerModal({ onClose }: { onClose: () => void }) {
 
         {/* Existing departments */}
         <div style={{ marginBottom: 16 }}>
-          {departments.length === 0 && (
+          {deptLoad.failed && <InlineLoadError what="your departments" onRetry={deptLoad.retry} busy={deptLoad.loading} />}
+          {departments.length === 0 && !deptLoad.failed && (
             <p style={{ fontSize: 12, color: 'var(--dim)', textAlign: 'center', padding: '16px 0' }}>No departments yet. Add one below.</p>
           )}
           {departments.map(d => (
@@ -640,7 +646,9 @@ function ChartFilter({ value, onChange }: { value: Set<string>; onChange: (v: Se
 // ─── Main view ────────────────────────────────────────────────────────────────
 
 export function HeadcountView() {
-  const { plans, loading, fetch, create, update, remove } = useHeadcountStore()
+  const { plans, loading, error, loaded, fetch, create, update, remove } = useHeadcountStore()
+  // The plans could not be loaded: say so, never an empty board (R-46: it would invite people to add plans that already exist).
+  const failed = error && !loaded
   const { fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const { canAdmin, canEdit } = usePermission()
   const { charts } = useChartStore()
@@ -751,13 +759,17 @@ export function HeadcountView() {
             { label: 'Filled',   count: totalFilled,   colour: 'var(--brand)' },
           ].map(({ label, count, colour }) => (
             <div key={label} style={{ textAlign: 'center', padding: '6px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 9 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: colour, lineHeight: 1 }}>{count}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: colour, lineHeight: 1 }}>{failed ? '—' : count}</div>
               <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 2 }}>{label}</div>
             </div>
           ))}
         </div>
       </div>
 
+      {failed ? (
+        <LoadError what="your headcount plans" onRetry={() => { void fetch() }} busy={loading} />
+      ) : (
+        <>
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         {/* Year picker */}
@@ -863,6 +875,9 @@ export function HeadcountView() {
             />
           ))}
         </div>
+      )}
+
+        </>
       )}
 
       {showDeptManager && <DeptManagerModal onClose={() => setShowDeptManager(false)} />}
