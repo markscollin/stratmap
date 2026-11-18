@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, count, eq } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
 import { requireRole, atLeast, getPermission } from '../../../_lib/access'
+import { enforceRateLimit } from '../../../_lib/rateLimit'
 import { parseBody } from '../../../_lib/validate'
 import { CommentUpdate } from '../../../_lib/schemas'
 import { notifyAboutComment, toCommentView } from '../../../_lib/comments'
@@ -72,6 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Edit the text: only the author, and not a deleted comment.
     if (!isAuthor) return res.status(403).json({ error: 'forbidden', message: 'You can only edit your own comments.' })
     if (comment.deletedAt) return res.status(404).json({ error: 'Comment not found' })
+    // Same allowance as posting: an edit can email newly @mentioned people, so it must not be an unlimited mail source (R-54).
+    if (!(await enforceRateLimit(res, `comment:${auth.userId}`, 30, 60))) return
     const memberIds = new Set(members.map(m => m.userId))
     const mentions = [...new Set(body.mentions ?? [])].filter(id => memberIds.has(id) && id !== auth.userId)
     const [updated] = await db.update(roleComments)

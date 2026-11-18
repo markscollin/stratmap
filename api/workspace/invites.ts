@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, inArray } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { track, hasAnalyticsConsent } from '../_lib/analytics'
 import { requireRole, ROLE_RANK, getEffectivePlan, sendPlanLimit, getSeatUsage } from '../_lib/access'
@@ -20,6 +20,9 @@ import { fitsLimit } from '../../src/lib/plans'
 /** Invite requests a workspace may make per hour (each can name several people). */
 export const INVITE_REQUESTS_PER_HOUR = 10
 export const INVITE_REQUESTS_PER_HOUR_FREE = 3
+
+/** The hourly invite-email allowance for a workspace on this plan tier (creating and resending share it). */
+export const inviteRequestsPerHour = (tier: string) => (tier === 'free' ? INVITE_REQUESTS_PER_HOUR_FREE : INVITE_REQUESTS_PER_HOUR)
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -50,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // workspace (which anyone can create) gets a lower hourly allowance than a paying one (R-33).
     const plan = await getEffectivePlan(auth.workspaceId)
     if (!plan) return res.status(404).json({ error: 'Workspace not found' })
-    if (!(await enforceRateLimit(res, `invites:${auth.workspaceId}`, plan.tier === 'free' ? INVITE_REQUESTS_PER_HOUR_FREE : INVITE_REQUESTS_PER_HOUR, 60 * 60))) return
+    if (!(await enforceRateLimit(res, `invites:${auth.workspaceId}`, inviteRequestsPerHour(plan.tier), 60 * 60))) return
 
     // Skip addresses that are already members or already invited.
     const [existingMembers, existingInvites] = await Promise.all([
@@ -73,13 +76,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
     }
 
-    const created = []
+    // Insert first, then recount: two requests made together can both pass the check above, so whoever finds the
+    // workspace over its cap takes back exactly the rows it inserted (R-53; same pattern as R-44 and R-50).
+    const inserted = []
     for (const { email, permission } of fresh) {
       const { token, tokenHash, expiresAt } = newInviteToken()
       const [row] = await db
         .insert(pendingInvites)
         .values({ id: crypto.randomUUID(), workspaceId: auth.workspaceId, email, permission, tokenHash, expiresAt, invitedBy: auth.userId })
         .returning()
+      inserted.push({ row, email, permission, token })
+    }
+    if (inserted.length) {
+      const after = await getSeatUsage(auth.workspaceId)
+      if (!fitsLimit(plan.limits.seats, after.members + after.invites, 0)) {
+        await db.delete(pendingInvites).where(inArray(pendingInvites.id, inserted.map(i => i.row.id)))
+        return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
+      }
+    }
+
+    const created = []
+    for (const { row, email, permission, token } of inserted) {
       created.push(toInviteView(row))
       await logAudit({
         workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.sent',

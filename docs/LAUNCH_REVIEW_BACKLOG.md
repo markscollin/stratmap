@@ -78,6 +78,8 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-50 | Two chart creates at the plan limit (double click, two tabs) could leave the workspace over it, which freezes every chart | P2 | S | code |
 | R-51 | Connect armed, then the canvas turned read-only (failed save, edit conflict): the next click still drew a line | P3 | S | code |
 | R-52 | The template library said "Updated by user_2Abc…" (a raw user id) after any reload | P2 | S | code |
+| R-53 | Parallel invite creates or expired-invite resends at the seat cap could overshoot it; resend ignored the Free 3-an-hour email allowance | P3 | S | code |
+| R-54 | Editing a comment was not rate limited, so toggling an @mention could re-email a person without limit | P3 | S | code |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -725,6 +727,11 @@ Loading Sentry on demand (R-44, `src/lib/crashReporting.ts`: a small stand-in bu
 | D-3 | New-workspace trial (14 days of Growth?) or a small Free allowance of paid features | R-18 (**decided 2026-11-14: 14-day Growth trial for every new workspace**) |
 | D-4 | Delete a paid workspace: prorated refund, or keep the plan until period end | R-21 (**decided 2026-11-14: stop renewal, keep the plan until period end, also through a restore**) |
 | D-5 | Which role fields a public share link may show (`location`, `startDate`, `avatarUrl`) | R-26 (**decided 2026-11-14: all three may be shown**) |
+
+### R-53 and R-54 Seat race on invites; unlimited comment edits (2026-11-18, second review pass)
+- [x] **Done 2026-11-18.** R-53: `POST /api/workspace/invites` inserted after a check-then-insert seat count, so two requests made together could both pass and leave the workspace over its cap. It now inserts, recounts (`getSeatUsage`) and deletes exactly the rows it inserted if over (402 `plan-limit` seats), and only then logs and emails. Resending an *expired* invite (`POST /api/workspace/invites/:id`) revives a seat the same way, so it recounts and puts the old token/expiry back if over. The resend also used a fixed 10 an hour against the shared `invites:<workspace>` counter, so a Free workspace (3) could send 7 more mails; both routes now use `inviteRequestsPerHour(tier)`. As with R-33, parallel requests at the edge may all be refused; retry works. Not changed: accept at the cap after a downgrade (members only, no seat is created: an invite already held it), and no unique index on invite email (a duplicate invite is not a seat overshoot the recount misses).
+- R-54: `PUT /api/charts/:id/comments/:commentId` (edit text) now shares the 30 a minute `comment:<user>` allowance with posting. An edit emails newly @mentioned people, so remove and re-add of a mention repeated forever was an unlimited mail source for any commenter.
+- Tests: `api/__tests__/seat-race.test.ts` (4; all fail without the fix). Open question for the owner, not changed: an editor can move an approved hire back to "planned" (the UI's "Mark filled" legitimately leaves approved for editors), unlike charts (R-08). Needs a decision before any rule is added.
 
 ## Reviewed and found sound (do not redo)
 
