@@ -50,29 +50,41 @@ test.describe.serial('review R-50 to R-52', () => {
     await expect(page.locator('body')).not.toContainText(/dev-e2e/)
   })
 
+})
+
+// R-51 has its own workspace: the one above is already at its single Free chart after the R-50 race.
+test.describe.serial('review R-51', () => {
+  let ctx2: BrowserContext
+  let page2: Page
+  test.beforeAll(async ({ browser }, testInfo) => {
+    ctx2 = await signedInContext(browser, testUser(`r51${testInfo.retry}`).slug)
+    page2 = await ctx2.newPage()
+    await onboard(page2, 'Connect Co')
+    await createChart(page2, 'Connect plan')
+  })
+  test.afterAll(async () => { await ctx2?.close() })
+
   test('R-51: Connect armed, then a save fails and the canvas turns read-only: the next click draws no line', async () => {
-    await page.goto('/charts')
-    await createChart(page, 'Connect plan')
-    await addRole(page, 'Alpha Boss')
-    await addRole(page, 'Bravo Boss')
-    const lines = () => page.locator('path[stroke="transparent"]').count()
+    await addRole(page2, 'Alpha Boss')
+    await addRole(page2, 'Bravo Boss')
+    const lines = () => page2.locator('path[stroke="transparent"]').count()
     const before = await lines()
     let edgePosts = 0
-    await page.route('**/api/charts/*/edges', route => { edgePosts++; return route.continue() })
+    await page2.route('**/api/charts/*/edges', route => { edgePosts++; return route.continue() })
     // The next role's save fails, but only after a moment: long enough to arm Connect and pick a source first.
-    await page.route('**/api/charts/*/nodes', async route => {
+    await page2.route('**/api/charts/*/nodes', async route => {
       if (route.request().method() !== 'POST') return route.continue()
       await new Promise(r => setTimeout(r, 1500))
       return route.abort('failed')
     })
-    await addRole(page, 'Dana Unsaved')
-    await page.keyboard.press('c')
-    await page.getByTestId('node-card').filter({ hasText: 'Alpha Boss' }).click()
-    await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 }) // the failure banner: the canvas is read-only now
-    await page.getByTestId('node-card').filter({ hasText: 'Bravo Boss' }).click()
-    await page.waitForTimeout(500)
+    await addRole(page2, 'Dana Unsaved')
+    await page2.keyboard.press('c')
+    await page2.getByTestId('node-card').filter({ hasText: 'Alpha Boss' }).click()
+    await expect(page2.getByRole('alert')).toBeVisible({ timeout: 10_000 }) // the failure banner: the canvas is read-only now
+    await page2.getByTestId('node-card').filter({ hasText: 'Bravo Boss' }).click()
+    await page2.waitForTimeout(500)
     expect(await lines()).toBe(before)
     expect(edgePosts).toBe(0)
-    expect(chartId(page)).toBeTruthy()
+    expect(chartId(page2)).toBeTruthy()
   })
 })
