@@ -187,3 +187,15 @@ describe('edit mode', () => {
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
   })
 })
+
+// ─── R-47: a role on a template chart points at a chart department, not a workspace one ────────────────────────────────
+
+describe('department of a role on a template chart (R-47)', () => {
+  it('the edit form shows the chart department\'s name, not "Select department"', () => {
+    const chartDept: Department = { id: 'c-9f1', name: 'Leadership', colour: '#64748B' }
+    const node: OrgNode = { ...existingNode, departmentId: 'c-9f1' }
+    render(<NodeModal {...defaultProps({ mode: 'edit', node, departments: [chartDept] })} />)
+    expect(screen.getByRole('button', { name: /Leadership/ })).toBeInTheDocument()
+    expect(screen.queryByText('Select department')).toBeNull()
+  })
+})

@@ -162,3 +162,30 @@ describe('JDPanel on the Free plan', () => {
   })
 })
 
+
+// ─── R-47: the department shown is the chart's, and never an id ─────────────────────────────────────────────────────────
+
+describe('JDPanel department (R-47)', () => {
+  const templateNode: OrgNode = { ...mockNode, departmentId: '16841415-5204-43b5-9b73-960440ebdd80' }
+  const chartDepts = [{ id: '16841415-5204-43b5-9b73-960440ebdd80', name: 'Leadership', colour: '#64748B' }]
+
+  it('shows the name of a chart department in the header and the Overview, not its id', () => {
+    useUserStore.setState({ permission: 'viewer' })
+    const { container } = render(<MemoryRouter><JDPanel node={templateNode} onClose={() => {}} departments={chartDepts} /></MemoryRouter>)
+    expect(screen.getAllByText('Leadership').length).toBeGreaterThanOrEqual(2) // header pill + Overview
+    expect(container.textContent).not.toContain('16841415')
+  })
+
+  it('a department that no list knows reads "Unknown department", never the id', () => {
+    useUserStore.setState({ permission: 'viewer' })
+    const { container } = render(<MemoryRouter><JDPanel node={templateNode} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText('Unknown department')).toBeInTheDocument()
+    expect(container.textContent).not.toContain('16841415')
+  })
+
+  it('a role with no department reads "Not set"', () => {
+    useUserStore.setState({ permission: 'viewer' })
+    render(<MemoryRouter><JDPanel node={{ ...mockNode, departmentId: '' }} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+  })
+})

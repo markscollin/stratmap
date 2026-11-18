@@ -8,6 +8,7 @@ import { useChartLimit } from '../../hooks/useChartLimit'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useTemplateStore } from '../../store/templateStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
+import { mergeDepartments, findDepartment, departmentLabel, type DepartmentLike } from '../../lib/departments'
 import { SalaryBandEditor, type SalaryBandChange } from './SalaryBandEditor'
 import { useDialog } from '../../components/ui/useDialog'
 import { AIJDDraft } from '../jd/AIJDDraft'
@@ -36,8 +37,10 @@ const STATUS_LABEL: Record<RoleStatus, string> = {
 // TipTap is large and only needed once a job description is open, so the editor is a separate download (R-24).
 const JDEditor = lazy(() => import('../jd/JDEditor').then(m => ({ default: m.JDEditor })))
 
-export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, initialTab, commentCount = 0, onCommentsChanged }: {
+export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, initialTab, commentCount = 0, onCommentsChanged, departments: chartDepartments = [] }: {
   node: OrgNode | null
+  /** The chart's own departments (R-47). A role on a template chart points at these, not at the workspace's. */
+  departments?: DepartmentLike[]
   allNodes?: OrgNode[]
   onClose: () => void
   onEditNode?: (node: OrgNode) => void
@@ -55,7 +58,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
   const [showTemplatePick, setShowTemplatePick] = useState(false)
 
   const { departments: wsDepts } = useWorkspaceDepartmentStore()
-  const dept = node ? wsDepts.find(d => d.id === node.departmentId) : null
+  // The chart's own departments first (R-47): a template chart's roles point at those, not at the workspace's.
+  const dept = node ? findDepartment(mergeDepartments(chartDepartments, wsDepts), node.departmentId) : undefined
   const perm = usePermission()
   // Over the chart limit after a downgrade, chart content (JDs included) is view-only (roadmap 1.6).
   const { frozen } = useChartLimit()
@@ -235,7 +239,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
                   <AIJDDraft
                     node={node}
                     jd={jd}
-                    deptName={dept?.name ?? node.departmentId}
+                    deptName={departmentLabel(dept, node.departmentId)}
                     onDraftComplete={handleDraftComplete}
                   />
                 )}
@@ -554,7 +558,7 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
     { label: 'Employment type', value: node.employmentType },
     { label: 'Status',          value: node.status },
     { label: 'Role type',       value: ROLE_TYPE_LABEL[node.roleType ?? 'existing'] },
-    { label: 'Department',      value: dept?.name ?? node.departmentId },
+    { label: 'Department',      value: departmentLabel(dept, node.departmentId) },
     { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'No manager (root)' },
   ]
 

@@ -4,6 +4,7 @@ import type { OrgNode, OrgEdge, Department, EmploymentType, NodeStatus, RoleType
 import { useWorkspaceDepartmentStore, useDepartmentsLoad } from '../../store/workspaceDepartmentStore'
 import { Dialog } from '../../components/ui/Dialog'
 import { InlineLoadError } from '../../components/ui/InlineLoadError'
+import { mergeDepartments, findDepartment } from '../../lib/departments'
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -78,8 +79,10 @@ const DEPT_COLOURS = [
   '#EF4444', '#06B6D4', '#F97316', '#EC4899',
 ]
 
-function DeptSelect({ value, onChange }: {
+function DeptSelect({ value, onChange, chartDepartments = [] }: {
   value: string; onChange: (id: string) => void
+  /** The chart's own departments, so a role on a template chart shows its department's name (R-47). */
+  chartDepartments?: Department[]
 }) {
   const { departments, create } = useWorkspaceDepartmentStore()
   const deptLoad = useDepartmentsLoad()
@@ -89,7 +92,7 @@ function DeptSelect({ value, onChange }: {
   const [newColour, setNewColour] = useState(DEPT_COLOURS[0])
   const [saving, setSaving]     = useState(false)
 
-  const selected = departments.find(d => d.id === value)
+  const selected = findDepartment(mergeDepartments(chartDepartments, departments), value)
 
   const handleCreate = async () => {
     if (!newName.trim()) return
@@ -336,7 +339,7 @@ function RoleTypeControl({ value, onChange }: { value: RoleType; onChange: (v: R
 }
 
 export function NodeModal({
-  isOpen, onClose, mode, node, allNodes, allEdges,
+  isOpen, onClose, mode, node, allNodes, allEdges, departments: chartDepartments,
   onAdd, onUpdate, onDelete,
 }: NodeModalProps) {
   const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
@@ -456,7 +459,7 @@ export function NodeModal({
         </Field>
 
         <Field label="Department">
-          <DeptSelect value={deptId} onChange={setDeptId} />
+          <DeptSelect value={deptId} onChange={setDeptId} chartDepartments={chartDepartments} />
         </Field>
 
         <Field label="Employment type">

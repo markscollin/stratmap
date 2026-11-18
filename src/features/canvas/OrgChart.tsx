@@ -24,6 +24,7 @@ import { useBillingStore } from '../../store/billingStore'
 import { useToastStore } from '../../store/toastStore'
 import { useJobDescriptionStore } from '../../store/jobDescriptionStore'
 import { useWorkspaceDepartmentStore } from '../../store/workspaceDepartmentStore'
+import { mergeDepartments } from '../../lib/departments'
 import { calculateLayout } from '../../utils/layout'
 import { EmptyCanvasCard } from '../onboarding/EmptyCanvasCard'
 import { pinchTransform, midpoint, distance, type Point, type ViewTransform } from './pinch'
@@ -129,6 +130,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   // Workspace departments for NodeCard colour lookup
   const { departments: wsDepts, fetch: fetchWsDepts } = useWorkspaceDepartmentStore()
+  // A role's department is a chart department (templates) or a workspace one (blank charts): look in the chart's own first (R-47).
+  // On a public share page there are no workspace departments at all, so the chart's own are the only colours.
+  const deptLookup = useMemo(() => mergeDepartments(departments, wsDepts), [departments, wsDepts])
   useEffect(() => { fetchWsDepts() }, []) // eslint-disable-line
 
   // Push chartId into JD store so JD actions know which chart to hit
@@ -622,7 +626,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
                 ariaLabel={roleAriaLabel(node, reportingIndex, id => nodeMap[id]?.name ?? '')}
                 onPointerDown={handleNodePointerDown} onClick={handleNodeClick} onDoubleClick={handleNodeDoubleClick}
                 onKeyDown={handleNodeKeyDown} onFocus={handleNodeFocus} />
-            : <NodeCard key={node.id} {...state} departments={wsDepts} commentCount={commentCounts?.[node.id] ?? 0}
+            : <NodeCard key={node.id} {...state} departments={deptLookup} commentCount={commentCounts?.[node.id] ?? 0}
                 ariaLabel={roleAriaLabel(node, reportingIndex, id => nodeMap[id]?.name ?? '')}
                 onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => handleNodeKeyDown(e, node.id)}
                 onFocus={(e: React.FocusEvent<HTMLDivElement>) => handleNodeFocus(e, node.id)}
@@ -737,6 +741,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         <JDPanel
           node={selectedNode}
           allNodes={nodes}
+          departments={departments}
           onClose={() => setSelectedId(null)}
           onEditNode={node => setEditingNodeId(node.id)}
           chartId={commentCounts ? chartId : undefined}
