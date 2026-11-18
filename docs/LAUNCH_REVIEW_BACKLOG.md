@@ -74,6 +74,7 @@ Sizes: **S** = under half a day, **M** = one to two days, **L** = three days or 
 | R-46 | A failed load of dashboard stats, headcount plans, templates or departments reads as "empty" | P2 | S | code |
 | R-47 | A role on a template chart shows a department code, not its name (and no colour on share pages) | P2 | S | code |
 | R-48 | The minimap's dots are all grey (hard-coded department colours no real id matches) | P3 | S | code |
+| R-49 | The × on a selected reporting line removed it on screen but never saved it (and worked on a read-only canvas) | P1 | S | code |
 | O-01 to O-09 | Owner and dashboard actions | — | — | owner |
 
 **Suggested order:** R-03 → R-01 → R-02 (one root cause, do together) → R-06 → R-05 → R-04, then the P1 band.
@@ -643,7 +644,7 @@ to open, arrow keys along reporting lines. Items 1 to 3 are the launch-relevant 
 - **Done:** after the inserts the import route counts again; over the limit (or over a sample chart's cap) it removes exactly the roles, lines and departments it inserted and answers 402 (or 400 `sample-too-large`), like the add-role route in R-33. Racing requests at the edge may all be refused; Retry then works. Test: `import.test.ts` "an import racing another add" (fails without the fix). Original text: The import route is check-then-insert, so an import racing another add can overshoot a plan's role limit by one import (the add-role route got a post-insert recount in R-33; import inserts in chunks and would need a transaction or a recount-and-compensate step).
 
 ### R-45 Reporting lines cannot be selected or deleted from the keyboard
-- [ ] Open (found 2026-11-15 by the R-42 scanner; marked `data-a11y-ok="known gap R-45"` in `EdgeLayers.tsx`)
+- [x] Done 2026-11-18 (owner said yes). **The suggested single "Remove reporting line" control was the wrong shape:** the edit form's "Reports to" menu already had "None (root node)", which removes the first incoming line from the keyboard. What could not be reached was every *other* line: a second manager (the Connect tool allows several) and the lines to a role's own reports. The form now lists those under "Other reporting lines", each with a button named "Remove reporting line: Reports to Dan" / "Rae reports to this role" (`NodeModal` `onRemoveLine`, not offered on a read-only canvas). It removes the line at once and saves it; Cmd+Z undoes it. Tests: `NodeModal.test.tsx` (+3), `OrgChartKeyboard.test.tsx` (+3, 5 of the 6 new tests fail on the old code), `tests/e2e/line-delete.spec.ts` (fails on the old code). The `data-a11y-ok` marks in `EdgeLayers.tsx` now say the keyboard way. Original text: Open (found 2026-11-15 by the R-42 scanner; marked `data-a11y-ok="known gap R-45"` in `EdgeLayers.tsx`)
 
 **Problem.** A reporting line is selected by clicking it, and then Delete (or the small bubble) removes it. A keyboard-only person can add a line (Connect tool, Enter on two roles) and change who a role reports to in the role's edit form, but cannot select a drawn line. **Suggested fix.** Make the reporting lines of the focused role reachable from the keyboard (for example `Shift+Arrow` cycles through the lines touching it, `Delete` removes the selected one), or document that the edit form is the keyboard way and add a "Remove reporting line" control there. Needs a short decision on which; the edit form is the smaller change.
 
@@ -666,6 +667,9 @@ Lower: `DeletedWorkspaceNotice` stays silent when `/api/workspaces` fails (delib
 
 ### R-48 The minimap's dots are all grey
 - [x] Done 2026-11-18 (found while closing R-47). `Minimap` used a constant keyed `eng`, `product`, `design`… that no real department id matches, so every dot was the default grey. It now takes the same merged lookup as the cards (`departments={deptLookup}`) and uses each department's colour, grey only for an unknown one. Test: `src/features/canvas/__tests__/Minimap.test.tsx` (2; the colour case fails on the old code).
+
+### R-49 The × on a reporting line was not saved
+- [x] Done 2026-11-18 (found while building R-45). Clicking a line and then its × bubble called `removeEdge` only: the line vanished, no `DELETE` was sent, and it came back on the next reload (the Delete key did save). The bubble also showed on a read-only canvas (a viewer selecting a line) and removed it locally. All three ways (Delete key, ×, the edit form) now go through one `handleDeleteLine` in `OrgChart.tsx` that saves through the queue and does nothing when read-only. Tests: `OrgChartKeyboard.test.tsx` (the × saves; read-only deletes nothing; both fail on the old code), `tests/e2e/line-delete.spec.ts`. Same family as R-01 (every canvas write goes through `canvasSync`).
 
 ### Share/embed first load (R-24 leftover)
 Loading Sentry on demand (R-44, `src/lib/crashReporting.ts`: a small stand-in buffers errors until Sentry has loaded, `CrashBoundary` replaces Sentry's `ErrorBoundary`) saves **5.0 kB gzip on every page** (same static-import-graph method before and after: entry 120.4 to 115.4, landing 126.6 to 121.6, **share 156.8 to 151.8, embed 156.0 to 151.0**). That script is not the one the 153.6 figure came from, so compare like with like: the saving is 5.0 kB, taking share from 153.6 to about 148.6 by the older method. What remains is Clerk and react-dom. Not worth more risk before launch.

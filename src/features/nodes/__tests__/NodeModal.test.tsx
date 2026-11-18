@@ -199,3 +199,46 @@ describe('department of a role on a template chart (R-47)', () => {
     expect(screen.queryByText('Select department')).toBeNull()
   })
 })
+
+// ─── Other reporting lines (R-45) ─────────────────────────────────────────────
+
+describe('other reporting lines (R-45)', () => {
+  const boss: OrgNode = { ...existingNode, id: 'boss', name: 'Bea', title: 'COO' }
+  const dotted: OrgNode = { ...existingNode, id: 'dot', name: 'Dan', title: 'Advisor' }
+  const report: OrgNode = { ...existingNode, id: 'rep', name: 'Rae', title: 'Analyst' }
+  const edges = [
+    { id: 'main', sourceId: 'boss', targetId: 'n1' },   // the line the "Reports to" menu holds
+    { id: 'extra', sourceId: 'dot', targetId: 'n1' },   // a second manager
+    { id: 'down', sourceId: 'n1', targetId: 'rep' },    // a report
+  ]
+  const edit = (overrides = {}) => defaultProps({ mode: 'edit', node: existingNode, allNodes: [existingNode, boss, dotted, report], allEdges: edges, onRemoveLine: vi.fn(), ...overrides })
+
+  it('lists every line except the one the "Reports to" menu holds, each with a named Remove button', () => {
+    render(<NodeModal {...edit()} />)
+    expect(screen.getByRole('button', { name: 'Remove reporting line: Reports to Dan' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove reporting line: Rae reports to this role' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Reports to Bea/ })).not.toBeInTheDocument()
+  })
+
+  it('Remove asks for exactly that line, from the keyboard', async () => {
+    const props = edit()
+    render(<NodeModal {...props} />)
+    const btn = screen.getByRole('button', { name: 'Remove reporting line: Reports to Dan' })
+    btn.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(props.onRemoveLine).toHaveBeenCalledWith('extra')
+    expect(props.onRemoveLine).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing when there is no other line, in add mode, or on a read-only canvas (no handler)', () => {
+    const none = { mode: 'edit' as const, node: existingNode, allNodes: [existingNode, boss], allEdges: [edges[0]], onRemoveLine: vi.fn() }
+    const { unmount } = render(<NodeModal {...defaultProps(none)} />)
+    expect(screen.queryByText('Other reporting lines')).not.toBeInTheDocument()
+    unmount()
+    const { unmount: u2 } = render(<NodeModal {...edit({ onRemoveLine: undefined })} />)
+    expect(screen.queryByText('Other reporting lines')).not.toBeInTheDocument()
+    u2()
+    render(<NodeModal {...edit({ mode: 'add', node: undefined })} />)
+    expect(screen.queryByText('Other reporting lines')).not.toBeInTheDocument()
+  })
+})

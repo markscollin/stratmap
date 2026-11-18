@@ -294,6 +294,8 @@ export interface NodeModalProps {
   onAdd: (data: Omit<OrgNode, 'id'>, reportsToId: string) => void
   onUpdate: (id: string, updates: Partial<OrgNode>, reportsToId: string) => void
   onDelete: (id: string) => void
+  /** Removes one reporting line right away (saved by the canvas). Left out on a read-only canvas. */
+  onRemoveLine?: (edgeId: string) => void
 }
 
 const EMPLOYMENT_OPTIONS: { value: EmploymentType; label: string }[] = [
@@ -340,7 +342,7 @@ function RoleTypeControl({ value, onChange }: { value: RoleType; onChange: (v: R
 
 export function NodeModal({
   isOpen, onClose, mode, node, allNodes, allEdges, departments: chartDepartments,
-  onAdd, onUpdate, onDelete,
+  onAdd, onUpdate, onDelete, onRemoveLine,
 }: NodeModalProps) {
   const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const fallbackDept = wsDepts[0]?.id ?? ''
@@ -417,6 +419,17 @@ export function NodeModal({
     onClose()
   }
 
+  // Every other reporting line that touches this role. The "Reports to" menu above holds the first line in; a role can have more
+  // than one (the Connect tool allows it) and the lines to its own reports, and those used to be removable only by clicking them (R-45).
+  const primaryLineId = mode === 'edit' && node ? allEdges.find(e => e.targetId === node.id)?.id : undefined
+  const otherLines = mode === 'edit' && node && onRemoveLine
+    ? allEdges.filter(e => e.id !== primaryLineId && (e.sourceId === node.id || e.targetId === node.id)).map(e => {
+        const incoming = e.targetId === node.id
+        const other = allNodes.find(n => n.id === (incoming ? e.sourceId : e.targetId))
+        return { id: e.id, text: incoming ? `Reports to ${other?.name ?? 'a removed role'}` : `${other?.name ?? 'A removed role'} reports to this role` }
+      })
+    : []
+
   // Nodes available for "reports to" — exclude the node being edited
   const reportingOptions = allNodes.filter(n => n.id !== node?.id)
 
@@ -477,6 +490,21 @@ export function NodeModal({
         <Field label="Reports to">
           <ReportsToSelect nodes={reportingOptions} value={reportsTo} onChange={setReportsTo} />
         </Field>
+
+        {otherLines.length > 0 && (
+          <div role="group" aria-label="Other reporting lines" style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 7, textTransform: 'uppercase', letterSpacing: '.4px' }}>Other reporting lines</div>
+            {otherLines.map(l => (
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 13, color: 'var(--text)' }}>
+                <span style={{ flex: 1 }}>{l.text}</span>
+                <button type="button" aria-label={`Remove reporting line: ${l.text}`} onClick={() => onRemoveLine?.(l.id)} style={{
+                  padding: '4px 10px', background: 'transparent', border: '1px solid var(--danger)',
+                  borderRadius: 7, color: 'var(--danger)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>Remove</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <Field label="Location">
           <div style={{ position: 'relative' }}>

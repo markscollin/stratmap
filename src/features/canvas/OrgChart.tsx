@@ -195,6 +195,13 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     if (step && chartId) saveHistoryStep(chartId, step, { syncedPositions: syncedPositions.current, afterRestore: onCommentsChanged })
   }, [redo, chartId, onCommentsChanged])
 
+  /** The one way a reporting line is deleted (Delete key, the × on the line, the role's edit form). It is saved, and refused on a read-only canvas (R-45, R-49). */
+  const handleDeleteLine = useCallback((edgeId: string) => {
+    if (readOnly) return
+    removeEdge(edgeId)
+    saveLineDelete(chartId, edgeId)
+  }, [readOnly, removeEdge, chartId])
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -205,10 +212,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       if (!readOnly) {
         if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); handleUndo() }
         if (mod &&  e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); handleRedo() }
-        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) {
-          removeEdge(selectedEdgeId)
-          saveLineDelete(chartId, selectedEdgeId)
-        }
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdgeId) handleDeleteLine(selectedEdgeId)
         if (e.key === 'c' && !mod) setActiveTool('connect')
       }
       if (e.key === 'Escape') { setConnectingFrom(null); setSelectedId(null); setFilterOpen(false) }
@@ -218,7 +222,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleUndo, handleRedo, removeEdge, selectedEdgeId, chartId, readOnly, setConnectingFrom, setSelectedId, setActiveTool])
+  }, [handleUndo, handleRedo, handleDeleteLine, selectedEdgeId, readOnly, setConnectingFrom, setSelectedId, setActiveTool])
 
   // ── Zoom ───────────────────────────────────────────────────────────────────
 
@@ -592,7 +596,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
                 onClick={() => { setSelectedEdgeId(edge.id); setSelectedId(null) }}
                 onMouseEnter={() => setHovEdgeId(edge.id)}
                 onMouseLeave={() => setHovEdgeId(null)}
-                onDelete={() => removeEdge(edge.id)}
+                onDelete={() => handleDeleteLine(edge.id)}
               />
             )
           })}
@@ -785,6 +789,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
               onAdd={() => {}}
               onUpdate={handleUpdateSubmit}
               onDelete={handleDeleteNode}
+              onRemoveLine={readOnly ? undefined : handleDeleteLine}
             />
           </Suspense>
         </div>

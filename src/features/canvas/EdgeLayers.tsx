@@ -52,7 +52,7 @@ export function EdgePath({
   return (
     <g opacity={opacity ?? 1} style={{ transition: 'opacity .2s' }}>
       {/* Invisible wide hit area */}
-      <path data-a11y-ok="known gap R-45: reporting lines cannot be selected by keyboard" d={d} fill="none" stroke="transparent" strokeWidth={14}
+      <path data-a11y-ok="pointer shortcut; the keyboard removes a line in the role edit form (R-45)" d={d} fill="none" stroke="transparent" strokeWidth={14}
         style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
         onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
       />
@@ -67,7 +67,7 @@ export function EdgePath({
       />
       {/* Delete button at midpoint — only when selected */}
       {selected && (
-        <g data-a11y-ok="known gap R-45: reporting lines cannot be selected by keyboard" onClick={e => { e.stopPropagation(); onDelete() }} style={{ cursor: 'pointer' }}>
+        <g data-a11y-ok="pointer shortcut; the keyboard removes a line in the role edit form (R-45)" onClick={e => { e.stopPropagation(); onDelete() }} style={{ cursor: 'pointer' }}>
           <circle cx={mid.x} cy={mid.y} r={10}
             fill="var(--surface)" stroke="var(--danger)" strokeWidth={1.5}
           />

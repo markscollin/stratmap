@@ -117,3 +117,46 @@ describe('keyboard on the canvas', () => {
     expect(card(/^Bo/)).toHaveFocus()
   })
 })
+
+// R-45 / R-49: every way of deleting a reporting line saves it, and a read-only canvas deletes nothing.
+describe('deleting a reporting line (R-45, R-49)', () => {
+  const lineDeletes = async () => {
+    const { api } = await import('../../../lib/apiClient')
+    return (api.delete as unknown as ReturnType<typeof vi.fn>)
+  }
+  const lineCount = (c: HTMLElement) => c.querySelectorAll('path[stroke="transparent"]').length
+
+  it('the × on a selected line removes it AND saves the delete (it used to only hide it until the next reload)', async () => {
+    const del = await lineDeletes(); del.mockClear().mockResolvedValue({})
+    const { container } = renderChart()
+    expect(lineCount(container)).toBe(4)
+    fireEvent.click(container.querySelectorAll('path[stroke="transparent"]')[0])
+    fireEvent.click(screen.getByText('×'))
+    expect(lineCount(container)).toBe(3)
+    await vi.waitFor(() => expect(del).toHaveBeenCalledTimes(1))
+    expect(String(del.mock.calls[0][0])).toMatch(/\/api\/charts\/c1\/edges\/e\d$/)
+  })
+
+  it('a read-only canvas cannot delete a line with the × (and does not save)', async () => {
+    const del = await lineDeletes(); del.mockClear()
+    const { container } = renderChart(true)
+    fireEvent.click(container.querySelectorAll('path[stroke="transparent"]')[0])
+    const bubble = screen.queryByText('×')
+    if (bubble) fireEvent.click(bubble)
+    expect(lineCount(container)).toBe(4)
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('the role edit form removes an extra line from the keyboard and saves it', async () => {
+    const del = await lineDeletes(); del.mockClear().mockResolvedValue({})
+    const extra = [...edges, { id: 'e9', sourceId: 'cfo', targetId: 'dev' }] // Dee now has a second manager
+    const { container } = render(<MemoryRouter><OrgChart chartId="c1" chartName="Org" initialNodes={nodes} initialEdges={extra} departments={[]} /></MemoryRouter>)
+    const dee = card(/^Dee/)
+    dee.focus()
+    fireEvent.keyDown(dee, { key: 'F2' })
+    const remove = await screen.findByRole('button', { name: 'Remove reporting line: Reports to Cy' })
+    fireEvent.click(remove)
+    await vi.waitFor(() => expect(del).toHaveBeenCalledWith('/api/charts/c1/edges/e9'))
+    expect(lineCount(container)).toBe(4)
+  })
+})
