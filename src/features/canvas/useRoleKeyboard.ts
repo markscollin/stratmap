@@ -57,7 +57,7 @@ export function useRoleKeyboard({
   }, [transform, focusRole])
 
   const connectTo = useCallback((nodeId: string): boolean => {
-    if (activeTool !== 'connect' && !connectingFrom) return false
+    if (readOnly || (activeTool !== 'connect' && !connectingFrom)) return false // read-only: Enter just opens the role (R-51)
     if (!connectingFrom) {
       setConnectingFrom(nodeId)
     } else if (connectingFrom !== nodeId) {
@@ -67,7 +67,7 @@ export function useRoleKeyboard({
       setActiveTool('select')
     }
     return true
-  }, [activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setActiveTool])
+  }, [readOnly, activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setActiveTool])
 
   const handleNodeKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>, nodeId: string) => {
     if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return

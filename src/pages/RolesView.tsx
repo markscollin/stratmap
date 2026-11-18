@@ -8,6 +8,8 @@ import { api, ApiError } from '../lib/apiClient'
 import { Dialog } from '../components/ui/Dialog'
 import { LoadError } from '../components/ui/LoadError'
 import { InlineLoadError } from '../components/ui/InlineLoadError'
+import { useUserStore } from '../store/userStore'
+import { personLabel } from '../lib/personLabel'
 
 const FALLBACK_COLOUR = '#94A3B8'
 
@@ -250,6 +252,9 @@ export function RolesView() {
   const [focusSearch, setFocusSearch] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [hovTemplate, setHovTemplate] = useState<string | null>(null)
+  const me = useUserStore(st => st.user?.id ?? '')
+  const members = useUserStore(st => st.workspace?.members)
+  const byLabel = (id: string) => personLabel(id, me, members)
 
   const [modalMode,    setModalMode]    = useState<ModalMode>('create')
   const [modalOpen,    setModalOpen]    = useState(false)
@@ -389,7 +394,7 @@ export function RolesView() {
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>{role.title}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: 12, color: 'var(--muted)' }}>{role.department}</span>
-                        <span style={{ fontSize: 11, color: 'var(--dim)' }}>Updated by {role.updatedBy} · {new Date(role.updatedAt).toLocaleDateString()}</span>
+                        <span style={{ fontSize: 11, color: 'var(--dim)' }}>Updated{byLabel(role.updatedBy) ? ` by ${byLabel(role.updatedBy)}` : ''} · {new Date(role.updatedAt).toLocaleDateString()}</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

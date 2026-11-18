@@ -160,3 +160,50 @@ describe('deleting a reporting line (R-45, R-49)', () => {
     expect(lineCount(container)).toBe(4)
   })
 })
+
+// R-51: a canvas that turns read-only while Connect is armed (a failed save, an edit conflict) must not draw a line.
+describe('Connect on a canvas that turns read-only (R-51)', () => {
+  const lineCount = (c: HTMLElement) => c.querySelectorAll('path[stroke="transparent"]').length
+  const chartEl = (readOnly: boolean) => (
+    <MemoryRouter><OrgChart chartId="c1" chartName="Org" initialNodes={nodes} initialEdges={edges} departments={[]} readOnly={readOnly} /></MemoryRouter>
+  )
+  const posts = async () => {
+    const { api } = await import('../../../lib/apiClient')
+    return api.post as unknown as ReturnType<typeof vi.fn>
+  }
+
+  it('control: on an editable canvas Connect draws and saves a line', async () => {
+    const post = await posts(); post.mockClear().mockResolvedValue({})
+    const { container } = render(chartEl(false))
+    fireEvent.keyDown(window, { key: 'c' })
+    fireEvent.click(card(/^Ada/))
+    fireEvent.click(card(/^Dee/))
+    expect(lineCount(container)).toBe(5)
+    await vi.waitFor(() => expect(post).toHaveBeenCalled())
+  })
+
+  it('a click cannot finish a line once the canvas is read-only, and the tool is disarmed', async () => {
+    const post = await posts(); post.mockClear().mockResolvedValue({})
+    const { container, rerender } = render(chartEl(false))
+    fireEvent.keyDown(window, { key: 'c' })
+    fireEvent.click(card(/^Ada/)) // Connect armed, Ada picked
+    rerender(chartEl(true)) // the save failed: the canvas is view-only now
+    fireEvent.click(card(/^Dee/))
+    expect(lineCount(container)).toBe(4)
+    expect(post).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Click another role/i)).not.toBeInTheDocument()
+  })
+
+  it('Enter cannot finish a line either; it just opens the role', async () => {
+    const post = await posts(); post.mockClear().mockResolvedValue({})
+    const { container, rerender } = render(chartEl(false))
+    fireEvent.keyDown(window, { key: 'c' })
+    fireEvent.click(card(/^Ada/))
+    rerender(chartEl(true))
+    const dee = card(/^Dee/)
+    dee.focus()
+    fireEvent.keyDown(dee, { key: 'Enter' })
+    expect(lineCount(container)).toBe(4)
+    expect(post).not.toHaveBeenCalled()
+  })
+})

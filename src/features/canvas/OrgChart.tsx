@@ -361,7 +361,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     if (interactionRef.current.hasMoved) return
     e.stopPropagation()
 
-    if (activeTool === 'connect' || connectingFrom) {
+    // A canvas that turned read-only while Connect was armed (a failed save, an edit conflict) must not draw a line (R-51).
+    if (!readOnly && (activeTool === 'connect' || connectingFrom)) {
       if (!connectingFrom) {
         setConnectingFrom(nodeId)
       } else if (connectingFrom !== nodeId) {
@@ -378,7 +379,14 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       setSelectedId(prev => prev === nodeId ? null : nodeId)
       setSelectedEdgeId(null)
     }, 220)
-  }, [activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
+  }, [readOnly, activeTool, connectingFrom, chartId, setConnectingFrom, addEdge, setSelectedId, setSelectedEdgeId, setActiveTool])
+
+  // The moment the canvas goes read-only, Connect is disarmed: the half-drawn line and the tool go with it (R-51).
+  useEffect(() => {
+    if (!readOnly) return
+    setConnectingFrom(null)
+    if (activeTool === 'connect') setActiveTool('select')
+  }, [readOnly, activeTool, setConnectingFrom, setActiveTool])
 
   // Keyboard access to the roles (R-32 item 4): Tab, Enter, F2 and the arrow keys. See useRoleKeyboard.ts.
   const { reportingIndex, handleNodeKeyDown, handleNodeFocus } = useRoleKeyboard({
