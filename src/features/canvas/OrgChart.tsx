@@ -708,7 +708,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         </div>
       )}
       <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
-      <Minimap nodes={nodes} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
+      <Minimap nodes={nodes} departments={deptLookup} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
         onPanTo={(x, y) => setTransform(t => ({ ...t, x, y }))}
       />
 

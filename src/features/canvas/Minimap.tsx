@@ -3,31 +3,34 @@ import { useMemo, memo } from 'react'
 import type { OrgNode } from '../../types'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import type { Transform } from './canvasTypes'
+import type { DepartmentLike } from '../../lib/departments'
 
 // ─── Minimap ──────────────────────────────────────────────────────────────────
 
 const MM_W = 160
 const MM_H = 90
 
-const MINIMAP_DEPT_COLOURS: Record<string, string> = { eng:'#0EA5E9', product:'#10B981', design:'#8B5CF6', go:'#F59E0B', ops:'#EF4444', finance:'#06B6D4' }
+const NO_DEPT_COLOUR = '#94A3B8'
 
 /** The minimap's role dots. Memoised: panning and zooming change only the viewport rectangle, not these. */
-export const MinimapDots = memo(function MinimapDots({ nodes, minX, minY, mmScale }: { nodes: OrgNode[]; minX: number; minY: number; mmScale: number }) {
+export const MinimapDots = memo(function MinimapDots({ nodes, departments, minX, minY, mmScale }: { nodes: OrgNode[]; departments: readonly DepartmentLike[]; minX: number; minY: number; mmScale: number }) {
+  // Same lookup as the cards (R-47 / R-48): a role's colour is its department's, chart first.
+  const colours = useMemo(() => new Map(departments.map(d => [d.id, d.colour])), [departments])
   return (
     <>
       {nodes.map(n => (
         <rect key={n.id}
           x={(n.x - minX) * mmScale} y={(n.y - minY) * mmScale}
           width={NODE_W * mmScale} height={NODE_H * mmScale}
-          rx={2} fill={MINIMAP_DEPT_COLOURS[n.departmentId] ?? '#94A3B8'} fillOpacity={0.55}
+          rx={2} fill={colours.get(n.departmentId) ?? NO_DEPT_COLOUR} fillOpacity={0.55}
         />
       ))}
     </>
   )
 })
 
-export function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
-  nodes: OrgNode[]; transform: Transform; vpW: number; vpH: number
+export function Minimap({ nodes, departments, transform, vpW, vpH, onPanTo }: {
+  nodes: OrgNode[]; departments: readonly DepartmentLike[]; transform: Transform; vpW: number; vpH: number
   onPanTo: (x: number, y: number) => void
 }) {
   // Bounds only change when roles move, not when the view pans or zooms (roadmap 3.4).
@@ -60,7 +63,7 @@ export function Minimap({ nodes, transform, vpW, vpH, onPanTo }: {
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
     }}>
       <svg data-a11y-ok="pointer shortcut; the keyboard pans through the roles (arrow keys)" width={MM_W} height={MM_H} style={{ display: 'block', cursor: 'crosshair' }} onClick={handleClick}>
-        <MinimapDots nodes={nodes} minX={minX} minY={minY} mmScale={mmScale} />
+        <MinimapDots nodes={nodes} departments={departments} minX={minX} minY={minY} mmScale={mmScale} />
         <rect x={vpMMX} y={vpMMY} width={vpMMW} height={vpMMH}
           fill="rgba(14,165,233,0.08)" stroke="var(--brand)" strokeWidth={1.5}
           rx={2} style={{ pointerEvents: 'none' }}
