@@ -32,7 +32,7 @@ describe('adopting a push-managed database', () => {
       const { level } = await adoptionPoint(query, FOLDER, migrations.length)
       expect(level).toBe(at)
     }
-  })
+  }, 90_000) // builds four in-memory databases; about 13 s alone, so the default 15 s fails whenever the machine is busy
 
   it('a missing index stops adoption there, so that migration runs', async () => {
     const { db, query } = await dbAt(migrations.length - 1)

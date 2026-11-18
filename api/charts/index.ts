@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, desc, count, sql, getTableColumns } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { track, hasAnalyticsConsent } from '../_lib/analytics'
-import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit } from '../_lib/access'
+import { requireRole, requireFeature, getEffectivePlan, sendPlanLimit, refuseChartIfOverLimit } from '../_lib/access'
 import { parseBody } from '../_lib/validate'
 import { ChartCreate, MAX_SAMPLE_NODES } from '../_lib/schemas'
 import { db } from '../_lib/db'
@@ -87,6 +87,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           creatorId: auth.userId,
         })
         .returning()
+
+      // Recount now that the chart is in: parallel creates at the limit must not leave the workspace over it (R-50).
+      if (!isSample && await refuseChartIfOverLimit(res, auth.workspaceId, chartId, plan)) return
 
       // Seed from template — generate fresh IDs to avoid PK conflicts across charts.
       // Only allow-listed fields (validated above) are written.

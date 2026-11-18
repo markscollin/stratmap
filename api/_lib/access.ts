@@ -173,6 +173,20 @@ export function sendPlanLimit(res: VercelResponse, limit: LimitName, plan: Effec
 }
 
 /**
+ * Call right AFTER a non-sample chart was inserted (create, duplicate, branch). The count that allowed it and the insert are
+ * separate statements, so two requests at the limit (a double click, two tabs) could both pass and leave the workspace over its
+ * chart limit, which freezes EVERY chart (R-50). Recount; if over, take this chart back out (it cascades) and send 402.
+ * Returns true when it refused (the response is sent). Requests racing at the edge may all be refused; Retry then works.
+ */
+export async function refuseChartIfOverLimit(res: VercelResponse, workspaceId: string, chartId: string, plan: EffectivePlan): Promise<boolean> {
+  const usage = await getChartUsage(workspaceId, plan)
+  if (!usage || !usage.frozen) return false
+  await db.delete(charts).where(and(eq(charts.id, chartId), eq(charts.workspaceId, workspaceId)))
+  sendPlanLimit(res, 'charts', plan, plan.limits.maxCharts)
+  return true
+}
+
+/**
  * Sends 402 { error: 'plan-feature' } unless the workspace's effective plan
  * includes `feature`. Returns true when allowed.
  */

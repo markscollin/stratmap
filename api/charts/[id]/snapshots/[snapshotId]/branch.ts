@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, count, eq } from 'drizzle-orm'
 import { requireAuth } from '../../../../_lib/auth'
-import { requireRole, requireFeature, requireChartsEditable, getEffectivePlan, sendPlanLimit } from '../../../../_lib/access'
+import { requireRole, requireFeature, requireChartsEditable, getEffectivePlan, sendPlanLimit, refuseChartIfOverLimit } from '../../../../_lib/access'
 import { parseBody } from '../../../../_lib/validate'
 import { SnapshotBranch } from '../../../../_lib/schemas'
 import { branchSnapshot } from '../../../../_lib/snapshots'
@@ -46,6 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       workspaceId: auth.workspaceId, userId: auth.userId, name, data: snapshot.data,
       liveWorkspaceDepts: new Set(workspaceDepts.map(d => d.id)),
     })
+    if (await refuseChartIfOverLimit(res, auth.workspaceId, created.id, plan)) return
     await logAudit({
       workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'chart.branched', targetType: 'chart', targetId: created.id,
       details: { chartName: created.name, versionName: snapshot.name },

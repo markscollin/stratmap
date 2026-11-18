@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, count, eq } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
-import { requireRole, requireChartsEditable, getEffectivePlan, sendPlanLimit } from '../../_lib/access'
+import { requireRole, requireChartsEditable, getEffectivePlan, sendPlanLimit, refuseChartIfOverLimit } from '../../_lib/access'
 import { captureChart, branchSnapshot } from '../../_lib/snapshots'
 import { db } from '../../_lib/db'
 import { charts, workspaceDepartments } from '../../../src/lib/db/schema'
@@ -44,6 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       name: `${chart.name.slice(0, NAME_MAX - SUFFIX.length)}${SUFFIX}`, data,
       liveWorkspaceDepts: new Set(workspaceDepts.map(d => d.id)),
     })
+    if (await refuseChartIfOverLimit(res, auth.workspaceId, created.id, plan)) return
     return res.status(201).json(created)
   } catch (err) {
     console.error('/api/charts/[id]/duplicate', err)
