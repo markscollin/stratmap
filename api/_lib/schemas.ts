@@ -196,6 +196,7 @@ export const SnapshotBranch = z.object({ name: z.string().trim().min(1).max(100)
 
 // Data rights (roadmap 4.2). The owner must type the workspace's name; the server compares it with the real name.
 export const WorkspaceDelete = z.object({ confirmName: z.string().trim().min(1).max(100) })
+export const OwnershipTransfer = z.object({ userId: Id, confirmName: z.string().trim().min(1).max(100) })
 export const WorkspaceRestore = z.object({ workspaceId: Id })
 export const AccountDelete = z.object({ confirm: z.literal('DELETE') })
 

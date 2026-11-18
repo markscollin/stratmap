@@ -7,6 +7,7 @@ import { useUserStore } from '../../store/userStore'
 import { useBillingStore } from '../../store/billingStore'
 import { usePermission } from '../../hooks/usePermission'
 import { useSignOut } from '../auth/useSignOut'
+import { TransferOwnership } from './TransferOwnership'
 
 // Settings → General (roadmap 4.2): export the workspace's data, delete the workspace (owner), delete my account.
 // The server enforces every rule (roles, typed confirmation); this screen only makes them easy to follow.
@@ -85,6 +86,8 @@ export function DataRightsSection() {
       <div style={{ ...card, borderColor: 'var(--danger)' }}>
         <h3 style={{ ...h3, color: 'var(--danger)' }}>Danger zone</h3>
 
+        {isOwner && workspace && <TransferOwnership />}
+
         {isOwner && workspace && (
           <div style={{ marginBottom: 20 }}>
             <p style={small}>
@@ -137,7 +140,7 @@ export function DataRightsSection() {
         <div>
           <p style={small}>
             <strong>Delete my account.</strong> You leave every workspace and your sign-in account is deleted.
-            {isOwner && <> <strong>You own {workspace?.name ? `“${workspace.name}”` : 'this workspace'}, so it is deleted with you</strong> (members are emailed). Because you will no longer be able to sign in, you cannot restore it, and it is erased after 30 days.</>}
+            {isOwner && <> <strong>You own {workspace?.name ? `“${workspace.name}”` : 'this workspace'}, so it is deleted with you</strong> (members are emailed); transfer ownership first if you want it to carry on. Because you will no longer be able to sign in, you cannot restore it, and it is erased after 30 days.</>}
           </p>
           {open !== 'account' ? (
             <button style={dangerBtn(true)} onClick={() => toggle('account')}>Delete my account…</button>

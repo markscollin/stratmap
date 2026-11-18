@@ -75,7 +75,7 @@ content reviewed by a lawyer.
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts (2026-11-18, after R-54): **975 frontend (+2 skipped launch-gate) + 908 API**, 122 e2e (full run 122/122 on 2026-11-18). Typecheck clean, lint 0 errors (14 warnings), build OK, `npm audit --omit=dev` 0 advisories (22 with dev tooling, see "P3 tail"). Older counts elsewhere in this file are stale; this line is the one to update.
+- Real test counts (2026-11-18, after ownership transfer): **980 frontend (+2 skipped launch-gate) + 915 API**, 123 e2e (122/122 full run before the new transfer spec, which passes alone 2/2; re-run the full suite once). Typecheck clean, lint 0 errors (14 warnings), build OK, `npm audit --omit=dev` 0 advisories (22 with dev tooling, see "P3 tail"). Older counts elsewhere in this file are stale; this line is the one to update.
 
 ### Daily maintenance, share fields, references, bundle, CSP, a11y (P2 band, 2026-11-15)
 - **`GET /api/cron/daily-maintenance`** (Vercel cron 03:41 UTC, `CRON_SECRET` like the purge; auth in `api/_lib/cron.ts`): (R-22) re-reads up to 100 workspaces' Stripe subscriptions through `syncSubscription`, oldest-synced first, and reports each correction to Sentry as a probable missed webhook (`api/_lib/reconcile.ts`); (R-27) `pruneRateLimits` deletes limiter rows whose window ended over an hour ago (`rate_limits.window_seconds`, migration 0014; a limiter failure is still fail-open but sampled to Sentry); (R-40) `sendTrialNotices` emails owners/admins 3 days before and after a trial ends, once each (`workspaces.trial_warned_at` / `trial_ended_notice_at`, cleared by `grant-trial`). One step failing never stops the others. The webhook also handles `charge.refunded` and `charge.dispute.created`: Sentry plus an email to the optional `BILLING_ALERT_EMAIL`, never an automatic action (`api/_lib/billingAlerts.ts`). Tests: `daily-maintenance.test.ts`.
@@ -447,7 +447,8 @@ All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/dat
 - **Member removal** was already immediate (membership is looked up on every request); `data-rights-auth.test.ts` now proves it.
 - **UI:** `DataRightsSection` (Settings → General): export buttons for admins, "Delete workspace" for the owner (type the name), "Delete my account" for everyone (type DELETE). `useSignOut` is the shared sign-out hook (TopNav uses it too).
 - **Owner action:** set `CRON_SECRET` in Vercel (any long random string) or the purge never runs and deleted workspaces are kept forever.
-- **Not built:** "leave this workspace" for a member who keeps their account; ownership transfer.
+- **Ownership transfer (2026-11-18):** `POST /api/workspace/transfer-ownership {userId, confirmName}` (`api/workspace/transfer-ownership.ts`). Owner only; the name must be typed exactly; the new owner must already be an **admin** (nobody is made owner from a lower role); refused with 409 `owns-another-workspace` if they own a live workspace (one owned workspace per user); the old owner becomes an admin (so "Leave workspace" now works for them). `workspaces.owner_id` and both member rows change in one `runAtomically`, guarded so two transfers made together leave exactly one owner. Billing is not touched (the subscription belongs to the workspace; every admin can manage it). Audit `workspace.ownership_transferred`. UI: `TransferOwnership` in Settings → General (owner only). Not built: an email to the new owner, accepting/declining a transfer (it is immediate). Tests: `transfer-ownership.test.ts`, `TransferOwnership.test.tsx`, `tests/e2e/transfer-ownership.spec.ts`.
+- **Not built:** nothing from the original data-rights list (leave and ownership transfer both exist now).
 
 ## Headcount cost modelling (roadmap 5, 2026-11-06)
 
@@ -488,7 +489,7 @@ Discussion threads on a role (a node), in a **Comments** tab of the role's side 
 
 ## Small follow-ups (2026-11-10)
 
-- **Leave a workspace:** `POST /api/workspace/leave` (any non-owner member; owner gets `403 owner-cannot-leave`; logs `member.left` with the role only). UI: Settings → General → "Leave workspace…" (`DataRightsSection`). Ownership transfer is still not built.
+- **Leave a workspace:** `POST /api/workspace/leave` (any non-owner member; owner gets `403 owner-cannot-leave`; logs `member.left` with the role only). UI: Settings → General → "Leave workspace…" (`DataRightsSection`). Ownership transfer exists (see Data rights).
 - **Budget across years:** `buildBudget(plans, year, { carryOver })`. A checkbox in `BudgetPanel` ("Include hires from earlier years (a full year each)") counts hires targeted in earlier years as a full year. Off by default (the original owner rule).
 - **Notifications tab:** only the real "New comments" switch remains; the three fake switches were removed.
 

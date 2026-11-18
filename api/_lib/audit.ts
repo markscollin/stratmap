@@ -26,6 +26,7 @@ export type AuditAction =
   | 'headcount.salary_updated'
   | 'workspace.deleted'
   | 'workspace.restored'
+  | 'workspace.ownership_transferred'
   | 'workspace.exported'
   | 'chart.restored'
   | 'chart.branched'

@@ -9,6 +9,7 @@ const ev = (action: string, details: AuditEventView['details'], actor: Partial<A
 describe('describeAudit', () => {
   it('describes each action in a sentence', () => {
     expect(describeAudit(ev('member.role_changed', { email: 'bo@co.com', from: 'editor', to: 'viewer' }))).toBe('Ada changed bo@co.com from Editor to Viewer')
+    expect(describeAudit(ev('workspace.ownership_transferred', { email: 'bo@co.com' }))).toBe('Ada made bo@co.com the owner of the workspace')
     expect(describeAudit(ev('member.removed', { email: 'bo@co.com', role: 'editor' }))).toBe('Ada removed bo@co.com (Editor)')
     expect(describeAudit(ev('member.joined', { email: 'bo@co.com', role: 'viewer' }))).toBe('Ada joined as Viewer')
     expect(describeAudit(ev('invite.sent', { email: 'bo@co.com', role: 'admin' }))).toBe('Ada invited bo@co.com as Admin')

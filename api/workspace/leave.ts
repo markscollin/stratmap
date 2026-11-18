@@ -8,7 +8,7 @@ import { revokeInvitesSentBy } from '../_lib/invites'
 import { workspaceMembers } from '../../src/lib/db/schema'
 
 // POST /api/workspace/leave — a member leaves the workspace they are acting in, keeping their account and their other
-// workspaces (roadmap 5). The owner cannot leave: a workspace always has its owner, so they delete it instead (a deleted
+// workspaces (roadmap 5). The owner cannot leave: a workspace always has its owner, so they transfer ownership or delete it instead (a deleted
 // workspace can be restored for 30 days). Comments and other content they wrote stay with the workspace.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (permission === 'owner') {
       return res.status(403).json({
         error: 'owner-cannot-leave',
-        message: 'The owner cannot leave a workspace. Delete the workspace instead; you can restore it for 30 days.',
+        message: 'The owner cannot leave a workspace. Make another admin the owner first (Settings → General → Transfer ownership), or delete the workspace; you can restore it for 30 days.',
       })
     }
     await db.delete(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, auth.workspaceId), eq(workspaceMembers.userId, auth.userId)))
