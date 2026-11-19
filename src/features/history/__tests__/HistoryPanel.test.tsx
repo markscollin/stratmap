@@ -70,6 +70,14 @@ describe('HistoryPanel: listing', () => {
     expect(api.get).toHaveBeenCalledWith('/api/charts/c1/snapshots')
   })
 
+  it('marks a daily version as saved automatically, not by a person (and never as a former member)', async () => {
+    setup('editor', 'growth', [row('d', { kind: 'scheduled', name: 'Daily version, 19 Nov 2026', createdBy: 'system', authorName: null })])
+    const [daily] = await screen.findAllByTestId('version-row')
+    expect(daily).toHaveTextContent('Daily')
+    expect(daily).toHaveTextContent('Saved automatically')
+    expect(daily).not.toHaveTextContent('former member')
+  })
+
   it('says so when there are none yet', async () => {
     setup('editor', 'growth', [])
     expect(await screen.findByText(/No versions yet/)).toBeInTheDocument()

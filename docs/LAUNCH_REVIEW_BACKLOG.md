@@ -707,6 +707,7 @@ Loading Sentry on demand (R-44, `src/lib/crashReporting.ts`: a small stand-in bu
   Check the prices on the pricing page (£18/£180, £49/£490) against the Stripe price objects. Do R-05 in test
   mode first.
 - [ ] **O-05 Lawyer review** of `/privacy` and `/terms` once R-04 has real details.
+  - Added 2026-11-19: daily versions (Growth and up) keep copies of a chart's roles, lines and departments for up to 14 days, so a role deleted from a chart can still be in a daily version for up to 14 days (manual versions are kept until deleted). The privacy text says deleted roles live 3 days and does not mention version history at all: the lawyer should decide the wording.
 - [ ] **O-06 Data safety** (roadmap 3.8, still open): Neon point-in-time recovery, one documented restore drill,
   and a **separate database for Preview deployments**. Today a preview deployment appears to run unreviewed
   branch code against the production database (`docs/MIGRATIONS.md:33-36`; confirm in Vercel → Environment

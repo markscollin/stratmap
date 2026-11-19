@@ -29,7 +29,7 @@ import cronHandler from '../cron/daily-maintenance'
 import webhook from '../webhooks/stripe'
 import { pruneRateLimits, hitRateLimit } from '../_lib/rateLimit'
 import { sendTrialNotices } from '../_lib/trialNotices'
-import { setupSchema, cleanDb, seedWorkspace, testDb, TEST_WS_ID } from './helpers/db'
+import { setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, testDb, TEST_WS_ID } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'
@@ -73,7 +73,17 @@ describe('the daily maintenance endpoint', () => {
     delete process.env.STRIPE_SECRET_KEY
     const res = await run()
     expect(res._status).toBe(200)
-    expect(res._body).toEqual({ reconcile: 'stripe-not-configured', rateLimitsPruned: 0, trialNotices: { warned: 0, ended: 0 } })
+    expect(res._body).toEqual({ reconcile: 'stripe-not-configured', rateLimitsPruned: 0, trialNotices: { warned: 0, ended: 0 }, scheduledVersions: { saved: 0, unchanged: 0, deferred: 0, failed: 0 } })
+  })
+
+  it('saves a daily version of a changed chart on a Growth workspace, and reports it', async () => {
+    delete process.env.STRIPE_SECRET_KEY
+    await testDb.update(schema.workspaces).set({ planTier: 'growth' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    await seedChart(); await seedNode()
+    const res = await run()
+    expect(res._body).toMatchObject({ scheduledVersions: { saved: 1, failed: 0 } })
+    const [v] = await testDb.select().from(schema.chartSnapshots)
+    expect(v.kind).toBe('scheduled')
   })
 })
 

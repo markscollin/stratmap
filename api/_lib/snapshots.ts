@@ -11,6 +11,10 @@ import { charts, chartSnapshots, departments, edges, nodes, workspaceDepartments
 /** At most this many versions saved by people per chart; the app's own "before restore" ones are kept separately. */
 export const MAX_MANUAL_SNAPSHOTS = 50
 export const MAX_AUTO_SNAPSHOTS = 20
+/** Daily versions kept per chart (the app takes one a day when the chart changed); older ones are pruned. */
+export const MAX_SCHEDULED_SNAPSHOTS = 14
+
+export type SnapshotKind = 'manual' | 'auto' | 'scheduled'
 
 export async function captureChart(chartId: string): Promise<SnapshotData> {
   const [nodeRows, edgeRows, deptRows] = await Promise.all([
@@ -25,19 +29,21 @@ export async function captureChart(chartId: string): Promise<SnapshotData> {
   }
 }
 
-/** Saves the chart's current structure as a version. Auto versions beyond the cap are pruned, oldest first. */
-export async function saveSnapshot(opts: { workspaceId: string; chartId: string; name: string; kind: 'manual' | 'auto'; userId: string }) {
+/** Saves the chart's current structure as a version. Automatic versions beyond their cap are pruned, oldest first. */
+export async function saveSnapshot(opts: { workspaceId: string; chartId: string; name: string; kind: SnapshotKind; userId: string }) {
   const data = await captureChart(opts.chartId)
   const [row] = await db.insert(chartSnapshots).values({
     id: crypto.randomUUID(), workspaceId: opts.workspaceId, chartId: opts.chartId, name: opts.name, kind: opts.kind,
     createdBy: opts.userId, nodeCount: data.nodes.length, edgeCount: data.edges.length, data,
   }).returning({ id: chartSnapshots.id, createdAt: chartSnapshots.createdAt })
 
-  if (opts.kind === 'auto') {
+  if (opts.kind !== 'manual') {
+    // Each automatic kind has its own allowance, so daily versions never push out the "before restore" ones (or the reverse).
+    const keep = opts.kind === 'auto' ? MAX_AUTO_SNAPSHOTS : MAX_SCHEDULED_SNAPSHOTS
     const autos = await db.select({ id: chartSnapshots.id }).from(chartSnapshots)
-      .where(and(eq(chartSnapshots.chartId, opts.chartId), eq(chartSnapshots.kind, 'auto')))
+      .where(and(eq(chartSnapshots.chartId, opts.chartId), eq(chartSnapshots.kind, opts.kind)))
       .orderBy(desc(chartSnapshots.createdAt), desc(chartSnapshots.id))
-    const surplus = autos.slice(MAX_AUTO_SNAPSHOTS).map(a => a.id)
+    const surplus = autos.slice(keep).map(a => a.id)
     if (surplus.length > 0) await db.delete(chartSnapshots).where(inArray(chartSnapshots.id, surplus))
   }
   return row

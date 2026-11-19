@@ -19,7 +19,7 @@ import { LockedFeatureCard } from '../../components/ui/FeatureLock'
 // reporting lines and departments, never job-description text or salaries.
 
 export interface VersionRow {
-  id: string; name: string; kind: 'manual' | 'auto'; createdBy: string; createdAt: string
+  id: string; name: string; kind: 'manual' | 'auto' | 'scheduled'; createdBy: string; createdAt: string
   nodeCount: number; edgeCount: number; authorName: string | null
 }
 interface ChartLike { nodes: DiffState['nodes']; edges: DiffState['edges']; departments: DiffState['departments'] }
@@ -209,10 +209,10 @@ export function HistoryPanel({ chartId, chartName, onClose, onRestored }: { char
             <li key={v.id} data-testid="version-row" style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflowWrap: 'anywhere' }}>{v.name}</span>
-                {v.kind === 'auto' && <span style={{ fontSize: 10, color: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '0 6px' }}>Automatic</span>}
+                {v.kind !== 'manual' && <span style={{ fontSize: 10, color: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '0 6px' }}>{v.kind === 'scheduled' ? 'Daily' : 'Automatic'}</span>}
               </div>
               <div style={{ fontSize: 11, color: 'var(--dim)', margin: '2px 0 6px' }}>
-                {timeAgo(v.createdAt)} · {v.authorName ?? 'A former member'} · {v.nodeCount} role{v.nodeCount === 1 ? '' : 's'}
+                {timeAgo(v.createdAt)} · {v.kind === 'scheduled' ? 'Saved automatically' : v.authorName ?? 'A former member'} · {v.nodeCount} role{v.nodeCount === 1 ? '' : 's'}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button style={btn} onClick={() => void startCompare(v.id, TODAY)}><GitCompare size={11} /> Compare with today</button>

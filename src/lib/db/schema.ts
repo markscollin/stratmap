@@ -355,7 +355,7 @@ export const chartSnapshots = pgTable('chart_snapshots', {
   workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  kind: text('kind').notNull().default('manual'),   // 'manual' | 'auto'
+  kind: text('kind').notNull().default('manual'),   // 'manual' | 'auto' (before a restore) | 'scheduled' (the daily one)
   createdBy: text('created_by').notNull(),          // Clerk userId
   createdAt: timestamp('created_at').notNull().defaultNow(),
   nodeCount: integer('node_count').notNull().default(0),
