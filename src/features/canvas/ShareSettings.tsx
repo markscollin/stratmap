@@ -1,10 +1,11 @@
 // Share and embed settings in the toolbar (split out of OrgChart.tsx, R-35).
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Share2, Check, Copy, Lock, Globe } from 'lucide-react'
 import { useChartStore } from '../../store/chartStore'
 import { useToastStore } from '../../store/toastStore'
 import { api } from '../../lib/apiClient'
 import { failureMessage } from '../../lib/failureMessage'
+import { embedSnippet, DEFAULT_EMBED_OPTIONS, type EmbedOptions } from '../../lib/embedOptions'
 
 export function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPublic: boolean }) {
   const [open, setOpen] = useState(false)
@@ -17,9 +18,10 @@ export function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPub
   const isPlanGated = false // Starter+ gate — wire to billing store when ready
 
   const shareUrl = code ? `${window.location.origin}/share/${code}` : null
-  const embedCode = code
-    ? `<iframe src="${window.location.origin}/embed/${code}" title="Org chart" width="100%" height="600" style="border:0" loading="lazy"></iframe>`
-    : null
+  const [embedOptions, setEmbedOptions] = useState<EmbedOptions>(DEFAULT_EMBED_OPTIONS)
+  const themeId = useId()
+  const namesId = useId()
+  const embedCode = code ? embedSnippet(window.location.origin, code, embedOptions) : null
   const [embedCopied, setEmbedCopied] = useState(false)
   const copyEmbed = async () => {
     if (!embedCode) return
@@ -199,6 +201,32 @@ export function ShareSettingsBtn({ chartId, isPublic }: { chartId: string; isPub
                 <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
                   This is a live link — viewers always see the latest version.
                 </p>
+                {embedCode && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: 'var(--muted)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label htmlFor={themeId}>Embed theme</label>
+                      <select
+                        id={themeId} data-testid="embed-theme" value={embedOptions.theme ?? ''}
+                        onChange={e => setEmbedOptions(o => ({ ...o, theme: e.target.value === 'light' || e.target.value === 'dark' ? e.target.value : null }))}
+                        style={{ background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 11, padding: '3px 6px' }}
+                      >
+                        <option value="">Visitor's own (dark by default)</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        id={namesId} type="checkbox" data-testid="embed-hide-names" checked={embedOptions.hideNames}
+                        onChange={e => setEmbedOptions(o => ({ ...o, hideNames: e.target.checked }))}
+                      />
+                      <label htmlFor={namesId}>Show role titles only (hide people's names and photos)</label>
+                    </div>
+                    {embedOptions.hideNames && (
+                      <span>This only changes how the embed looks. The share link itself still shows names.</span>
+                    )}
+                  </div>
+                )}
                 {embedCode && (
                   <button
                     onClick={copyEmbed}

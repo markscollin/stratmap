@@ -2,8 +2,9 @@
 // <iframe>: vercel.json drops the frame-blocking headers for /embed/* and keeps them everywhere else.
 // It reads the same public share code as /share/:code, so turning sharing off (or revoking the link)
 // empties every embed at once. It shows the chart name and the chart only: no toolbar, no sign-in.
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useParams } from 'react-router-dom'
+import { parseEmbedOptions, applyEmbedOptions } from '../lib/embedOptions'
 import { OrgChart } from '../features/canvas/OrgChart'
 import type { OrgNode, OrgEdge, Department } from '../types'
 
@@ -17,6 +18,8 @@ interface EmbeddedChart {
 
 export function EmbedPage() {
   const { code } = useParams()
+  const { search } = useLocation()
+  const options = useMemo(() => parseEmbedOptions(search), [search])
   const [data, setData] = useState<EmbeddedChart | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,6 +37,14 @@ export function EmbedPage() {
       .catch((e) => setError((e as Error).message))
   }, [code])
 
+  // An explicit theme in the address wins over the visitor's saved one. It is set on the page only, never saved.
+  useEffect(() => {
+    if (options.theme === 'light') document.documentElement.setAttribute('data-theme', 'light')
+    else if (options.theme === 'dark') document.documentElement.removeAttribute('data-theme')
+  }, [options.theme])
+
+  const nodes = useMemo(() => (data ? applyEmbedOptions(data.nodes, options) : []), [data, options])
+
   useEffect(() => { if (data) document.title = `${data.name} — StratMap` }, [data])
 
   if (error || !data) {
@@ -47,7 +58,7 @@ export function EmbedPage() {
   const branding = data.branding !== false
   return (
     <div style={{ height: '100dvh', position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>
-      <OrgChart chartName={data.name} initialNodes={data.nodes} initialEdges={data.edges} departments={data.departments} readOnly brandExports={branding} />
+      <OrgChart chartName={data.name} initialNodes={nodes} initialEdges={data.edges} departments={data.departments} readOnly brandExports={branding} />
       {branding && (
         <a
           href={`/share/${code}`} target="_blank" rel="noopener noreferrer" data-testid="embed-branding"

@@ -19,9 +19,19 @@ test('a shared chart can be embedded: the snippet points at /embed, a signed-out
   await page.getByTestId('copy-embed').click()
   await expect(page.getByTestId('copy-embed')).toContainText('copied')
 
+  // The snippet follows the options picked in the share panel, and a visitor sees the chart in the chosen theme.
+  await page.getByTestId('embed-theme').selectOption('light')
+  await page.getByTestId('embed-hide-names').check()
+  await page.getByTestId('copy-embed').click()
+  const snippet = await page.evaluate(() => navigator.clipboard.readText())
+  expect(snippet).toContain(`/embed/${code}?theme=light&names=hide"`)
+
   const guestCtx = await browser.newContext()
   const guest = await guestCtx.newPage()
+  await guest.goto(`/embed/${code}?theme=light&names=hide`)
+  await expect(guest.locator('html')).toHaveAttribute('data-theme', 'light')
   await guest.goto(`/embed/${code}`)
+  await expect(guest.locator('html')).not.toHaveAttribute('data-theme', 'light')
   await expect(guest).toHaveTitle('Public org — StratMap')
   await expect(guest.getByTestId('embed-message')).toHaveCount(0)
   await expect(guest.getByTitle('Version history')).toHaveCount(0)
