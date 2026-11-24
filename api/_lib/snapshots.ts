@@ -30,11 +30,13 @@ export async function captureChart(chartId: string): Promise<SnapshotData> {
 }
 
 /** Saves the chart's current structure as a version. Automatic versions beyond their cap are pruned, oldest first. */
-export async function saveSnapshot(opts: { workspaceId: string; chartId: string; name: string; kind: SnapshotKind; userId: string }) {
+export async function saveSnapshot(opts: { workspaceId: string; chartId: string; name: string; kind: SnapshotKind; userId: string; createdAt?: Date }) {
   const data = await captureChart(opts.chartId)
   const [row] = await db.insert(chartSnapshots).values({
     id: crypto.randomUUID(), workspaceId: opts.workspaceId, chartId: opts.chartId, name: opts.name, kind: opts.kind,
     createdBy: opts.userId, nodeCount: data.nodes.length, edgeCount: data.edges.length, data,
+    // A job that takes a clock (the daily versions) stamps the version with it, so its "how long since the last one" check compares like with like.
+    ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
   }).returning({ id: chartSnapshots.id, createdAt: chartSnapshots.createdAt })
 
   if (opts.kind !== 'manual') {

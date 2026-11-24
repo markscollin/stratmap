@@ -67,7 +67,11 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 ## Phase 0: green CI (do first, today)
 
 ### R-55 API suite red: scheduled snapshots ignore the injected clock
-- [ ] **Problem.** `takeScheduledSnapshots(now)` takes a clock for testability, but `api/_lib/scheduledSnapshots.ts:50` calls
+- [x] **Done 2026-11-24.** `resolvePlanTier(r, now)`, and `saveSnapshot` takes an optional `createdAt` that the daily job sets to `now` (the
+  14-vs-11 failure was the 20-hour gap check comparing the injected `now` with a real-clock `created_at`). New tests run the job with the
+  system clock moved a month forward and back. Other `now`-taking functions in `api/` (`restoreWorkspace`, `purgeExpiredWorkspaces`,
+  `claimEvent`, `sendTrialNotices`) were checked: none passes the clock on to something that ignores it. API 926/926.
+- **Problem.** `takeScheduledSnapshots(now)` takes a clock for testability, but `api/_lib/scheduledSnapshots.ts:50` calls
   `resolvePlanTier(r)` without `now`, so the trial check uses the real date. The test pins `T0 = 2026-11-19`; it passed the day it was
   written and fails since. Two failures in `api/__tests__/scheduled-snapshots.test.ts` ("a trial counts as the plan…" and "keeps only the
   newest 14 daily versions…"). Production behaviour is right (`now` defaults to the real date), but **CI is red, so a protected `main` cannot deploy**.

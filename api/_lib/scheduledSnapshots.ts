@@ -38,6 +38,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(walk(JSON.parse(JSON.stringify(value))))
 }
 
+/** Every time comparison in this job uses `now` (never the system clock), so a test can pin the date (R-55). */
 export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHEDULED_CHARTS_PER_RUN): Promise<ScheduledSnapshotResult> {
   const out: ScheduledSnapshotResult = { saved: 0, unchanged: 0, deferred: 0, failed: 0 }
 
@@ -47,7 +48,7 @@ export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHED
     cancelAtPeriodEnd: workspaces.cancelAtPeriodEnd, planExpiresAt: workspaces.planExpiresAt,
   }).from(charts).innerJoin(workspaces, eq(charts.workspaceId, workspaces.id))
     .where(and(eq(charts.isSample, false), isNull(workspaces.deletedAt)))
-  const eligible = rows.filter(r => tierHasFeature(resolvePlanTier(r), 'version-history')).sort((a, b) => (a.id < b.id ? -1 : 1))
+  const eligible = rows.filter(r => tierHasFeature(resolvePlanTier(r, now), 'version-history')).sort((a, b) => (a.id < b.id ? -1 : 1))
   if (eligible.length === 0) return out
 
   const start = (Math.floor(now.getTime() / DAY) * maxCharts) % eligible.length
@@ -65,7 +66,7 @@ export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHED
       if (nothingNew) { out.unchanged++; continue }
 
       const day = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
-      await saveSnapshot({ workspaceId: chart.workspaceId, chartId: chart.id, name: `Daily version, ${day}`, kind: 'scheduled', userId: SYSTEM_USER })
+      await saveSnapshot({ workspaceId: chart.workspaceId, chartId: chart.id, name: `Daily version, ${day}`, kind: 'scheduled', userId: SYSTEM_USER, createdAt: now })
       out.saved++
     } catch (err) {
       out.failed++
