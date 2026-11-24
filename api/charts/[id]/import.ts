@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, and, count, inArray } from 'drizzle-orm'
+import { eq, and, count, sql } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { track, hasAnalyticsConsent } from '../../_lib/analytics'
 import { requireRole, getEffectivePlan, sendPlanLimit, requireChartsEditable } from '../../_lib/access'
-import { claimRevision } from '../../_lib/revision'
+import { revisionStillCurrent, revisionClaimStatement, guardStatement, guardFailure, sendChartChanged, sendRevisionHeader, sentRevision } from '../../_lib/revision'
+import { runAtomically } from '../../_lib/atomic'
 import { parseBody } from '../../_lib/validate'
 import { ChartImport, MAX_SAMPLE_NODES } from '../../_lib/schemas'
 import { chunk } from '../../_lib/chunk'
@@ -57,7 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
     }
 
-    if ((await claimRevision(req, res, chartId)) === null) return
+    // A stale revision is refused before any work; the claim itself happens inside the batch below (R-59).
+    if (!(await revisionStillCurrent(req, res, chartId))) return
 
     // Departments: reuse the chart's own by name (case-insensitive), create the rest.
     const existing = await db.select().from(departments).where(eq(departments.chartId, chartId))
@@ -73,7 +75,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       deptIdMap.set(d.id, id)
     }
-    if (newDepts.length) await db.insert(departments).values(newDepts)
 
     // Fresh ids for everything; references outside the payload are dropped.
     const nodeIdMap = new Map(body.nodes.map(n => [n.id, crypto.randomUUID()]))
@@ -95,22 +96,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         targetId: nodeIdMap.get(e.targetId)!,
       }))
 
-    for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
-    for (const part of chunk(newEdges)) await db.insert(edges).values(part)
-
-    // The count above and the inserts are separate statements, so an import racing another add can overshoot the limit (R-44).
-    // Count again now that the roles are in; if the chart is over, take this import back out (nothing else of ours is in the chart)
-    // and refuse it, as the add-role route does (R-33). Racing requests at the edge may all be refused; Retry then succeeds.
-    const [{ value: after }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chartId))
-    const sampleFull = chart.isSample && after > MAX_SAMPLE_NODES
-    if (sampleFull || !fitsLimit(plan.limits.maxNodesPerChart, after, 0)) {
-      const newIds = newNodes.map(n => n.id)
-      for (const part of chunk(newIds)) await db.delete(nodes).where(and(eq(nodes.chartId, chartId), inArray(nodes.id, part)))
-      for (const part of chunk(newEdges.map(e => e.id))) await db.delete(edges).where(and(eq(edges.chartId, chartId), inArray(edges.id, part)))
-      if (newDepts.length) await db.delete(departments).where(and(eq(departments.chartId, chartId), inArray(departments.id, newDepts.map(d => d.id as string))))
-      if (sampleFull) return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
-      return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+    // All or nothing (R-59): the revision bump, the departments, every chunk of roles and lines, and the limit recount are ONE
+    // atomic batch. The bump comes first: it locks the chart row, so a second import on this chart waits for this one and its
+    // recount sees these rows. The recount (R-44) is a guard that fails the batch when the chart is over the plan's limit or a
+    // sample's cap, so nothing is ever inserted and taken back. Racing requests at the edge may all be refused; Retry then succeeds.
+    const planMax = plan.limits.maxNodesPerChart
+    const cap = chart.isSample ? (planMax < 0 ? MAX_SAMPLE_NODES : Math.min(planMax, MAX_SAMPLE_NODES)) : planMax
+    const capReason = chart.isSample && (planMax < 0 || MAX_SAMPLE_NODES <= planMax) ? 'sample-too-large' : 'plan-limit'
+    try {
+      await runAtomically(d => [
+        revisionClaimStatement(d, chartId, sentRevision(req)),
+        ...(newDepts.length ? [d.insert(departments).values(newDepts)] : []),
+        ...chunk(newNodes).map(part => d.insert(nodes).values(part)),
+        ...chunk(newEdges).map(part => d.insert(edges).values(part)),
+        ...(cap >= 0 ? [guardStatement(d, capReason, sql`count(*) <= ${cap}`, sql`${nodes} WHERE ${nodes.chartId} = ${chartId}`)] : []),
+      ])
+    } catch (err) {
+      const reason = guardFailure(err)
+      if (reason === 'chart-changed') { await sendChartChanged(res, chartId); return }
+      if (reason === 'sample-too-large') return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+      if (reason === 'plan-limit') return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+      throw err
     }
+    await sendRevisionHeader(res, chartId)
 
     if (!chart.isSample && nodeCount < 10 && nodeCount + newNodes.length >= 10) {
       await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier, via: 'import' } })

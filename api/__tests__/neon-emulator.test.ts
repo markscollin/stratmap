@@ -81,4 +81,36 @@ describe('Neon HTTP emulator', () => {
     await db.delete(schema.workspaces).where(eq(schema.workspaces.id, id))      // cascades
     expect(await db.select().from(schema.auditLog).where(eq(schema.auditLog.workspaceId, id))).toEqual([])
   })
+
+  // R-59: an import or a template chart is one batch with guard statements that fail it (revision claim, plan recount). Through the
+  // real Neon driver: a failed guard rolls back every statement before it, and the reason can be read back from the error.
+  it('a guard statement fails the whole batch through the Neon driver, and its reason is readable', async () => {
+    neonConfig.fetchEndpoint = emulator.url
+    process.env.DATABASE_URL ??= URL_LABEL
+    const { revisionClaimStatement, guardStatement, guardFailure } = await import('../_lib/revision')
+    const { sql: dsql } = await import('drizzle-orm')
+    const db = drizzle(neon(URL_LABEL), { schema })
+    const ws = crypto.randomUUID(), chart = crypto.randomUUID()
+    await db.insert(schema.workspaces).values({ id: ws, name: 'Emu', ownerId: 'u-1', ownerRole: 'CEO', size: '1-10' })
+    await db.insert(schema.charts).values({ id: chart, workspaceId: ws, name: 'C', version: 1, ownerId: 'u-1', creatorId: 'u-1' })
+    const node = (id: string) => db.insert(schema.nodes).values({ id: `${chart}-${id}`, chartId: chart, name: id, title: 't', x: 0, y: 0 })
+    const d = db as never
+
+    // stale revision: nothing written, no bump
+    const stale = await db.batch([revisionClaimStatement(d, chart, 41), node('a')] as never).catch((e: unknown) => e)
+    expect(guardFailure(stale)).toBe('chart-changed')
+    // over a cap of 1: the claim and both roles are rolled back
+    const over = await db.batch([revisionClaimStatement(d, chart, 0), node('b'), node('c'),
+      guardStatement(d, 'plan-limit', dsql`count(*) <= 1`, dsql`nodes WHERE chart_id = ${chart}`)] as never).catch((e: unknown) => e)
+    expect(guardFailure(over)).toBe('plan-limit')
+    expect(await db.select().from(schema.nodes).where(eq(schema.nodes.chartId, chart))).toEqual([])
+    expect((await db.select().from(schema.charts).where(eq(schema.charts.id, chart)))[0].revision).toBe(0)
+    // within the cap: everything lands, the revision goes up by one
+    await db.batch([revisionClaimStatement(d, chart, 0), node('d'), guardStatement(d, 'plan-limit', dsql`count(*) <= 1`, dsql`nodes WHERE chart_id = ${chart}`)] as never)
+    expect(await db.select().from(schema.nodes).where(eq(schema.nodes.chartId, chart))).toHaveLength(1)
+    expect((await db.select().from(schema.charts).where(eq(schema.charts.id, chart)))[0].revision).toBe(1)
+    expect(guardFailure(new Error('Failed query: ... params: guard:plan-limit:'))).toBeNull() // parameters in a wrapper message do not count
+    await db.delete(schema.workspaces).where(eq(schema.workspaces.id, ws))
+  })
 })
+

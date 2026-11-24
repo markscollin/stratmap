@@ -11,6 +11,7 @@ import { charts, nodes, edges, departments } from '../../src/lib/db/schema'
 import { fitsLimit, APPROVAL_CHART_STATUSES } from '../../src/lib/plans'
 import { statusChangeNeedsAdmin } from '../../src/lib/chartStatus'
 import { liveWorkspaceDepartmentIds } from '../_lib/references'
+import { runAtomically } from '../_lib/atomic'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -74,68 +75,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const chartId = crypto.randomUUID()
 
-      const [chart] = await db
-        .insert(charts)
-        .values({
-          id: chartId,
-          workspaceId: auth.workspaceId,
-          name,
-          status,
-          version: 1,
-          isSample,
-          ownerId: auth.userId,
-          creatorId: auth.userId,
-        })
-        .returning()
-
-      // Recount now that the chart is in: parallel creates at the limit must not leave the workspace over it (R-50).
-      if (!isSample && await refuseChartIfOverLimit(res, auth.workspaceId, chartId, plan)) return
-
-      // Seed from template — generate fresh IDs to avoid PK conflicts across charts.
-      // Only allow-listed fields (validated above) are written.
-      const deptIdMap = new Map<string, string>()
-      const nodeIdMap = new Map<string, string>()
-
+      // Seed from template: fresh ids to avoid PK conflicts across charts; only allow-listed fields (validated above) are written.
       // A template may name workspace departments; only this workspace's own are linked, the rest become unlinked (R-30).
       const liveWsDepts = await liveWorkspaceDepartmentIds(auth.workspaceId, templateDepts.map(d => d.workspaceDepartmentId))
-      if (templateDepts.length) {
-        const newDepts = templateDepts.map((d) => {
-          const newId = crypto.randomUUID()
-          deptIdMap.set(d.id, newId)
-          return {
-            id: newId,
-            chartId,
-            name: d.name,
-            colour: d.colour,
-            workspaceDepartmentId: d.workspaceDepartmentId && liveWsDepts.has(d.workspaceDepartmentId) ? d.workspaceDepartmentId : null,
-          }
-        })
-        await db.insert(departments).values(newDepts)
-      }
-
-      if (templateNodes.length) {
-        // Pre-generate all node IDs so managerId refs can be remapped in one pass
-        templateNodes.forEach((n) => nodeIdMap.set(n.id, crypto.randomUUID()))
-        const newNodes = templateNodes.map((n) => ({
-          ...n,
-          id: nodeIdMap.get(n.id)!,
-          chartId,
-          departmentId: n.departmentId ? (deptIdMap.get(n.departmentId) ?? null) : null,
-          managerId: n.managerId ? (nodeIdMap.get(n.managerId) ?? null) : null,
-        }))
-        for (const part of chunk(newNodes)) await db.insert(nodes).values(part)
-      }
-
+      const deptIdMap = new Map(templateDepts.map(d => [d.id, crypto.randomUUID()]))
+      const newDepts = templateDepts.map(d => ({
+        id: deptIdMap.get(d.id)!,
+        chartId,
+        name: d.name,
+        colour: d.colour,
+        workspaceDepartmentId: d.workspaceDepartmentId && liveWsDepts.has(d.workspaceDepartmentId) ? d.workspaceDepartmentId : null,
+      }))
+      const nodeIdMap = new Map(templateNodes.map(n => [n.id, crypto.randomUUID()]))
+      const newNodes = templateNodes.map((n) => ({
+        ...n,
+        id: nodeIdMap.get(n.id)!,
+        chartId,
+        departmentId: n.departmentId ? (deptIdMap.get(n.departmentId) ?? null) : null,
+        managerId: n.managerId ? (nodeIdMap.get(n.managerId) ?? null) : null,
+      }))
       // Edges may only connect nodes that were seeded into this chart.
       const newEdges = templateEdges
         .filter((e) => nodeIdMap.has(e.sourceId) && nodeIdMap.has(e.targetId))
-        .map((e) => ({
-          id: crypto.randomUUID(),
-          chartId,
-          sourceId: nodeIdMap.get(e.sourceId)!,
-          targetId: nodeIdMap.get(e.targetId)!,
-        }))
-      for (const part of chunk(newEdges)) await db.insert(edges).values(part)
+        .map((e) => ({ id: crypto.randomUUID(), chartId, sourceId: nodeIdMap.get(e.sourceId)!, targetId: nodeIdMap.get(e.targetId)! }))
+
+      // The chart and everything seeded into it in ONE atomic batch (R-59): a failure part-way leaves no half-made chart.
+      await runAtomically(d => [
+        d.insert(charts).values({
+          id: chartId, workspaceId: auth.workspaceId, name, status, version: 1, isSample, ownerId: auth.userId, creatorId: auth.userId,
+        }),
+        ...(newDepts.length ? [d.insert(departments).values(newDepts)] : []),
+        ...chunk(newNodes).map(part => d.insert(nodes).values(part)),
+        ...chunk(newEdges).map(part => d.insert(edges).values(part)),
+      ])
+
+      // Recount now that the chart is in: parallel creates at the limit must not leave the workspace over it (R-50). Taking it
+      // back is one delete; its roles, lines and departments cascade.
+      if (!isSample && await refuseChartIfOverLimit(res, auth.workspaceId, chartId, plan)) return
+      const [chart] = await db.select().from(charts).where(eq(charts.id, chartId)).limit(1)
 
       // Funnel: the workspace's first real chart (no non-sample chart existed before this one).
       if (!isSample && chartCount === 0) {

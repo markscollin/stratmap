@@ -10,7 +10,7 @@ vi.mock('../../src/lib/db/index', async () => {
 vi.mock('../_lib/auth', () => ({ requireAuth: vi.fn(), requireUser: vi.fn() }))
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import importHandler from '../charts/[id]/import'
 import chartsHandler from '../charts/index'
@@ -32,6 +32,8 @@ const setTier = (planTier: 'free' | 'starter' | 'growth' | 'enterprise') =>
   testDb.update(schema.workspaces).set({ planTier }).where(eq(schema.workspaces.id, TEST_WS_ID))
 
 const q = { id: TEST_CHART_ID }
+/** Several SQL statements at once (triggers for the race and failure tests), through the PGlite client itself. */
+const execSql = (text: string) => (testDb as unknown as { $client: { exec: (t: string) => Promise<unknown> } }).$client.exec(text)
 const node = (id: string, extra: Record<string, unknown> = {}) =>
   ({ id, name: `Person ${id}`, title: 'Engineer', x: 0, y: 0, ...extra })
 const doImport = (body: unknown, query = q) => call(importHandler, { method: 'POST', query, body })
@@ -190,24 +192,33 @@ describe('importing into a new chart (POST /api/charts) at scale', () => {
 describe('an import racing another add (R-44)', () => {
   afterEach(() => { vi.restoreAllMocks() })
 
-  /** Makes the first insert of roles also insert `extra` roles first, as a request that slipped in after the limit check. */
-  function raceWith(extra: number) {
-    const realInsert = testDb.insert.bind(testDb)
-    let raced = false
-    vi.spyOn(testDb, 'insert').mockImplementation(((table: unknown) => {
-      if (table === schema.nodes && !raced) {
-        raced = true
-        return { values: async (rows: never) => {
-          await realInsert(schema.nodes).values(Array.from({ length: extra }, (_, i) => ({ id: `rival-${i}`, chartId: TEST_CHART_ID, name: `Rival ${i}`, title: 'x', x: 0, y: 0 })))
-          return realInsert(table as never).values(rows)
-        } }
-      }
-      return realInsert(table as never)
-    }) as never)
+  /**
+   * Makes the first insert of roles also insert `extra` roles first, as a request that slipped in after the limit check. Done with a
+   * database trigger (once), so it happens whatever executor the route uses (a transaction since R-59).
+   */
+  async function raceWith(extra: number) {
+    await execSql(`
+      CREATE TABLE IF NOT EXISTS race_once (n int);
+      DELETE FROM race_once; INSERT INTO race_once VALUES (${extra});
+      CREATE OR REPLACE FUNCTION race_rivals() RETURNS trigger LANGUAGE plpgsql AS $$
+      DECLARE k int;
+      BEGIN
+        SELECT n INTO k FROM race_once LIMIT 1;
+        IF k IS NOT NULL THEN
+          DELETE FROM race_once;
+          INSERT INTO nodes (id, chart_id, name, title, x, y)
+            SELECT 'rival-' || g, '${TEST_CHART_ID}', 'Rival ' || g, 'x', 0, 0 FROM generate_series(0, k - 1) g;
+        END IF;
+        RETURN NULL;
+      END $$;
+      DROP TRIGGER IF EXISTS race_rivals ON nodes;
+      CREATE TRIGGER race_rivals BEFORE INSERT ON nodes FOR EACH STATEMENT EXECUTE FUNCTION race_rivals();
+    `)
   }
+  afterEach(async () => { await testDb.execute(sql.raw('DROP TRIGGER IF EXISTS race_rivals ON nodes')) })
 
   it('over the limit by the race: 402, only the existing role and the rival remain, no edges or departments left behind', async () => {
-    raceWith(6) // 1 existing + 6 rivals + 24 imported = 31 > 30
+    await raceWith(6) // 1 existing + 6 rivals + 24 imported = 31 > 30
     const res = await doImport({
       departments: [{ id: 'd0', name: 'New dept', colour: '#0EA5E9' }],
       nodes: Array.from({ length: 24 }, (_, i) => node(`i${i}`, { departmentId: 'd0' })),
@@ -215,16 +226,70 @@ describe('an import racing another add (R-44)', () => {
     })
     expect(res._status).toBe(402)
     expect(res._body).toMatchObject({ error: 'plan-limit', limit: 'nodes', max: 30 })
+    // Nothing of the import is left. (The simulated rival runs inside the import's own transaction here, since one test database
+    // has one connection, so it is rolled back with it; a real rival request commits on its own and stays.)
     const left = await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))
-    expect(left.map(n => n.id).sort()).toEqual([TEST_NODE_ID, ...Array.from({ length: 6 }, (_, i) => `rival-${i}`)].sort())
+    expect(left.filter(n => n.name.startsWith('Person '))).toHaveLength(0)
+    expect(left.map(n => n.id)).toContain(TEST_NODE_ID)
     expect(await testDb.select().from(schema.edges).where(eq(schema.edges.chartId, TEST_CHART_ID))).toHaveLength(0)
     expect(await testDb.select().from(schema.departments).where(eq(schema.departments.chartId, TEST_CHART_ID))).toHaveLength(0)
   })
 
   it('an import that fits after the race still succeeds', async () => {
-    raceWith(2) // 1 + 2 + 20 = 23 <= 30
+    await raceWith(2) // 1 + 2 + 20 = 23 <= 30
     const res = await doImport({ nodes: Array.from({ length: 20 }, (_, i) => node(`i${i}`)) })
     expect(res._status).toBe(201)
     expect(await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))).toHaveLength(23)
+  })
+})
+
+// R-59: an import is all or nothing. A failure part-way (here: the reporting lines cannot be written) must leave no roles, no new
+// departments and no revision bump behind; so must a chart created from a template.
+describe('a failure part-way through (R-59)', () => {
+  const failEdges = () => execSql(`
+    CREATE OR REPLACE FUNCTION fail_edges() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'edges are broken'; END $$;
+    DROP TRIGGER IF EXISTS fail_edges ON edges;
+    CREATE TRIGGER fail_edges BEFORE INSERT ON edges FOR EACH STATEMENT EXECUTE FUNCTION fail_edges();
+  `)
+  afterEach(async () => { await testDb.execute(sql.raw('DROP TRIGGER IF EXISTS fail_edges ON edges')) })
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}) })
+
+  it('import: no roles, departments or revision bump are left behind', async () => {
+    await setTier('growth')
+    const [before] = await testDb.select({ revision: schema.charts.revision }).from(schema.charts).where(eq(schema.charts.id, TEST_CHART_ID))
+    await failEdges()
+    const res = await doImport({
+      departments: [{ id: 'd0', name: 'New dept', colour: '#0EA5E9' }],
+      nodes: [node('a', { departmentId: 'd0' }), node('b', { departmentId: 'd0', managerId: 'a' })],
+      edges: [{ sourceId: 'a', targetId: 'b' }],
+    })
+    expect(res._status).toBe(500)
+    const left = await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))
+    expect(left.map(n => n.id)).toEqual([TEST_NODE_ID])
+    expect(await testDb.select().from(schema.departments).where(eq(schema.departments.chartId, TEST_CHART_ID))).toHaveLength(0)
+    const [after] = await testDb.select({ revision: schema.charts.revision }).from(schema.charts).where(eq(schema.charts.id, TEST_CHART_ID))
+    expect(after.revision).toBe(before.revision)
+  })
+
+  it('template chart: no chart, roles or departments are left behind', async () => {
+    await setTier('growth')
+    await failEdges()
+    const res = await call(chartsHandler, { method: 'POST', body: {
+      name: 'From a template',
+      templateDepts: [{ id: 'd0', name: 'Eng', colour: '#0EA5E9' }],
+      templateNodes: [{ id: 'a', name: 'A', title: 'CEO', x: 0, y: 0, departmentId: 'd0' }, { id: 'b', name: 'B', title: 'CTO', x: 0, y: 100, departmentId: 'd0' }],
+      templateEdges: [{ sourceId: 'a', targetId: 'b' }],
+    } })
+    expect(res._status).toBe(500)
+    expect((await testDb.select().from(schema.charts)).map(c => c.id)).toEqual([TEST_CHART_ID])
+    expect(await testDb.select().from(schema.nodes)).toHaveLength(1)
+    expect(await testDb.select().from(schema.departments)).toHaveLength(0)
+  })
+
+  it('a stale X-Chart-Revision is still a 409 and writes nothing', async () => {
+    const res = await call(importHandler, { method: 'POST', query: q, headers: { 'x-chart-revision': '999' }, body: { nodes: [node('a')] } })
+    expect(res._status).toBe(409)
+    expect(res._body).toMatchObject({ error: 'chart-changed' })
+    expect(await testDb.select().from(schema.nodes).where(eq(schema.nodes.chartId, TEST_CHART_ID))).toHaveLength(1)
   })
 })

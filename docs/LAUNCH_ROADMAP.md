@@ -133,7 +133,13 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 - **Done when** the export of a workspace with 20 charts × 84 versions × 300 roles succeeds and is under the limit.
 
 ### R-59 Import and template chart creation are not atomic on Neon
-- [ ] **Problem (reported).** `api/charts/[id]/import.ts:60-110`: the revision is claimed, then departments, node chunks and edge chunks are
+- [x] **Done 2026-11-24.** Reproduced first (a trigger that makes the edge insert fail left the roles, departments and a bumped revision).
+  `POST /api/charts/:id/import` is now ONE `runAtomically` batch: revision claim first (it locks the chart row, so a second import waits),
+  departments, role and line chunks, then the plan/sample recount as a **guard statement** that fails the batch when over (no insert-then-take-back).
+  Guards (`guardStatement`, `revisionClaimStatement`, `guardFailure` in `api/_lib/revision.ts`) fail with a cast error whose text names the reason.
+  `POST /api/charts` inserts the chart, departments, roles and lines in one batch (the R-50 recount stays a single cascading delete).
+  Tests: `import.test.ts` (PGlite) and `neon-emulator.test.ts` (the real Neon driver: a failed guard rolls back the batch).
+- **Problem (reported).** `api/charts/[id]/import.ts:60-110`: the revision is claimed, then departments, node chunks and edge chunks are
   separate `await db.insert` calls; the R-44 take-back is several separate deletes. A failure or timeout part-way leaves a half-imported
   chart with a bumped revision, breaking the owner rule "all or nothing". `api/charts/index.ts:77-138` (template seeding) has the same shape.
 - **Fix.** Build every insert (already chunked) into one `runAtomically` batch, as `branchSnapshot` does. On Neon `db.batch` is one
