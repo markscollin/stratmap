@@ -59,6 +59,12 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 3. **Subscriptions and emails → Manage failed payments:** turn on Smart Retries. After all retries fail,
    choose **cancel the subscription** or **mark it as unpaid**. Both downgrade to Free.
    You can leave Stripe's own failed-payment emails off, because StratMap sends its own.
+4. **Tax (R-60, waits on decision D-6).** Checkout always asks for a billing address and offers a VAT/tax id field (both saved on the
+   customer, so they appear on invoices). Stripe does **not** calculate tax until you switch it on:
+   - register for VAT (and anywhere else you must collect tax) and add the registrations under Stripe → Tax → Registrations;
+   - set each price's **tax behaviour** (inclusive or exclusive) to match what the pricing page says;
+   - turn on Stripe Tax, then set `STRIPE_AUTOMATIC_TAX=1` in Vercel (Production) and redeploy. Setting it before Stripe Tax is on makes
+     every Checkout fail, so do it in this order and try one test-mode payment on a preview first.
 
 ## Release check for the webhook body (R-05): run this on a deployed preview
 

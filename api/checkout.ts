@@ -13,6 +13,21 @@ import { workspaces } from '../src/lib/db/schema'
 import { hasAnalyticsConsent } from './_lib/analytics'
 import { isDevBypassAllowed } from './_lib/devBypass'
 
+/**
+ * Tax and invoice details (R-60). Always: a billing address and an optional VAT/tax id (needed on UK/EU business invoices), saved
+ * onto the customer, which is made before Checkout with no address (R-19), hence `customer_update`. Stripe Tax is switched on
+ * only with `STRIPE_AUTOMATIC_TAX=1`, once the owner has registered for tax and turned Stripe Tax on in the dashboard (D-6):
+ * asking for it before that makes every Checkout fail.
+ */
+export function checkoutTaxParams() {
+  return {
+    billing_address_collection: 'required' as const,
+    tax_id_collection: { enabled: true },
+    customer_update: { address: 'auto' as const, name: 'auto' as const },
+    automatic_tax: { enabled: process.env.STRIPE_AUTOMATIC_TAX === '1' },
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -81,6 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: { workspaceId: auth.workspaceId, ...(hasAnalyticsConsent(req) ? { analyticsUser: auth.userId } : {}) },
       subscription_data: { metadata: { workspaceId: auth.workspaceId } },
       allow_promotion_codes: true,
+      ...checkoutTaxParams(),
       success_url: `${appUrl}/billing/success?plan=${tier}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing`,
     })

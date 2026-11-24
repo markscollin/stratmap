@@ -26,7 +26,7 @@ To make a long random secret (CRON_SECRET, ADMIN_SECRET): `openssl rand -hex 32`
 | 4 | **Clerk production instance (O-01).** Create the production application, enable Google sign-in, put the `pk_live_` / `sk_live_` keys in Vercel (Production). Then sign up, onboard and invite someone end to end. | Test-mode Clerk sessions are not production-safe. | 30 min |
 | 5 | **Domain and `APP_URL` (O-03).** Buy a domain, add it to the Vercel project, set `APP_URL=https://yourdomain` in Production. In Resend add the domain and its DNS records (SPF/DKIM; also publish a DMARC record). Create the mailboxes the pages link to: `privacy@`, `legal@`, `sales@`. Set `EMAIL_FROM` to an address on that domain. | Invite and comment emails, checkout redirects and canonical URLs follow `APP_URL`; emails from an unverified domain go to spam. | 1 h + DNS wait |
 | 6 | **Vercel Pro (O-02).** Upgrade the project. | The Hobby plan does not allow commercial use. | 5 min |
-| 7 | **Stripe live mode (O-04).** Live keys, live price objects (check they are £18/£180 and £49/£490 as the pricing page says), a live webhook endpoint on the production domain, Stripe Tax if you need it. Put them in Production and run helper 1. | Real money. | 45 min |
+| 7 | **Stripe live mode (O-04).** Live keys, live price objects (check they are £18/£180 and £49/£490 as the pricing page says), a live webhook endpoint on the production domain. Tax: decide D-6 first, then follow `docs/BILLING.md` "Stripe dashboard setup" step 4 (Stripe Tax, price tax behaviour, then `STRIPE_AUTOMATIC_TAX=1`). Put them in Production and run helper 1. | Real money. | 45 min |
 | 8 | **Production environment variables (O-07).** Run helper 1 until it prints "Nothing launch-blocking". Also confirm in Vercel → Settings → Environment Variables that "Automatically expose System Environment Variables" is on. **Do not** set `ALLOW_DEV_BYPASS` there. | `CRON_SECRET` unset means the daily purge never runs; the others switch features on. | 15 min |
 
 ## B. Strongly recommended before launch
@@ -46,4 +46,6 @@ If you run `vercel dev` **without** Clerk keys, add `ALLOW_DEV_BYPASS=1` to `.en
 
 ## D. Decisions still wanted from you (none block launch)
 
-None open. If you want the landing page to show a real chart (R-41), pick which chart, or send a screenshot.
+- **D-6 (tax):** are you VAT-registered, and are £18/£49 inclusive or exclusive of VAT? Checkout already collects the billing address
+  and VAT id; Stripe Tax is off until you set `STRIPE_AUTOMATIC_TAX=1` (R-60). The pricing page says nothing about VAT until you decide.
+- If you want the landing page to show a real chart (R-41), pick which chart, or send a screenshot.

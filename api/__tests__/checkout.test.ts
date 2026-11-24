@@ -105,8 +105,25 @@ describe('POST /api/checkout', () => {
     expect(arg.client_reference_id).toBe(TEST_WS_ID)
     expect(arg.customer).toBe('cus_new') // a customer is made before Checkout (R-19)
     expect(arg.allow_promotion_codes).toBe(true)
+    // R-60: invoice details always; Stripe Tax only when switched on
+    expect(arg.billing_address_collection).toBe('required')
+    expect(arg.tax_id_collection).toEqual({ enabled: true })
+    expect(arg.customer_update).toEqual({ address: 'auto', name: 'auto' })
+    expect(arg.automatic_tax).toEqual({ enabled: false })
     const body = res._body as { url: string }
     expect(body.url).toBe('https://checkout.stripe.test/abc')
+  })
+
+  it('asks Stripe to calculate tax only with STRIPE_AUTOMATIC_TAX=1 (R-60)', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test'
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = 'price_starter_monthly'
+    for (const [flag, enabled] of [['1', true], ['true', false], ['0', false]] as const) {
+      process.env.STRIPE_AUTOMATIC_TAX = flag
+      sessionCreate.mockClear()
+      await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, createRes() as never)
+      expect(sessionCreate.mock.calls[0][0].automatic_tax, flag).toEqual({ enabled })
+    }
+    delete process.env.STRIPE_AUTOMATIC_TAX
   })
 
   it('reuses the Stripe customer after a cancellation', async () => {
