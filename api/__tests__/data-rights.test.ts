@@ -471,10 +471,31 @@ describe('workspace export', () => {
     expect(data.charts.find((c: { id: string }) => c.id === 'big-3').nodes).toHaveLength(300)
     expect(data.chartVersions).toHaveLength(20 * 84)
     const v = data.chartVersions.find((x: { id: string }) => x.id === 'big-0-v0')
-    expect(v).toMatchObject({ name: 'Version 0', kind: 'manual', nodeCount: 300, dataUrl: '/api/charts/big-0/snapshots/big-0-v0' })
+    expect(v).toMatchObject({ name: 'Version 0', kind: 'manual', nodeCount: 300 })
     expect(v).not.toHaveProperty('data')
+    expect(data.charts.find((c: { id: string }) => c.id === 'big-0').versionsFile).toBe('/api/workspace/export?format=versions&chartId=big-0')
+
+    // the version contents come per chart, in their own file
+    const file = await call(exportHandler, { method: 'GET', query: { format: 'versions', chartId: 'big-0' } })
+    expect(file._status).toBe(200)
+    const versions = JSON.parse(file._written)
+    expect(versions).toMatchObject({ format: 'stratmap-chart-versions/1', chart: { id: 'big-0', name: 'Chart 0' } })
+    expect(versions.versions).toHaveLength(84)
+    expect(versions.versions[0].data.nodes).toHaveLength(300)
+    expect(versions.versions[0]).not.toHaveProperty('workspaceId')
     expect(res._written).not.toContain('"\n  ') // not pretty-printed
   }, 120_000)
+
+  it('the versions file is for a chart of this workspace only, and needs owner/admin', async () => {
+    await testDb.insert(schema.workspaces).values({ id: 'ws-2', name: 'Other', ownerId: 'u-x', ownerRole: 'CEO', size: '1-10' })
+    await testDb.insert(schema.charts).values({ id: 'chart-other', workspaceId: 'ws-2', name: 'NotYours', ownerId: 'u-x', creatorId: 'u-x', version: 1 })
+    expect((await call(exportHandler, { method: 'GET', query: { format: 'versions', chartId: 'chart-other' } }))._status).toBe(404)
+    expect((await call(exportHandler, { method: 'GET', query: { format: 'versions' } }))._status).toBe(404)
+    const ok = await call(exportHandler, { method: 'GET', query: { format: 'versions', chartId: TEST_CHART_ID } })
+    expect(JSON.parse(ok._written).versions).toEqual([])
+    await seedMember('u-ed', 'editor'); as('u-ed')
+    expect((await call(exportHandler, { method: 'GET', query: { format: 'versions', chartId: TEST_CHART_ID } }))._status).toBe(403)
+  })
 
   it('records that an export happened', async () => {
     await get()

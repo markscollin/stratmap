@@ -8,6 +8,7 @@ import { useBillingStore } from '../../store/billingStore'
 import { usePermission } from '../../hooks/usePermission'
 import { useSignOut } from '../auth/useSignOut'
 import { TransferOwnership } from './TransferOwnership'
+import { VersionHistoryDownload } from './VersionHistoryDownload'
 
 // Settings → General (roadmap 4.2): export the workspace's data, delete the workspace (owner), delete my account.
 // The server enforces every rule (roles, typed confirmation); this screen only makes them easy to follow.
@@ -80,6 +81,7 @@ export function DataRightsSection() {
             <button style={ghostBtn} onClick={() => void download('json')} disabled={busy !== null}><Download size={13} /> {busy === 'json' ? 'Preparing…' : 'All data (JSON)'}</button>
             <button style={ghostBtn} onClick={() => void download('csv')} disabled={busy !== null}><Download size={13} /> {busy === 'csv' ? 'Preparing…' : 'All roles (CSV)'}</button>
           </div>
+          <VersionHistoryDownload disabled={busy !== null} onError={setError} />
         </div>
       )}
 

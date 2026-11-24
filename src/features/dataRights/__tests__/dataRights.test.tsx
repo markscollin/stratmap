@@ -186,3 +186,23 @@ describe('DeletedWorkspaceNotice', () => {
     expect(switchWorkspace).not.toHaveBeenCalled()
   })
 })
+
+// R-58 follow-up: the main export lists versions without contents; each chart's versions download on their own.
+describe('version history download', () => {
+  it('downloads the chosen chart\'s versions as a file, for admins', async () => {
+    const { useChartStore } = await import('../../../store/chartStore')
+    useChartStore.setState({ charts: [{ id: 'c1', name: 'Org 2026' }, { id: 'c2', name: 'Plan B' }], loaded: true, loading: false, error: false } as never)
+    setup('admin')
+    fireEvent.change(screen.getByLabelText(/Saved versions of a chart/), { target: { value: 'c2' } })
+    fireEvent.click(screen.getByRole('button', { name: /Version history/ }))
+    await waitFor(() => expect(api.getText).toHaveBeenCalledWith('/api/workspace/export?format=versions&chartId=c2'))
+    await waitFor(() => expect(downloadText).toHaveBeenCalledWith('stratmap-versions-plan-b.json', 'file contents', 'application/json'))
+  })
+
+  it('is not offered to editors', async () => {
+    const { useChartStore } = await import('../../../store/chartStore')
+    useChartStore.setState({ charts: [{ id: 'c1', name: 'Org' }], loaded: true, loading: false, error: false } as never)
+    setup('editor')
+    expect(screen.queryByTestId('version-history-download')).toBeNull()
+  })
+})

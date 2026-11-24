@@ -127,6 +127,10 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
   (the existing `GET /api/charts/:id/snapshots/:snapshotId`, readable by any member). Format is now `stratmap-workspace-export/2`.
   Test: 20 charts × 300 roles × 84 versions exports under 4 MB (`data-rights.test.ts`). **To check on a preview:** Vercel documents no
   4.5 MB cap for streamed replies; confirm a large export downloads there (not verifiable locally).
+  **Follow-up (2026-11-24):** the per-version `dataUrl` links were a poor answer for a data export (they need a signed-in session, so
+  they are useless once someone has left). Replaced by a downloadable file per chart with every version's contents
+  (`?format=versions&chartId=`, format `stratmap-chart-versions/1`, own 60/hour limit), offered in Settings → General → Export as a
+  chart picker + "Version history (JSON)" (`VersionHistoryDownload`). The main export lists `versionsFile` per chart.
 - **Problem (verified in code; size not measured).** `api/workspace/export.ts:101` puts every chart version's full `data`
   (`chartVersions`) into one body, pretty-printed (`:106`, `JSON.stringify(body, null, 2)`). Each chart can keep 50 manual + 20 automatic
   + 14 daily versions. Vercel caps a function response at 4.5 MB, and the Neon HTTP driver caps a query response too. The data export

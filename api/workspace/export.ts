@@ -16,13 +16,15 @@ import type { OrgNode } from '../../src/types'
 // Workspace export (roadmap 4.2): everything the workspace holds, for its owner and admins. Free on every plan.
 //   GET /api/workspace/export               -> one JSON file
 //   GET /api/workspace/export?format=csv    -> every role of every chart, in the importer's column layout
+//   GET /api/workspace/export?format=versions&chartId=… -> one chart's saved versions WITH their contents (R-58 follow-up), so
+//       version history can be kept offline; per chart because 84 versions of a big chart are already many megabytes
 // Includes salary bands (owner/admin only, like the job description screen). Never includes Stripe ids, invite
 // tokens or share-link codes (a code is a password to a public chart).
 //
 // Size (R-58): a function's reply is capped (4.5 MB on Vercel unless it is streamed) and so is one Neon query's reply. So the
 // JSON is written chart by chart (`res.write`), each chart's rows are read in their own queries, nothing is pretty-printed, and
-// saved versions are listed WITHOUT their contents (each lists `dataUrl`, the existing per-version endpoint, any member may read
-// it). Format `/2` = `/1` minus `chartVersions[].data`, plus `dataUrl`.
+// saved versions are listed WITHOUT their contents; those come in a separate file per chart (`?format=versions&chartId=`, offered
+// next to the export in Settings). Format `/2` = `/1` minus `chartVersions[].data`, plus `versionsFile` per chart.
 
 const AUDIT_ROWS = 10_000
 
@@ -39,8 +41,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (!(await requireRole(auth, res, 'admin'))) return
-    // Big queries: a few downloads an hour is plenty.
-    if (!(await enforceRateLimit(res, `export:${auth.workspaceId}`, 10, 60 * 60))) return
+    // Big queries: a few downloads an hour is plenty. Version files are one per chart, so they have their own, larger allowance.
+    const versionsFile = req.query.format === 'versions'
+    if (!(await enforceRateLimit(res, versionsFile ? `export-versions:${auth.workspaceId}` : `export:${auth.workspaceId}`, versionsFile ? 60 : 10, 60 * 60))) return
 
     const wsId = auth.workspaceId
     const [[ws], members, invites, wsDepartments, chartRows, templates, plans] = await Promise.all([
@@ -66,10 +69,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await logAudit({
       workspaceId: wsId, actorUserId: auth.userId, action: 'workspace.exported', targetType: 'workspace', targetId: wsId,
-      details: { format: req.query.format === 'csv' ? 'csv' : 'json' },
+      details: { format: req.query.format === 'csv' ? 'csv' : req.query.format === 'versions' ? 'versions' : 'json' },
     })
 
     res.setHeader('Cache-Control', 'no-store')
+
+    if (req.query.format === 'versions') {
+      const chartId = typeof req.query.chartId === 'string' ? req.query.chartId : ''
+      const chart = chartRows.find(c => c.id === chartId)
+      if (!chart) return res.status(404).json({ error: 'Chart not found' })
+      // One version per query: a single read of every version's contents could exceed what one database reply may hold.
+      const list = await db.select({ id: chartSnapshots.id }).from(chartSnapshots)
+        .where(eq(chartSnapshots.chartId, chart.id)).orderBy(desc(chartSnapshots.createdAt), desc(chartSnapshots.id))
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="stratmap-versions-${chart.id}.json"`)
+      res.status(200)
+      res.write('{' + JSON.stringify('format') + ':' + JSON.stringify('stratmap-chart-versions/1')
+        + ',"exportedAt":' + JSON.stringify(new Date().toISOString())
+        + ',"chart":' + JSON.stringify({ id: chart.id, name: chart.name }) + ',"versions":[')
+      for (const [i, { id }] of list.entries()) {
+        const [v] = await db.select().from(chartSnapshots).where(eq(chartSnapshots.id, id)).limit(1)
+        if (!v) continue // deleted while we were reading
+        const { workspaceId: _w, ...rest } = v
+        res.write((i ? ',' : '') + JSON.stringify(rest))
+      }
+      res.write(']}')
+      return res.end()
+    }
 
     if (req.query.format === 'csv') {
       const perChart = []
@@ -111,6 +137,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         nodes: nodeRows.map(({ chartId: _c, ...n }) => n),
         edges: edgeRows.map(({ chartId: _c, ...e }) => e),
         jobDescriptions: jdRows.map(({ chartId: _c, ...j }) => j),
+        // Where this chart's saved versions, with their contents, can be downloaded (Settings → General → Version history).
+        versionsFile: `/api/workspace/export?format=versions&chartId=${encodeURIComponent(c.id)}`,
       }))
     }
     res.write(']' + field('roleTemplates', templates.map(({ workspaceId: _w, ...t }) => t))
@@ -130,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdBy: chartSnapshots.createdBy, createdAt: chartSnapshots.createdAt, nodeCount: chartSnapshots.nodeCount, edgeCount: chartSnapshots.edgeCount,
       }).from(chartSnapshots).where(eq(chartSnapshots.chartId, c.id)).orderBy(desc(chartSnapshots.createdAt))
       for (const v of rows) {
-        res.write((firstVersion ? '' : ',') + JSON.stringify({ ...v, dataUrl: `/api/charts/${v.chartId}/snapshots/${v.id}` }))
+        res.write((firstVersion ? '' : ',') + JSON.stringify(v))
         firstVersion = false
       }
     }
