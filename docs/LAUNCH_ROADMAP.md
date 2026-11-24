@@ -106,7 +106,11 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
   `AuthProvider.test.tsx`, and an e2e (invited user signs up without the link, sees the choice, declines, onboards their own workspace).
 
 ### R-57 Dashboard counts only `live` charts
-- [ ] **Problem (verified).** `api/workspace/stats.ts:14-35` counts headcount, open roles and departments over charts with
+- [x] **Done 2026-11-24.** `GET /api/workspace/stats` counts the live charts when there are any, otherwise every chart that is not archived
+  and not the sample, and returns `scope` (`live`|`all`) and `chartCount`; the KPI cards say "active roles across 1 chart" / "in 2 live
+  charts" (`src/lib/statsScope.ts`). Also fixed on the way: a role on a blank chart that uses a workspace department directly now counts in
+  that department. Tests: `workspace-stats.test.ts`, `statsScope.test.ts`, `DashboardLoadError.test.tsx`.
+- **Problem (verified).** `api/workspace/stats.ts:14-35` counts headcount, open roles and departments over charts with
   `status = 'live'` only. Going live needs the approval workflow (Starter+) and an admin, so on Free and for most new paid users
   "Org Health" reads 0 right after they build a chart (UX screenshot: a 3-role chart, dashboard all zeros, checklist says "chart built").
 - **Fix.** Decide the rule in code, not in copy: count every non-archived, non-sample chart, or the live charts if any exist and otherwise

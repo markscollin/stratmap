@@ -10,6 +10,7 @@ import type { ChartStatus } from '../types'
 import { useIsPhone } from '../hooks/useMediaQuery'
 import { OnboardingChecklist } from '../features/onboarding/OnboardingChecklist'
 import { DashboardEmpty } from '../features/onboarding/DashboardEmpty'
+import { statsScopeLabel } from '../lib/statsScope'
 
 interface DeptStat {
   id: string
@@ -31,7 +32,11 @@ interface WorkspaceStats {
   totalOpen: number
   deptBreakdown: DeptStat[]
   roleTypeBreakdown: RoleTypeBreakdown
+  /** Which charts the figures cover (R-57): the live ones if there are any, else every chart that is not archived or the sample. */
+  scope?: 'live' | 'all'
+  chartCount?: number
 }
+
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -85,8 +90,8 @@ export function Dashboard() {
   }, {})
 
   const kpis = [
-    { label: 'Total headcount', value: totalHeadcount, sub: 'active roles in live charts',   color: 'var(--brand)',   bg: 'var(--brand-bg)',   Icon: Users,      grad: 'var(--grad-brand)' },
-    { label: 'Open roles',      value: totalOpen,       sub: 'unfilled positions',             color: 'var(--warn)',    bg: 'var(--warn-bg)',    Icon: Briefcase,  grad: 'var(--grad-warn)' },
+    { label: 'Total headcount', value: totalHeadcount, sub: `active roles ${statsScopeLabel(stats)}`, color: 'var(--brand)',   bg: 'var(--brand-bg)',   Icon: Users,      grad: 'var(--grad-brand)' },
+    { label: 'Open roles',      value: totalOpen,       sub: `unfilled ${statsScopeLabel(stats)}`, color: 'var(--warn)',    bg: 'var(--warn-bg)',    Icon: Briefcase,  grad: 'var(--grad-warn)' },
     { label: 'Planned hires',   value: plannedHires,    sub: 'in headcount plan',              color: 'var(--purple)', bg: 'var(--purple-bg)', Icon: TrendingUp, grad: 'var(--grad-purple)' },
     { label: 'Live org charts', value: liveCharts,      sub: 'currently published',            color: 'var(--success)',bg: 'var(--success-bg)',Icon: Network,    grad: 'var(--grad-success)' },
   ]

@@ -24,3 +24,19 @@ describe('Dashboard — a failed chart list', () => {
     expect(fetchCharts).toHaveBeenCalledTimes(1)
   })
 })
+
+// R-57: with no live chart the figures cover the draft charts, and the card says so.
+describe('Dashboard — which charts the figures cover', () => {
+  it('shows the headcount of a draft-only workspace with "across 1 chart"', async () => {
+    const { api } = await import('../../lib/apiClient')
+    const { useHeadcountStore } = await import('../../store/headcountStore')
+    vi.mocked(api.get).mockImplementation(async (url: string) => (url === '/api/workspace/stats'
+      ? { totalHeadcount: 3, totalOpen: 0, deptBreakdown: [], roleTypeBreakdown: { 'new-headcount': 0, backfill: 0, contractor: 0, tbd: 0 }, scope: 'all', chartCount: 1 }
+      : {}) as never)
+    useHeadcountStore.setState({ plans: [], loaded: true, loading: false, error: false, fetch: vi.fn() } as never)
+    useChartStore.setState({ charts: [{ id: 'c1', name: 'Org', status: 'draft' }], loaded: true, loading: false, error: false, fetchCharts: vi.fn() } as never)
+    render(<MemoryRouter><Dashboard /></MemoryRouter>)
+    expect(await screen.findByText('active roles across 1 chart')).toBeInTheDocument()
+    expect(screen.getByText('unfilled across 1 chart')).toBeInTheDocument()
+  })
+})
