@@ -410,7 +410,7 @@ describe('workspace export', () => {
     expect(res._headers['Content-Type']).toContain('application/json')
     expect(res._headers['Content-Disposition']).toContain('attachment')
     const data = JSON.parse(res._written)
-    expect(data.format).toBe('stratmap-workspace-export/1')
+    expect(data.format).toBe('stratmap-workspace-export/2')
     expect(data.workspace.name).toBe('Test Workspace')
     expect(data.members).toHaveLength(1)
     expect(data.invites[0].email).toBe('new@co.com')
@@ -445,6 +445,36 @@ describe('workspace export', () => {
     expect(rep[5]).toBe(rows.find(r => r[3] === 'Head')![1])    // Reports to points at the boss's unique ID
     expect(res._written).toContain(`'=HYPERLINK`)               // formula guard
   })
+
+  // R-58: a function reply is capped (4.5 MB on Vercel unless streamed), so versions are listed without their contents and the
+  // JSON is written chart by chart. 20 charts x 300 roles x 84 versions (one chart's versions with full 300-role contents).
+  it('a big workspace exports under 4 MB, with version metadata and a link to each version, never the version contents', async () => {
+    const roles = (chartId: string) => Array.from({ length: 300 }, (_, i) => ({
+      id: `${chartId}-n${i}`, chartId, name: `Person number ${i}`, title: `Senior role title ${i}`, x: (i % 30) * 260, y: Math.floor(i / 30) * 160,
+    }))
+    const versionData = { nodes: roles('v').map(({ chartId: _c, ...n }) => ({ ...n, departmentId: null, managerId: null, status: 'active' })), edges: [], departments: [] }
+    for (let c = 0; c < 20; c++) {
+      const chartId = `big-${c}`
+      await testDb.insert(schema.charts).values({ id: chartId, workspaceId: TEST_WS_ID, name: `Chart ${c}`, ownerId: TEST_USER_ID, creatorId: TEST_USER_ID, version: 1 })
+      for (let part = 0; part < 300; part += 100) await testDb.insert(schema.nodes).values(roles(chartId).slice(part, part + 100))
+      await testDb.insert(schema.chartSnapshots).values(Array.from({ length: 84 }, (_, v) => ({
+        id: `${chartId}-v${v}`, workspaceId: TEST_WS_ID, chartId, name: `Version ${v}`, kind: v < 50 ? 'manual' : v < 70 ? 'auto' : 'scheduled',
+        createdBy: TEST_USER_ID, nodeCount: 300, edgeCount: 0, data: (c === 0 ? versionData : { nodes: [], edges: [], departments: [] }) as never,
+      })))
+    }
+    const res = await get()
+    expect(res._status).toBe(200)
+    const bytes = Buffer.byteLength(res._written)
+    expect(bytes).toBeLessThan(4 * 1024 * 1024)
+    const data = JSON.parse(res._written)
+    expect(data.charts.filter((c: { id: string }) => c.id.startsWith('big-'))).toHaveLength(20)
+    expect(data.charts.find((c: { id: string }) => c.id === 'big-3').nodes).toHaveLength(300)
+    expect(data.chartVersions).toHaveLength(20 * 84)
+    const v = data.chartVersions.find((x: { id: string }) => x.id === 'big-0-v0')
+    expect(v).toMatchObject({ name: 'Version 0', kind: 'manual', nodeCount: 300, dataUrl: '/api/charts/big-0/snapshots/big-0-v0' })
+    expect(v).not.toHaveProperty('data')
+    expect(res._written).not.toContain('"\n  ') // not pretty-printed
+  }, 120_000)
 
   it('records that an export happened', async () => {
     await get()

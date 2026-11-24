@@ -118,7 +118,12 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 - **Done when** a Free user who builds a 3-role chart sees 3 on the dashboard; API and Dashboard tests cover both cases.
 
 ### R-58 Workspace export can exceed the response limit
-- [ ] **Problem (verified in code; size not measured).** `api/workspace/export.ts:101` puts every chart version's full `data`
+- [x] **Done 2026-11-24.** The JSON export is written chart by chart (`res.write`, a streamed reply), each chart's rows read in their own
+  queries, not pretty-printed, and versions are listed **without** their contents: name, kind, date, author, counts and a `dataUrl`
+  (the existing `GET /api/charts/:id/snapshots/:snapshotId`, readable by any member). Format is now `stratmap-workspace-export/2`.
+  Test: 20 charts × 300 roles × 84 versions exports under 4 MB (`data-rights.test.ts`). **To check on a preview:** Vercel documents no
+  4.5 MB cap for streamed replies; confirm a large export downloads there (not verifiable locally).
+- **Problem (verified in code; size not measured).** `api/workspace/export.ts:101` puts every chart version's full `data`
   (`chartVersions`) into one body, pretty-printed (`:106`, `JSON.stringify(body, null, 2)`). Each chart can keep 50 manual + 20 automatic
   + 14 daily versions. Vercel caps a function response at 4.5 MB, and the Neon HTTP driver caps a query response too. The data export
   (a GDPR right) fails for exactly the bigger customers.

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { desc, eq, inArray } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { requireRole } from '../_lib/access'
 import { enforceRateLimit } from '../_lib/rateLimit'
@@ -18,6 +18,11 @@ import type { OrgNode } from '../../src/types'
 //   GET /api/workspace/export?format=csv    -> every role of every chart, in the importer's column layout
 // Includes salary bands (owner/admin only, like the job description screen). Never includes Stripe ids, invite
 // tokens or share-link codes (a code is a password to a public chart).
+//
+// Size (R-58): a function's reply is capped (4.5 MB on Vercel unless it is streamed) and so is one Neon query's reply. So the
+// JSON is written chart by chart (`res.write`), each chart's rows are read in their own queries, nothing is pretty-printed, and
+// saved versions are listed WITHOUT their contents (each lists `dataUrl`, the existing per-version endpoint, any member may read
+// it). Format `/2` = `/1` minus `chartVersions[].data`, plus `dataUrl`.
 
 const AUDIT_ROWS = 10_000
 
@@ -49,13 +54,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ])
     if (!ws) return res.status(404).json({ error: 'Workspace not found' })
 
-    const chartIds = chartRows.map(c => c.id)
-    const [nodeRows, edgeRows, deptRows, jdRows] = chartIds.length === 0 ? [[], [], [], []] : await Promise.all([
-      db.select().from(nodes).where(inArray(nodes.chartId, chartIds)).orderBy(...nodeOrder),
-      db.select().from(edges).where(inArray(edges.chartId, chartIds)).orderBy(...edgeOrder),
-      db.select().from(departments).where(inArray(departments.chartId, chartIds)),
-      db.select().from(jobDescriptions).where(inArray(jobDescriptions.chartId, chartIds)),
-    ])
+    // One chart's rows at a time, so no single query (or the reply) has to hold the whole workspace.
+    const chartRowsOf = async (chartId: string) => {
+      const [n, e, d] = await Promise.all([
+        db.select().from(nodes).where(eq(nodes.chartId, chartId)).orderBy(...nodeOrder),
+        db.select().from(edges).where(eq(edges.chartId, chartId)).orderBy(...edgeOrder),
+        db.select().from(departments).where(eq(departments.chartId, chartId)),
+      ])
+      return { nodeRows: n, edgeRows: e, deptRows: d }
+    }
 
     await logAudit({
       workspaceId: wsId, actorUserId: auth.userId, action: 'workspace.exported', targetType: 'workspace', targetId: wsId,
@@ -65,47 +72,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'no-store')
 
     if (req.query.format === 'csv') {
-      const { csv } = buildWorkspaceRolesCsv(chartRows.map(c => ({
-        name: c.name,
-        nodes: nodeRows.filter(n => n.chartId === c.id).map(toNode),
-        edges: edgeRows.filter(e => e.chartId === c.id).map(e => ({ id: e.id, sourceId: e.sourceId, targetId: e.targetId })),
-        departments: deptRows.filter(d => d.chartId === c.id).map(d => ({ id: d.id, name: d.name, colour: d.colour })),
-      })))
+      const perChart = []
+      for (const c of chartRows) {
+        const { nodeRows, edgeRows, deptRows } = await chartRowsOf(c.id)
+        perChart.push({
+          name: c.name,
+          nodes: nodeRows.map(toNode),
+          edges: edgeRows.map(e => ({ id: e.id, sourceId: e.sourceId, targetId: e.targetId })),
+          departments: deptRows.map(d => ({ id: d.id, name: d.name, colour: d.colour })),
+        })
+      }
+      const { csv } = buildWorkspaceRolesCsv(perChart)
       res.setHeader('Content-Type', 'text/csv; charset=utf-8')
       res.setHeader('Content-Disposition', 'attachment; filename="stratmap-roles.csv"')
       return res.status(200).end(csv)
     }
 
-    const comments = await db.select().from(roleComments).where(eq(roleComments.workspaceId, wsId))
-    const snapshots = await db.select().from(chartSnapshots).where(eq(chartSnapshots.workspaceId, wsId))
-    const events = await db.select().from(auditLog).where(eq(auditLog.workspaceId, wsId))
-      .orderBy(desc(auditLog.createdAt)).limit(AUDIT_ROWS)
-
-    const body = {
-      exportedAt: new Date().toISOString(),
-      format: 'stratmap-workspace-export/1',
-      workspace: { id: ws.id, name: ws.name, planTier: ws.planTier, createdAt: ws.createdAt },
-      members: members.map(({ workspaceId: _w, ...m }) => m),
-      invites: invites.map(({ workspaceId: _w, tokenHash: _t, ...i }) => i),
-      departments: wsDepartments.map(({ workspaceId: _w, ...d }) => d),
-      charts: chartRows.map(({ workspaceId: _w, ...c }) => ({
-        ...c,
-        departments: deptRows.filter(d => d.chartId === c.id).map(({ chartId: _c, ...d }) => d),
-        nodes: nodeRows.filter(n => n.chartId === c.id).map(({ chartId: _c, ...n }) => n),
-        edges: edgeRows.filter(e => e.chartId === c.id).map(({ chartId: _c, ...e }) => e),
-        jobDescriptions: jdRows.filter(j => j.chartId === c.id).map(({ chartId: _c, ...j }) => j),
-      })),
-      roleTemplates: templates.map(({ workspaceId: _w, ...t }) => t),
-      headcountPlans: plans.map(({ workspaceId: _w, ...p }) => p),
-      comments: comments.map(({ workspaceId: _w, ...c }) => c),
-      chartVersions: snapshots.map(({ workspaceId: _w, ...v }) => v),
-      activityLog: events.map(({ workspaceId: _w, ...e }) => e),
-    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('Content-Disposition', 'attachment; filename="stratmap-workspace.json"')
-    return res.status(200).end(JSON.stringify(body, null, 2))
+    res.status(200)
+    const field = (key: string, value: unknown, first = false) => `${first ? '' : ','}${JSON.stringify(key)}:${JSON.stringify(value)}`
+
+    res.write('{' + field('exportedAt', new Date().toISOString(), true)
+      + field('format', 'stratmap-workspace-export/2')
+      + field('workspace', { id: ws.id, name: ws.name, planTier: ws.planTier, createdAt: ws.createdAt })
+      + field('members', members.map(({ workspaceId: _w, ...m }) => m))
+      + field('invites', invites.map(({ workspaceId: _w, tokenHash: _t, ...i }) => i))
+      + field('departments', wsDepartments.map(({ workspaceId: _w, ...d }) => d))
+      + ',"charts":[')
+    for (const [i, { workspaceId: _w, ...c }] of chartRows.entries()) {
+      const [{ nodeRows, edgeRows, deptRows }, jdRows] = await Promise.all([
+        chartRowsOf(c.id),
+        db.select().from(jobDescriptions).where(eq(jobDescriptions.chartId, c.id)),
+      ])
+      res.write((i ? ',' : '') + JSON.stringify({
+        ...c,
+        departments: deptRows.map(({ chartId: _c, ...d }) => d),
+        nodes: nodeRows.map(({ chartId: _c, ...n }) => n),
+        edges: edgeRows.map(({ chartId: _c, ...e }) => e),
+        jobDescriptions: jdRows.map(({ chartId: _c, ...j }) => j),
+      }))
+    }
+    res.write(']' + field('roleTemplates', templates.map(({ workspaceId: _w, ...t }) => t))
+      + field('headcountPlans', plans.map(({ workspaceId: _w, ...p }) => p))
+      + ',"comments":[')
+    let firstComment = true
+    for (const c of chartRows) {
+      const rows = await db.select().from(roleComments).where(eq(roleComments.chartId, c.id))
+      for (const { workspaceId: _w, ...row } of rows) { res.write((firstComment ? '' : ',') + JSON.stringify(row)); firstComment = false }
+    }
+    res.write('],"chartVersions":[')
+    let firstVersion = true
+    for (const c of chartRows) {
+      // Metadata only: a version's contents can be as big as the chart, times up to 84 versions a chart.
+      const rows = await db.select({
+        id: chartSnapshots.id, chartId: chartSnapshots.chartId, name: chartSnapshots.name, kind: chartSnapshots.kind,
+        createdBy: chartSnapshots.createdBy, createdAt: chartSnapshots.createdAt, nodeCount: chartSnapshots.nodeCount, edgeCount: chartSnapshots.edgeCount,
+      }).from(chartSnapshots).where(eq(chartSnapshots.chartId, c.id)).orderBy(desc(chartSnapshots.createdAt))
+      for (const v of rows) {
+        res.write((firstVersion ? '' : ',') + JSON.stringify({ ...v, dataUrl: `/api/charts/${v.chartId}/snapshots/${v.id}` }))
+        firstVersion = false
+      }
+    }
+    const events = await db.select().from(auditLog).where(eq(auditLog.workspaceId, wsId))
+      .orderBy(desc(auditLog.createdAt)).limit(AUDIT_ROWS)
+    res.write(']' + field('activityLog', events.map(({ workspaceId: _w, ...e }) => e)) + '}')
+    return res.end()
   } catch (err) {
     console.error('/api/workspace/export', err)
+    // Part of the file may already be on its way: end it (the download is then visibly broken JSON) rather than append an error.
+    if (res.headersSent) return res.end()
     return res.status(500).json({ error: 'Internal server error' })
   }
 }
