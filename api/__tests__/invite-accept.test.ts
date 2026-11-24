@@ -24,6 +24,8 @@ import invitesHandler from '../workspace/invites'
 import inviteItemHandler from '../workspace/invites/[id]'
 import previewHandler from '../invites/[token]'
 import acceptHandler from '../invites/accept'
+import mineHandler from '../invites/mine'
+import declineHandler from '../invites/decline'
 import workspaceHandler from '../workspace'
 import { setupSchema, cleanDb, seedWorkspace, seedMember, testDb, TEST_USER_ID, TEST_WS_ID } from './helpers/db'
 import { createReq } from './helpers/req'
@@ -175,32 +177,37 @@ describe('accepting an invite', () => {
     expect((await call(acceptHandler, { method: 'POST', body: { token: 'short' } }))._status).toBe(400)
   })
 
-  it('without a token, accepts the pending invite matching a verified email (sign-in auto-match)', async () => {
-    await invite('new@co.com', 'viewer')
-    signInAs(INVITEE, ['NEW@co.com'.toLowerCase()])
+  // R-56: nothing is joined on sign-in without the person's click. Tokenless "newest invite to your email" was a capture route:
+  // anyone could invite cfo@victimco.com to their own "VictimCo" and the CFO landed in it on sign-up.
+  it('without a token or a chosen invite it joins nothing (400), even with a matching pending invite', async () => {
+    await invite('new@co.com', 'admin')
+    signInAs(INVITEE, ['new@co.com'])
     const res = await call(acceptHandler, { method: 'POST', body: {} })
+    expect(res._status).toBe(400)
+    expect(res._body).toMatchObject({ error: 'invite-choice-required' })
+    expect(await memberOf(INVITEE)).toHaveLength(0)
+    expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(1)
+  })
+
+  it('accepts an invite the person chose by id, only when it was sent to one of their verified addresses', async () => {
+    const { id } = await invite('new@co.com', 'viewer')
+    signInAs('u-stranger', ['someone@else.com'])
+    expect((await call(acceptHandler, { method: 'POST', body: { inviteId: id } }))._status).toBe(404)
+    expect((await call(acceptHandler, { method: 'POST', body: { inviteId: 'nope' } }))._status).toBe(404)
+    signInAs(INVITEE, ['new@co.com'])
+    const res = await call(acceptHandler, { method: 'POST', body: { inviteId: id } })
     expect(res._status).toBe(201)
     expect((await memberOf(INVITEE))[0].permission).toBe('viewer')
   })
 
-  it('auto-match also accepts legacy invites that have no token or expiry', async () => {
+  it('a chosen invite may be a legacy one with no token or expiry; an expired one is 410', async () => {
     await testDb.insert(schema.pendingInvites).values({ id: 'legacy', workspaceId: TEST_WS_ID, email: 'old@co.com', permission: 'editor' })
     signInAs(INVITEE, ['old@co.com'])
-    expect((await call(acceptHandler, { method: 'POST', body: {} }))._status).toBe(201)
-  })
-
-  it('without a token and with no matching invite → 404 no-invite (client goes to onboarding)', async () => {
-    signInAs(INVITEE, ['nobody@co.com'])
-    const res = await call(acceptHandler, { method: 'POST', body: {} })
-    expect(res._status).toBe(404)
-    expect(res._body).toMatchObject({ error: 'no-invite' })
-  })
-
-  it('auto-match skips expired invites', async () => {
+    expect((await call(acceptHandler, { method: 'POST', body: { inviteId: 'legacy' } }))._status).toBe(201)
     const { id } = await invite('new@co.com')
     await testDb.update(schema.pendingInvites).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.pendingInvites.id, id))
-    signInAs(INVITEE, ['new@co.com'])
-    expect((await call(acceptHandler, { method: 'POST', body: {} }))._status).toBe(404)
+    signInAs('u-late', ['new@co.com'])
+    expect((await call(acceptHandler, { method: 'POST', body: { inviteId: id } }))._status).toBe(410)
   })
 
   it('an existing member of the same workspace just clears the invite', async () => {
@@ -233,6 +240,59 @@ describe('accepting an invite', () => {
     vi.mocked(requireAuth).mockResolvedValue({ userId: INVITEE, workspaceId: TEST_WS_ID })
     const res = await call(workspaceHandler, { method: 'GET' })
     expect(res._body).toMatchObject({ id: TEST_WS_ID, myPermission: 'editor' })
+  })
+})
+
+describe('the "you have been invited" choice (R-56)', () => {
+  it('lists live invites to my verified addresses with the workspace, the inviter and the role; never someone else\'s', async () => {
+    await testDb.update(schema.workspaceMembers).set({ name: 'Olive Owner', email: 'olive@acme.com' }).where(eq(schema.workspaceMembers.userId, TEST_USER_ID))
+    const { id } = await invite('new@co.com', 'admin')
+    await invite('other@co.com', 'viewer')
+    await testDb.insert(schema.pendingInvites).values({ id: 'expired', workspaceId: TEST_WS_ID, email: 'new@co.com', permission: 'viewer', expiresAt: new Date(Date.now() - 1000) })
+    signInAs(INVITEE, ['new@co.com'])
+    const res = await call(mineHandler, { method: 'GET' })
+    expect(res._status).toBe(200)
+    const { invites } = res._body as { invites: Record<string, unknown>[] }
+    expect(invites).toHaveLength(1)
+    expect(invites[0]).toMatchObject({ id, workspaceName: expect.any(String), inviterName: 'Olive Owner', inviterEmail: 'olive@acme.com', permission: 'admin' })
+    expect(JSON.stringify(invites)).not.toMatch(/tokenHash|token_hash/)
+    expect(await memberOf(INVITEE)).toHaveLength(0) // listing joins nothing
+  })
+
+  it('leaves out invites to deleted workspaces and to workspaces I already belong to', async () => {
+    await invite('new@co.com')
+    await seedMember(INVITEE, 'viewer')
+    signInAs(INVITEE, ['new@co.com'])
+    expect(((await call(mineHandler, { method: 'GET' }))._body as { invites: unknown[] }).invites).toHaveLength(0)
+    await testDb.delete(schema.workspaceMembers).where(eq(schema.workspaceMembers.userId, INVITEE))
+    await testDb.update(schema.workspaces).set({ deletedAt: new Date() }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    expect(((await call(mineHandler, { method: 'GET' }))._body as { invites: unknown[] }).invites).toHaveLength(0)
+  })
+
+  it('declining deletes the invite and logs it; nobody else can decline it', async () => {
+    const { id } = await invite('new@co.com', 'admin')
+    signInAs('u-stranger', ['someone@else.com'])
+    expect((await call(declineHandler, { method: 'POST', body: { inviteId: id } }))._status).toBe(404)
+    signInAs(INVITEE, ['new@co.com'])
+    expect((await call(declineHandler, { method: 'POST', body: { inviteId: id } }))._status).toBe(200)
+    expect(await testDb.select().from(schema.pendingInvites)).toHaveLength(0)
+    expect(await memberOf(INVITEE)).toHaveLength(0)
+    const log = await testDb.select().from(schema.auditLog).where(eq(schema.auditLog.action, 'invite.declined'))
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ actorUserId: INVITEE, workspaceId: TEST_WS_ID, details: { email: 'new@co.com', role: 'admin' } })
+  })
+
+  it('someone invited elsewhere can still create their own workspace (only OWNED workspaces block a create)', async () => {
+    const { id } = await invite('new@co.com', 'editor')
+    signInAs(INVITEE, ['new@co.com'])
+    await call(acceptHandler, { method: 'POST', body: { inviteId: id } })
+    const res = await call(workspaceHandler, { method: 'POST', body: { name: 'Mine', ownerRole: 'Founder/CEO', size: '1-10' } })
+    expect(res._status).toBe(201)
+    expect(res._body).toMatchObject({ name: 'Mine', myPermission: 'owner' })
+    // and a second create returns the one they own, not the one they joined
+    const again = await call(workspaceHandler, { method: 'POST', body: { name: 'Another', ownerRole: 'Founder/CEO', size: '1-10' } })
+    expect(again._status).toBe(200)
+    expect(again._body).toMatchObject({ name: 'Mine', myPermission: 'owner' })
   })
 })
 
@@ -323,7 +383,8 @@ describe('seat cap (roadmap 1.5: flat tiers, hard cap)', () => {
     await seedMember('u-b', 'viewer')
     await setTier('free')
     signInAs(INVITEE, ['new@co.com'])
-    const res = await call(acceptHandler, { method: 'POST', body: {} })
+    const { id } = (await testDb.select().from(schema.pendingInvites))[0]
+    const res = await call(acceptHandler, { method: 'POST', body: { inviteId: id } })
     expect(res._status).toBe(402)
   })
 

@@ -178,15 +178,15 @@ describe('POST /api/workspace', () => {
     expect(res._body).toMatchObject({ myPermission: 'owner' })
   })
 
-  it('says "viewer" to a person who was only invited, never "owner"', async () => {
+  it('a person who is only a member elsewhere gets their own workspace, as its owner (R-56: only owned workspaces block a create)', async () => {
     await seedWorkspace()
     const viewer = 'u-invited-viewer'
     await seedMember(viewer, 'viewer')
     vi.mocked(requireUser).mockResolvedValue({ userId: viewer })
     const res = createRes()
     await handler(createReq({ method: 'POST', body: { name: 'Mine', ownerRole: 'Founder/CEO', size: '1-10' } }) as never, res as never)
-    expect(res._status).toBe(200)
-    expect(res._body).toMatchObject({ name: 'Test Workspace', myPermission: 'viewer' })
+    expect(res._status).toBe(201)
+    expect(res._body).toMatchObject({ name: 'Mine', myPermission: 'owner' })
   })
 
   it('never returns Stripe ids, on create or on the existing-workspace path (R-29, POST part)', async () => {

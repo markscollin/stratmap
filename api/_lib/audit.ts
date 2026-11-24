@@ -18,6 +18,7 @@ export type AuditAction =
   | 'invite.sent'
   | 'invite.resent'
   | 'invite.revoked'
+  | 'invite.declined'
   | 'share.link_created'
   | 'share.link_revoked'
   | 'share.public_on'

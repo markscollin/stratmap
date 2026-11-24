@@ -9,6 +9,7 @@ import { useAuth } from '../features/auth/useAuth'
 import { setSelectedWorkspaceId } from '../lib/workspaceSelection'
 import { api } from '../lib/apiClient'
 import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
+import { PendingInvitesChoice } from '../features/onboarding/PendingInvitesChoice'
 import type { Permission, CompanySize, WorkspaceRole, Workspace, PlanTier } from '../types'
 import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
@@ -158,6 +159,9 @@ export function OnboardingPage() {
 
       {/* A workspace they deleted can be restored for 30 days (roadmap 4.2) */}
       <DeletedWorkspaceNotice />
+
+      {/* Invites to their address: accepted only on a click (R-56) */}
+      <PendingInvitesChoice />
 
       {/* Step dots */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>

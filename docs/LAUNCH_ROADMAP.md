@@ -86,7 +86,12 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 ## Phase 1: launch blockers in code
 
 ### R-56 A stranger can capture a new user through a tokenless invite auto-accept
-- [ ] **Problem (verified).** When a signed-in person has no workspace, `UserSync` (`src/features/auth/AuthProvider.tsx:181-196`) calls
+- [x] **Done 2026-11-24.** `POST /api/invites/accept` takes `{ token }` (the link) or `{ inviteId }` (an explicit pick); with neither it is
+  400 `invite-choice-required`. `AuthProvider` accepts only a remembered link token. Onboarding shows `PendingInvitesChoice`
+  (`GET /api/invites/mine`: workspace, inviter name + email, role) with Accept / Decline (`POST /api/invites/decline`, deletes the invite,
+  audit `invite.declined`) above "create your own". `POST /api/workspace` now returns an existing workspace only if the person **owns**
+  a live one. Tests: `invite-accept.test.ts`, `workspace.test.ts`, `AuthProvider.test.tsx`, `PendingInvitesChoice.test.tsx`, `tests/e2e/invite-choice.spec.ts`.
+- **Problem (verified).** When a signed-in person has no workspace, `UserSync` (`src/features/auth/AuthProvider.tsx:181-196`) calls
   `POST /api/invites/accept` with no token, without asking. The server (`api/invites/accept.ts:59-67`) then joins them to the **newest
   unexpired invite sent to any of their verified emails**. Anyone can make a Free workspace named "VictimCo", invite `cfo@victimco.com`
   as admin, and resend at will to stay newest (`api/workspace/invites/[id].ts` POST bumps `sentAt`). When the CFO signs up on their own,

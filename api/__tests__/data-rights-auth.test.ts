@@ -92,13 +92,12 @@ describe('a deleted workspace', () => {
     expect((res._body as { name: string }).name).toBe('Fresh start')
   })
 
-  it('someone whose only workspace was deleted may create a new one; someone with a live one still gets that one', async () => {
+  it('only an owned, live workspace blocks a create: its owner gets it back; a deleted one or a mere membership does not (R-56)', async () => {
     await call(workspaceHandler, { method: 'DELETE', as: 'olive', ws: 'ws-a', body: { confirmName: 'Alpha' } })
-    // ed is also in Beta, which is live: the create-workspace guard hands him Beta, as before.
-    const guarded = await call(workspaceHandler, { method: 'POST', as: 'ed', body: { name: 'Eds own', ownerRole: 'CEO', size: '1-10' } })
+    // bo owns Beta, which is live: the create-workspace guard hands it back.
+    const guarded = await call(workspaceHandler, { method: 'POST', as: 'bo', body: { name: 'Bos second', ownerRole: 'CEO', size: '1-10' } })
     expect([guarded._status, (guarded._body as { id: string }).id]).toEqual([200, 'ws-b'])
-    // Take Beta away: his only membership is the deleted workspace, which no longer counts.
-    await testDb.delete(schema.workspaceMembers).where(eq(schema.workspaceMembers.id, 'm4'))
+    // ed is only a member (of Beta, and of the deleted Alpha): he may make his own.
     const created = await call(workspaceHandler, { method: 'POST', as: 'ed', body: { name: 'Eds own', ownerRole: 'CEO', size: '1-10' } })
     expect(created._status).toBe(201)
   })

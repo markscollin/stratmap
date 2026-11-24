@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ClerkProvider, useUser } from '@clerk/clerk-react'
 import { useUserStore, MOCK_USER, MOCK_WORKSPACE } from '../../store/userStore'
-import { useToastStore } from '../../store/toastStore'
 import { setSelectedWorkspaceId } from '../../lib/workspaceSelection'
 import { useBillingStore, FREE_PLAN, PLAN_BY_TIER } from '../../store/billingStore'
 import type { PlanTier, Permission, WorkspaceRole, CompanySize, SubscriptionInfo } from '../../types'
@@ -178,45 +177,38 @@ function UserSync({ isLoaded, isSignedIn, identity: clerkUser, children }: {
         }
       }
 
-      // No workspace yet: accept a pending invite before falling back to onboarding.
-      // Uses the token from an /invite link if we have one, else matches by verified email.
+      // No workspace yet. Accept an invite only with the token from the emailed link (the person clicked it). Without one, nothing
+      // is joined here (R-56): invites to their address are offered on onboarding, where they choose to accept, decline or start
+      // their own workspace. Silently joining "the newest invite to your email" let anyone capture a new user's account.
       const token = getRememberedInviteToken()
-      try {
-        const joined = await api.post<{ workspaceId: string }>('/api/invites/accept', token ? { token } : {})
-        forgetInviteToken()
-        setSelectedWorkspaceId(joined.workspaceId)
+      if (token) {
         try {
-          applyWorkspace(await fetchWorkspace())
+          const joined = await api.post<{ workspaceId: string }>('/api/invites/accept', { token })
+          forgetInviteToken()
+          setSelectedWorkspaceId(joined.workspaceId)
+          try {
+            applyWorkspace(await fetchWorkspace())
+          } catch (err) {
+            console.error('[auth] workspace fetch after accepting an invite failed:', err)
+            fail()
+            return
+          }
+          setResolved()
+          if (pathname === '/onboarding') navigate('/dashboard')
+          return
         } catch (err) {
-          console.error('[auth] workspace fetch after accepting an invite failed:', err)
-          fail()
-          return
-        }
-        setResolved()
-        if (pathname === '/onboarding') navigate('/dashboard')
-        return
-      } catch (err) {
-        // The server may simply be unreachable: that is not "no invite", and must not send anyone to onboarding.
-        if (isTransient(err)) {
-          console.error('[auth] invite check failed:', err)
-          fail()
-          return
-        }
-        if (token && !(err instanceof ApiError && err.message === 'no-invite')) {
-          // The invite page explains what went wrong (expired, wrong account, …). Forget this load so a later visit starts afresh.
+          // The server may simply be unreachable: that is not "no invite", and must not send anyone to onboarding.
+          if (isTransient(err)) {
+            console.error('[auth] invite check failed:', err)
+            fail()
+            return
+          }
+          // The invite page explains what went wrong (expired, wrong account, no free seat, …). Forget this load so a later
+          // visit starts afresh.
           loadKey.current = null
           navigate(`/invite/${token}`)
           return
         }
-        if (err instanceof ApiError && err.message === 'plan-limit') {
-          // Matched an invite by email, but that workspace has no free seat. Say so
-          // before onboarding, because creating a workspace would block the invite later.
-          useToastStore.getState().addToast(
-            `${err.userMessage} Or create your own workspace below.`,
-            'warning',
-          )
-        }
-        forgetInviteToken()
       }
 
       // Genuinely new user → onboarding. Tell analytics once (server checks consent; best effort).

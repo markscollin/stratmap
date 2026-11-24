@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { and, desc, eq, gt, inArray, isNull, or } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { requireUser } from '../_lib/auth'
 import { parseBody } from '../_lib/validate'
 import { InviteAccept } from '../_lib/schemas'
@@ -13,11 +13,15 @@ import { getEffectivePlan, getSeatUsage } from '../_lib/access'
 import { fitsLimit } from '../../src/lib/plans'
 import { workspaceMembers, pendingInvites } from '../../src/lib/db/schema'
 
-// POST /api/invites/accept  { token? }
+// POST /api/invites/accept  { token } | { inviteId }
 //
 // Joins the caller to the invite's workspace with the invited role, then deletes
-// the invite (single use). Called by the /invite/:token page, and on sign-in
-// before the onboarding redirect (no token → match a pending invite by email).
+// the invite (single use). Called by the /invite/:token page and the sign-in flow
+// (with the token from the link), or by the "you've been invited" choice on
+// onboarding (with the id of the invite the person clicked Accept on).
+//
+// Never without one of the two (R-56): matching "the newest invite to your email"
+// silently let anyone who invited your address capture your account at sign-up.
 //
 // The invite's email must be one of the caller's VERIFIED email addresses
 // (looked up server-side from Clerk), so a forwarded or leaked link can't be
@@ -55,16 +59,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           message: `This invite was sent to ${invite.email}. Sign in with that address (and verify it) to accept.`,
         })
       }
+    } else if (body.inviteId) {
+      // Picked on the choice screen. Only an invite sent to one of the caller's verified addresses; anything else is "not found",
+      // so ids cannot be probed.
+      ;[invite] = await db.select().from(pendingInvites).where(eq(pendingInvites.id, body.inviteId)).limit(1)
+      if (!invite || !identity.emails.includes(invite.email.toLowerCase())) {
+        return res.status(404).json({ error: 'invite-not-found', message: 'This invite no longer exists.' })
+      }
+      if (isExpired(invite.expiresAt)) {
+        return res.status(410).json({ error: 'invite-expired', message: 'This invite has expired. Ask an admin to resend it.' })
+      }
     } else {
-      if (identity.emails.length === 0) return res.status(404).json({ error: 'no-invite' })
-      ;[invite] = await db.select().from(pendingInvites)
-        .where(and(
-          inArray(pendingInvites.email, identity.emails),
-          or(isNull(pendingInvites.expiresAt), gt(pendingInvites.expiresAt, new Date())),
-        ))
-        .orderBy(desc(pendingInvites.sentAt))
-        .limit(1)
-      if (!invite) return res.status(404).json({ error: 'no-invite' })
+      return res.status(400).json({ error: 'invite-choice-required', message: 'Open the invite link from your email, or choose the invite to accept.' })
     }
 
     // Users can belong to several workspaces (roadmap 1.2); only a repeat join is a no-op.

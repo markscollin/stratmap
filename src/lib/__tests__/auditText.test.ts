@@ -14,6 +14,7 @@ describe('describeAudit', () => {
     expect(describeAudit(ev('member.joined', { email: 'bo@co.com', role: 'viewer' }))).toBe('Ada joined as Viewer')
     expect(describeAudit(ev('invite.sent', { email: 'bo@co.com', role: 'admin' }))).toBe('Ada invited bo@co.com as Admin')
     expect(describeAudit(ev('invite.revoked', { email: 'bo@co.com', role: 'admin' }))).toBe('Ada cancelled the invite to bo@co.com')
+    expect(describeAudit(ev('invite.declined', { email: 'bo@co.com', role: 'admin' }))).toBe('bo@co.com declined the invite')
     expect(describeAudit(ev('share.public_on', { chartName: 'Q3 plan' }))).toBe('Ada made "Q3 plan" public')
     expect(describeAudit(ev('share.public_off', { chartName: 'Q3 plan' }))).toBe('Ada made "Q3 plan" private')
     expect(describeAudit(ev('share.link_created', { chartName: 'Q3 plan' }))).toBe('Ada created a share link for "Q3 plan"')

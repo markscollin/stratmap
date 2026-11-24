@@ -48,23 +48,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!body) return
       const { name, ownerRole, size } = body
 
-      // Guard: if user already has a workspace, return it instead of creating a duplicate
+      // Guard: one OWNED workspace per user (owner-decided, roadmap 1.2). If they already own a live one, return it instead of
+      // creating a second. Memberships elsewhere do not count (R-56): someone who was invited to a workspace may still make their own,
+      // otherwise an invite they never accepted, or one they accepted by mistake, would stop them ever starting fresh.
       const [existing] = await db
-        .select({ workspaceId: workspaceMembers.workspaceId, permission: workspaceMembers.permission })
-        .from(workspaceMembers)
-        .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.deletedAt)))
-        .where(eq(workspaceMembers.userId, user.userId))
+        .select()
+        .from(workspaces)
+        .where(and(eq(workspaces.ownerId, user.userId), isNull(workspaces.deletedAt)))
         .limit(1)
 
-      if (existing) {
-        const [ws] = await db
-          .select()
-          .from(workspaces)
-          .where(eq(workspaces.id, existing.workspaceId))
-          .limit(1)
-        // Say what this person is in it: the client used to assume "owner", wrong for someone who was only invited (R-13).
-        return res.status(200).json({ ...publicWorkspace(ws), myPermission: existing.permission })
-      }
+      if (existing) return res.status(200).json({ ...publicWorkspace(existing), myPermission: 'owner' })
 
       // Who this person is comes from the sign-in provider, not from the request body: the stored address receives
       // workspace-deleted and comment emails and decides whose invites an account deletion removes (R-09).

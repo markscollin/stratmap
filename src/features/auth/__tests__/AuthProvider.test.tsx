@@ -23,6 +23,7 @@ import { AuthProvider } from '../AuthProvider'
 import { api, ApiError } from '../../../lib/apiClient'
 import { useUserStore } from '../../../store/userStore'
 import { useBillingStore } from '../../../store/billingStore'
+import { rememberInviteToken, forgetInviteToken } from '../pendingInvite'
 
 const workspace = { id: 'w1', name: 'Acme', ownerRole: 'Founder/CEO', size: '11-50', createdAt: '2026-01-01T00:00:00Z', planTier: 'growth', myPermission: 'editor', members: [] }
 const mount = (path = '/dashboard') => render(<MemoryRouter initialEntries={[path]}><AuthProvider><div data-testid="app">the app</div></AuthProvider></MemoryRouter>)
@@ -100,12 +101,37 @@ describe('AuthProvider workspace load (R-13)', () => {
     expect(screen.queryByTestId('workspace-load-failed')).toBeNull()
   })
 
-  it('if the invite check itself cannot reach the server, that is a failure, not "go and create a workspace"', async () => {
+  it('with a token from an invite link, an unreachable server is a failure, not "go and create a workspace"', async () => {
+    rememberInviteToken('t'.repeat(43))
     vi.mocked(api.get).mockRejectedValue(new ApiError(404, { error: 'no-workspace' }))
     vi.mocked(api.post).mockRejectedValue(new TypeError('Failed to fetch'))
     mount()
     await settle()
     expect(screen.getByTestId('workspace-load-failed')).toBeInTheDocument()
     expect(mockNavigate).not.toHaveBeenCalledWith('/onboarding')
+    forgetInviteToken()
+  })
+})
+
+// R-56: a stranger could invite your address to their own workspace and you landed in it on sign-up, without a click.
+describe('AuthProvider invites (R-56)', () => {
+  it('without an invite link it never accepts anything: no workspace → onboarding, where the person chooses', async () => {
+    vi.mocked(api.get).mockRejectedValue(new ApiError(404, { error: 'no-workspace' }))
+    vi.mocked(api.post).mockResolvedValue({ workspaceId: 'attacker-ws' } as never)
+    mount()
+    await settle()
+    expect(vi.mocked(api.post).mock.calls.map(c => c[0])).not.toContain('/api/invites/accept')
+    expect(mockNavigate).toHaveBeenCalledWith('/onboarding')
+  })
+
+  it('with the token from the emailed link it accepts that invite, and only with the token', async () => {
+    rememberInviteToken('k'.repeat(43))
+    vi.mocked(api.get).mockRejectedValueOnce(new ApiError(404, { error: 'no-workspace' })).mockResolvedValue(workspace as never)
+    vi.mocked(api.post).mockResolvedValue({ workspaceId: 'w1' } as never)
+    mount()
+    await settle()
+    expect(api.post).toHaveBeenCalledWith('/api/invites/accept', { token: 'k'.repeat(43) })
+    expect(screen.getByTestId('app')).toBeInTheDocument()
+    forgetInviteToken()
   })
 })

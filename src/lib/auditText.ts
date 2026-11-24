@@ -40,6 +40,7 @@ export function describeAudit(e: AuditEventView): string {
     case 'invite.sent': return `${who} invited ${email} as ${cap(d.role)}`
     case 'invite.resent': return `${who} resent the invite to ${email}`
     case 'invite.revoked': return `${who} cancelled the invite to ${email}`
+    case 'invite.declined': return `${email} declined the invite`
     case 'share.link_created': return `${who} created a share link for ${chart}`
     case 'share.link_revoked': return `${who} turned off the share link for ${chart}`
     case 'share.public_on': return `${who} made ${chart} public`

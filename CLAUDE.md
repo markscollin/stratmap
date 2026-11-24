@@ -184,11 +184,16 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
   SHA-256 is stored (`pending_invites.token_hash`). Links are single-use and expire after 7 days (`api/_lib/inviteTokens.ts`).
 - **API:**
   - `GET /api/invites/:token` — public preview.
-  - `POST /api/invites/accept` — `{token?}`. Requires a **verified** Clerk email matching the invite (`api/_lib/identity.ts`).
+  - `POST /api/invites/accept` — `{token}` or `{inviteId}`. Requires a **verified** Clerk email matching the invite (`api/_lib/identity.ts`).
+  - `GET /api/invites/mine`, `POST /api/invites/decline {inviteId}` — the onboarding choice (R-56).
   - `GET`/`POST /api/workspace/invites` — list / create.
   - `POST`/`DELETE /api/workspace/invites/:id` — resend / revoke.
-- **Auto-accept on sign-in:** `AuthProvider` accepts a pending invite (token remembered in sessionStorage, else matched by
-  email) *before* redirecting to onboarding. It also sets the user's permission from `/api/workspace` (`myPermission`).
+- **Accept on sign-in only with the link's token (R-56):** `AuthProvider` accepts the invite whose token was remembered in sessionStorage
+  (from `/invite/<token>`) *before* redirecting to onboarding. **Never by email match alone**: that let anyone who invited your address
+  capture your account on sign-up. Without a token, onboarding shows `PendingInvitesChoice` (`GET /api/invites/mine`, live invites to the
+  caller's verified addresses with workspace, inviter name + email, role): Accept = `POST /api/invites/accept {inviteId}`, Decline =
+  `POST /api/invites/decline {inviteId}` (deleted, audit `invite.declined`). `accept` with neither token nor inviteId is 400
+  `invite-choice-required`. It also sets the user's permission from `/api/workspace` (`myPermission`).
 - **Several workspaces per user** (roadmap 1.2): accepting an invite adds a membership; the client then switches to that workspace.
 - **Tests:** `api/__tests__/invite-accept.test.ts`, `api/__live__/invites.live.test.ts`, `src/pages/__tests__/InvitePage.test.tsx`,
   `SettingsMembers.test.tsx`.
@@ -203,7 +208,7 @@ See `docs/ROADMAP_TO_PRODUCTION.md` for the full roadmap. Phase 0 added:
   `not-a-member` forgets it and retries once. `switchWorkspace(id)` reloads the app so every store starts clean.
   The switcher is `WorkspaceSwitcher` at the top of the sidebar.
 - **Decided (owner): one owned workspace per user.** Other workspaces are joined by invite only; `POST /api/workspace`
-  returns the one the user already has. This stops users stacking Free workspaces. Don't change it without asking.
+  returns the one the user already **owns** (memberships elsewhere do not block creating your own, R-56). This stops users stacking Free workspaces. Don't change it without asking.
   If it's ever needed: the first workspace can be Free, and every additional one must be paid (create → checkout).
 
 ## Paid features (2026-11-05)

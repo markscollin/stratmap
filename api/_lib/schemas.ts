@@ -214,9 +214,15 @@ export const InviteCreate = z.object({
 })
 
 /** No token = accept a pending invite matched by the caller's verified email. */
+const InviteId = z.string().min(1).max(100)
+
+/** A token (from the emailed link) or the id of an invite the person picked on the "you've been invited" screen (R-56). */
 export const InviteAccept = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'invalid token').optional(),
+  inviteId: InviteId.optional(),
 })
+
+export const InviteDecline = z.object({ inviteId: InviteId })
 
 // ─── Billing / AI / admin ────────────────────────────────────────────────────
 
