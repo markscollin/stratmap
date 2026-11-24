@@ -156,7 +156,10 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 - [x] **Done 2026-11-24 (code part; D-6 still open).** Checkout always sends `billing_address_collection: 'required'`, `tax_id_collection`
   and `customer_update: { address, name: 'auto' }`; `automatic_tax` is on only with `STRIPE_AUTOMATIC_TAX=1` (`checkoutTaxParams` in
   `api/checkout.ts`, `checkout.test.ts`; `check:env` knows the variable). `docs/BILLING.md` (setup step 4) and `OWNER_CHECKLIST.md` say
-  what to switch on and in which order. **Not done, waits on D-6:** the VAT wording on the pricing page and the prices' tax behaviour.
+  what to switch on and in which order. **D-6 answer (2026-11-24): build it in; the owning company is not decided yet.** So the VAT wording
+  is one setting, `PRICE_TAX_MODE` in `src/lib/taxDetails.ts` (next to the legal facts, since both belong to the selling entity):
+  `null` (now) says nothing, `'inclusive'` / `'exclusive'` puts the matching line under the plan cards. Still the owner's, once the
+  company exists: VAT registration, that setting, the Stripe prices' tax behaviour, then `STRIPE_AUTOMATIC_TAX=1`.
 - **Problem (verified).** `api/checkout.ts` (around `:73-86`) has `allow_promotion_codes` but no `automatic_tax`,
   `billing_address_collection`, `tax_id_collection` or `customer_update`. Turning Stripe Tax on in the dashboard does nothing unless the
   session asks for it. The customer is created before Checkout with no address, so it also needs `customer_update: { address: 'auto', name: 'auto' }`.

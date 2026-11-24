@@ -46,6 +46,8 @@ If you run `vercel dev` **without** Clerk keys, add `ALLOW_DEV_BYPASS=1` to `.en
 
 ## D. Decisions still wanted from you (none block launch)
 
-- **D-6 (tax):** are you VAT-registered, and are £18/£49 inclusive or exclusive of VAT? Checkout already collects the billing address
-  and VAT id; Stripe Tax is off until you set `STRIPE_AUTOMATIC_TAX=1` (R-60). The pricing page says nothing about VAT until you decide.
+- **D-6 (tax), once the company that will own StratMap exists:** VAT registration is per legal entity, so it waits on that. Then set
+  `PRICE_TAX_MODE` in `src/lib/taxDetails.ts` (`'inclusive'` or `'exclusive'`; the pricing page says nothing about VAT until you do),
+  give the Stripe prices the same tax behaviour, turn on Stripe Tax and set `STRIPE_AUTOMATIC_TAX=1` (`docs/BILLING.md` step 4). The
+  same company's details go in `src/lib/legalDetails.ts` (R-04). Checkout already collects the billing address and VAT id.
 - If you want the landing page to show a real chart (R-41), pick which chart, or send a screenshot.

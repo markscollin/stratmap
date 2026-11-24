@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { priceTaxNote } from '../lib/taxDetails'
 import { Link } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { CheckoutButton } from '../features/billing/CheckoutButton'
@@ -266,6 +267,13 @@ export function PricingPage() {
           )
         })}
       </div>
+
+      {/* VAT wording follows the owner's decision (D-6, src/lib/taxDetails.ts); nothing is said until it is made */}
+      {priceTaxNote() && (
+        <p data-testid="price-tax-note" style={{ maxWidth: 1200, margin: '-16px auto 32px', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
+          {priceTaxNote()}
+        </p>
+      )}
 
       {/* Enterprise CTA */}
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 32, maxWidth: 1200, margin: '0 auto 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 40 }}>

@@ -86,3 +86,10 @@ describe('trial and plan copy (R-18)', () => {
     expect(screen.queryByText(/dedicated support/i)).toBeNull()
   })
 })
+
+describe('VAT line (D-6)', () => {
+  it('says nothing about VAT while it is undecided', () => {
+    renderRoute()
+    expect(screen.queryByTestId('price-tax-note')).toBeNull()
+  })
+})

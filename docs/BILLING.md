@@ -66,7 +66,8 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 4. **Tax (R-60, waits on decision D-6).** Checkout always asks for a billing address and offers a VAT/tax id field (both saved on the
    customer, so they appear on invoices). Stripe does **not** calculate tax until you switch it on:
    - register for VAT (and anywhere else you must collect tax) and add the registrations under Stripe → Tax → Registrations;
-   - set each price's **tax behaviour** (inclusive or exclusive) to match what the pricing page says;
+   - set each price's **tax behaviour** (inclusive or exclusive) and set `PRICE_TAX_MODE` in `src/lib/taxDetails.ts` to the same, so the
+     pricing page says it (it says nothing about VAT while that is `null`);
    - turn on Stripe Tax, then set `STRIPE_AUTOMATIC_TAX=1` in Vercel (Production) and redeploy. Setting it before Stripe Tax is on makes
      every Checkout fail, so do it in this order and try one test-mode payment on a preview first.
 
