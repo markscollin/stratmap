@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import type Stripe from 'stripe'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from './db'
 import { reportError } from './sentry'
 import { getAppUrl } from './url'
@@ -82,6 +82,32 @@ function idOf(ref: string | { id: string } | null | undefined): string | null {
   return typeof ref === 'string' ? ref : ref.id
 }
 
+/**
+ * True when Stripe says the object does not exist (R-61): an id from test mode after the switch to live keys, or a customer or
+ * subscription deleted in the dashboard. Such an id will never work again, so it is cleared rather than retried for ever.
+ */
+export function isStripeMissing(err: unknown): boolean {
+  const e = err as { code?: unknown; raw?: { code?: unknown } } | null
+  return !!e && (e.code === 'resource_missing' || e.raw?.code === 'resource_missing')
+}
+
+/** A subscription Stripe no longer knows: unlink it and drop the workspace to Free (reported, so a human can check). */
+async function forgetMissingSubscription(subscriptionId: string): Promise<SyncResult | null> {
+  const [ws] = await db.select({ id: workspaces.id, planTier: workspaces.planTier }).from(workspaces)
+    .where(eq(workspaces.stripeSubscriptionId, subscriptionId)).limit(1)
+  if (!ws) return null
+  await db.update(workspaces).set({
+    planTier: 'free', subscriptionStatus: null, planExpiresAt: null, cancelAtPeriodEnd: false, stripeSubscriptionId: null, updatedAt: new Date(),
+  }).where(and(eq(workspaces.id, ws.id), eq(workspaces.stripeSubscriptionId, subscriptionId)))
+  reportError(new Error(`Stripe has no subscription ${subscriptionId} (workspace ${ws.id}, was ${ws.planTier}): unlinked it and moved the workspace to Free. Test-mode id after going live, or deleted in Stripe?`), { route: 'billing.syncSubscription' })
+  return { workspaceId: ws.id, previousTier: ws.planTier, tier: 'free', status: 'canceled' }
+}
+
+/** A customer Stripe deleted (`customer.deleted`) or no longer knows: forget it, so the next Checkout makes a new one (R-61). */
+export async function forgetCustomer(customerId: string): Promise<void> {
+  await db.update(workspaces).set({ stripeCustomerId: null, updatedAt: new Date() }).where(eq(workspaces.stripeCustomerId, customerId))
+}
+
 export interface SyncResult {
   workspaceId: string
   previousTier: PlanTier
@@ -99,7 +125,15 @@ export async function syncSubscription(
   subscriptionId: string,
   opts: { workspaceId?: string } = {},
 ): Promise<SyncResult | null> {
-  const sub = await stripe.subscriptions.retrieve(subscriptionId)
+  let sub: Stripe.Subscription
+  try {
+    sub = await stripe.subscriptions.retrieve(subscriptionId)
+  } catch (err) {
+    // Gone for good (R-61): before this, the throw left a dead id on the workspace for ever: paid plan kept, Checkout broken,
+    // and the daily reconciliation stuck on the same rows.
+    if (isStripeMissing(err)) return forgetMissingSubscription(subscriptionId)
+    throw err
+  }
 
   const cols = { id: workspaces.id, planTier: workspaces.planTier, stripeSubscriptionId: workspaces.stripeSubscriptionId }
   let [ws] = await db
@@ -131,14 +165,17 @@ export async function syncSubscription(
   // workspace; the newer one is a duplicate, so it is cancelled and its payment refunded rather than billed for ever.
   if (!TERMINAL_STATUSES.has(sub.status) && ws.stripeSubscriptionId && ws.stripeSubscriptionId !== sub.id) {
     let current: Stripe.Subscription | null = null
+    let linkedGone = false
     try { current = await stripe.subscriptions.retrieve(ws.stripeSubscriptionId) } catch (err) {
-      // Cannot tell whether the linked one is still live: touch nothing, and ask a human to look.
-      reportError(err, { route: 'billing.syncSubscription', note: `could not check ${ws.stripeSubscriptionId} before deciding about ${sub.id}` })
+      // Stripe has no such subscription (R-61): it is finished, so this one replaces it, below.
+      if (isStripeMissing(err)) linkedGone = true
+      // Otherwise we cannot tell whether the linked one is still live: touch nothing, and ask a human to look.
+      else reportError(err, { route: 'billing.syncSubscription', note: `could not check ${ws.stripeSubscriptionId} before deciding about ${sub.id}` })
     }
     if (current && !TERMINAL_STATUSES.has(current.status)) {
       await cancelDuplicateSubscription(stripe, sub, ws.id)
     }
-    if (!current || !TERMINAL_STATUSES.has(current.status)) {
+    if (!linkedGone && (!current || !TERMINAL_STATUSES.has(current.status))) {
       return { workspaceId: ws.id, previousTier: ws.planTier, tier: ws.planTier, status: sub.status }
     }
     // The linked subscription is actually finished in Stripe (its event was lost): this one replaces it, below.

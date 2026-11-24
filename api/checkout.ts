@@ -8,7 +8,7 @@ import { CheckoutCreate } from './_lib/schemas'
 import { reportError } from './_lib/sentry'
 import { getAppUrl } from './_lib/url'
 import { db } from './_lib/db'
-import { createPortalSession, priceIdFor } from './_lib/billing'
+import { createPortalSession, forgetCustomer, isStripeMissing, priceIdFor, syncSubscription } from './_lib/billing'
 import { workspaces } from '../src/lib/db/schema'
 import { hasAnalyticsConsent } from './_lib/analytics'
 import { isDevBypassAllowed } from './_lib/devBypass'
@@ -58,9 +58,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
     const appUrl = getAppUrl()
 
-    const [ws] = await db
+    const readLinks = async () => (await db
       .select({ stripeCustomerId: workspaces.stripeCustomerId, stripeSubscriptionId: workspaces.stripeSubscriptionId })
-      .from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1)
+      .from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1))[0]
+    let ws = await readLinks()
+
+    // A linked subscription Stripe no longer knows (a test-mode id after going live, R-61) is cleared by the sync, so this
+    // workspace gets a fresh Checkout instead of a Portal link that fails.
+    if (ws?.stripeSubscriptionId) {
+      await syncSubscription(stripe, ws.stripeSubscriptionId)
+      ws = await readLinks()
+    }
 
     // A workspace that already subscribes changes plan in the Customer Portal.
     // A second Checkout would start a second, parallel subscription.
@@ -68,14 +76,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ url: await createPortalSession(stripe, ws.stripeCustomerId), portal: true })
     }
 
+    // A stored customer Stripe no longer knows (or deleted) is forgotten and replaced (R-61).
+    let customerId = ws?.stripeCustomerId ?? null
+    let replacing: string | null = null
+    if (customerId) {
+      const gone = await stripe.customers.retrieve(customerId).then(c => !!(c as { deleted?: boolean }).deleted, err => {
+        if (isStripeMissing(err)) return true
+        throw err
+      })
+      if (gone) {
+        await forgetCustomer(customerId)
+        replacing = customerId
+        customerId = null
+      }
+    }
+
     // One Stripe customer per workspace, made before Checkout (R-19): two Checkouts opened at once then belong to the
     // same customer, so the second payment is recognisable as a duplicate. The idempotency key makes two simultaneous
-    // requests get the very same customer back instead of creating two. Only the opaque workspace id is stored on it.
-    let customerId = ws?.stripeCustomerId ?? null
+    // requests get the very same customer back instead of creating two (a replacement gets its own key: the first one's
+    // would return the customer that is gone). Only the opaque workspace id is stored on it.
     if (!customerId) {
       const created = await stripe.customers.create(
         { metadata: { workspaceId: auth.workspaceId } },
-        { idempotencyKey: `customer-${auth.workspaceId}` },
+        { idempotencyKey: replacing ? `customer-${auth.workspaceId}-after-${replacing}` : `customer-${auth.workspaceId}` },
       )
       customerId = created.id
       await db.update(workspaces).set({ stripeCustomerId: customerId, updatedAt: new Date() })

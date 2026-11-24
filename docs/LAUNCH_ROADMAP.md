@@ -25,6 +25,10 @@ Owner account work is still listed in `docs/OWNER_CHECKLIST.md`. Tick items **he
 **Baseline at review time:** typecheck clean; lint 0 errors, 14 warnings; **992 frontend tests pass (+2 skipped); API 922 pass,
 2 FAIL** (R-55); build OK; `npm audit --omit=dev` 0. e2e last recorded 124/124 (not re-run in the review).
 
+**After Phase 0 + 1 (2026-11-24):** typecheck clean; lint 0 errors, 14 warnings; 1,000 frontend (+2 skipped); API 948/948; build OK;
+e2e 126/126. Seen in e2e logs, not a test failure and not from these changes (present before them): a `workspaces_pkey` duplicate-key error
+and a failed `workspaceDepartmentStore` fetch during `journey.spec.ts`, probably two parallel first requests for the `u-dev` workspace. Worth a look in R-74.
+
 Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 
 ---
@@ -161,7 +165,12 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 - **Done when** the checkout session parameters are covered by `checkout.test.ts`, and `docs/BILLING.md` + `OWNER_CHECKLIST.md` say what to switch on.
 
 ### R-61 Stripe ids that Stripe no longer knows break checkout and stall reconciliation
-- [ ] **Problem (reported).** `syncSubscription` (`api/_lib/billing.ts:~102`) throws on `stripe.subscriptions.retrieve` before writing.
+- [x] **Done 2026-11-24.** Reproduced: a `resource_missing` throw left the paid tier, broke Checkout and kept the row first in the reconcile
+  queue. Now `isStripeMissing` + `forgetMissingSubscription` in `api/_lib/billing.ts` unlink the subscription and drop to Free (Sentry);
+  the duplicate check treats a missing linked subscription as finished; reconcile bumps `updated_at` on failure; the webhook handles
+  `customer.deleted`; Checkout syncs a linked subscription first and replaces a missing/deleted customer. Tests: `checkout.test.ts`,
+  `daily-maintenance.test.ts`, `stripe-webhook.test.ts`. O-10 (clearing test-mode ids before going live) is still the clean way.
+- **Problem (reported).** `syncSubscription` (`api/_lib/billing.ts:~102`) throws on `stripe.subscriptions.retrieve` before writing.
   Workspaces carrying ids from **test mode** (or a deleted customer/subscription) after the switch to live keys therefore: keep their paid
   `planTier` forever (only `cancelAtPeriodEnd` drops a plan, `resolvePlanTier` `:231`); get a 500 at checkout (`checkout.ts:52` sends anyone
   with a subscription id to the Portal; `:59` reuses a stale `stripeCustomerId`); and sit at the head of the daily reconcile queue forever

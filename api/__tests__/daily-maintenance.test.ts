@@ -7,11 +7,15 @@ vi.mock('../../src/lib/db/index', async () => {
 })
 
 const subs = new Map<string, Record<string, unknown>>()
+const missingIds = new Set<string>()
 const charges = new Map<string, Record<string, unknown>>()
 vi.mock('stripe', () => ({
   default: class {
     webhooks = { constructEvent: vi.fn() }
-    subscriptions = { retrieve: async (id: string) => { const s = subs.get(id); if (!s) throw new Error(`No such subscription: ${id}`); return s }, cancel: vi.fn() }
+    subscriptions = { retrieve: async (id: string) => {
+      if (missingIds.has(id)) throw Object.assign(new Error(`No such subscription: '${id}'`), { type: 'StripeInvalidRequestError', code: 'resource_missing', statusCode: 404 })
+      const s = subs.get(id); if (!s) throw new Error(`Stripe is having a moment: ${id}`); return s
+    }, cancel: vi.fn() }
     charges = { retrieve: async (id: string) => charges.get(id) }
   },
 }))
@@ -54,7 +58,7 @@ function sub(over: { id?: string; status?: string } = {}) {
 beforeAll(async () => { await setupSchema() })
 beforeEach(async () => {
   await cleanDb(); await seedWorkspace()
-  subs.clear(); charges.clear(); reported.length = 0; trialMail.mockClear(); billingMail.mockClear()
+  subs.clear(); missingIds.clear(); charges.clear(); reported.length = 0; trialMail.mockClear(); billingMail.mockClear()
   process.env.CRON_SECRET = 's3cret'
   process.env.STRIPE_SECRET_KEY = 'sk_test_x'
   process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = 'price_starter'
@@ -111,6 +115,31 @@ describe('R-22: reconciliation repairs a lost webhook', () => {
     await testDb.update(schema.workspaces).set({ planTier: 'starter', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'past_due' }).where(eq(schema.workspaces.id, TEST_WS_ID))
     sub({ status: 'canceled' })
     expect((await run())._body).toMatchObject({ reconcile: { checked: 2, corrected: 1, failed: 1 } })
+    expect((await ws()).planTier).toBe('free')
+  })
+
+  // R-61: a subscription Stripe does not know (test-mode id after going live) is unlinked and the workspace drops to Free; a row that
+  // keeps failing for another reason moves to the back of the queue, so it cannot block everyone else.
+  it('a subscription Stripe has no record of is unlinked and the workspace goes to Free', async () => {
+    await testDb.update(schema.workspaces).set({ planTier: 'growth', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_testmode', subscriptionStatus: 'active' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    missingIds.add('sub_testmode')
+    expect((await run())._body).toMatchObject({ reconcile: { checked: 1, corrected: 1, failed: 0 } })
+    expect(await ws()).toMatchObject({ planTier: 'free', stripeSubscriptionId: null, subscriptionStatus: null })
+    expect(reported.some(m => m.includes('Stripe has no subscription sub_testmode'))).toBe(true)
+  })
+
+  it('rows that always fail no longer stay at the head of the queue', async () => {
+    for (let i = 0; i < 3; i++) {
+      await testDb.insert(schema.workspaces).values({ id: `ws-bad-${i}`, name: 'Bad', ownerId: `o${i}`, ownerRole: 'CEO', size: '1-10', planTier: 'starter', stripeSubscriptionId: `sub_broken_${i}`, subscriptionStatus: 'active', updatedAt: new Date(i) })
+    }
+    await testDb.update(schema.workspaces).set({ planTier: 'starter', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'past_due', updatedAt: new Date(Date.now() - DAY) }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    sub({ status: 'canceled' })
+    const { reconcileSubscriptions } = await import('../_lib/reconcile')
+    const Stripe = (await import('stripe')).default
+    // batch of 3: the three broken rows are oldest and fail
+    expect(await reconcileSubscriptions(new Stripe('sk') as never, 3)).toMatchObject({ checked: 3, failed: 3 })
+    // next run: they went to the back, so the good row is reached
+    expect(await reconcileSubscriptions(new Stripe('sk') as never, 3)).toMatchObject({ corrected: 1 })
     expect((await ws()).planTier).toBe('free')
   })
 

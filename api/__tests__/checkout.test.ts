@@ -15,9 +15,12 @@ vi.mock('../_lib/auth', () => ({
 const sessionCreate = vi.fn()
 const portalCreate = vi.fn()
 const customerCreate = vi.fn()
+const customerRetrieve = vi.fn()
+const subRetrieve = vi.fn()
 vi.mock('stripe', () => ({
   default: class {
-    customers = { create: customerCreate }
+    customers = { create: customerCreate, retrieve: customerRetrieve }
+    subscriptions = { retrieve: subRetrieve }
     checkout = { sessions: { create: sessionCreate } }
     billingPortal = { sessions: { create: portalCreate } }
   },
@@ -48,6 +51,11 @@ beforeEach(async () => {
   vi.mocked(requireAuth).mockResolvedValue({ userId: TEST_USER_ID, workspaceId: TEST_WS_ID, permission: 'owner' })
   sessionCreate.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/abc' })
   customerCreate.mockReset().mockResolvedValue({ id: 'cus_new' })
+  customerRetrieve.mockReset().mockImplementation(async (id: string) => ({ id }))
+  subRetrieve.mockReset().mockImplementation(async (id: string) => ({
+    id, status: 'active', customer: 'cus_1', metadata: {}, cancel_at_period_end: false, cancel_at: null,
+    items: { data: [{ price: { id: 'price_starter_monthly' }, current_period_end: 1_900_000_000 }] },
+  }))
   PRICE_ENV.forEach(k => delete process.env[k])
 })
 
@@ -146,6 +154,50 @@ describe('POST /api/checkout', () => {
     expect(sessionCreate).not.toHaveBeenCalled()
     expect(portalCreate.mock.calls[0][0].customer).toBe('cus_1')
     expect(res._body).toEqual({ url: 'https://billing.stripe.test/portal', portal: true })
+  })
+})
+
+// R-61: ids Stripe no longer knows (test-mode ids after going live, deleted in the dashboard) used to break Checkout for good.
+describe('Stripe ids that Stripe no longer knows (R-61)', () => {
+  const missing = () => Object.assign(new Error('No such object'), { type: 'StripeInvalidRequestError', code: 'resource_missing', statusCode: 404 })
+  const start = async () => { const res = createRes(); await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, res as never); return res }
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test'
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = 'price_starter_monthly'
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('a missing subscription is unlinked (Free) and the admin gets a real Checkout, not a Portal link', async () => {
+    await testDb.update(schema.workspaces).set({ planTier: 'growth', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_test_mode', subscriptionStatus: 'active' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    subRetrieve.mockRejectedValue(missing())
+    const res = await start()
+    expect(res._status).toBe(200)
+    expect(portalCreate).not.toHaveBeenCalled()
+    expect(sessionCreate).toHaveBeenCalledTimes(1)
+    const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.id, TEST_WS_ID))
+    expect(ws).toMatchObject({ planTier: 'free', stripeSubscriptionId: null, subscriptionStatus: null })
+  })
+
+  it('a missing (or deleted) customer is replaced by a new one, with its own idempotency key', async () => {
+    for (const gone of [() => Promise.reject(missing()), () => Promise.resolve({ id: 'cus_old', deleted: true })]) {
+      await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_old' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+      customerRetrieve.mockReset().mockImplementation(gone)
+      customerCreate.mockClear(); sessionCreate.mockClear()
+      const res = await start()
+      expect(res._status).toBe(200)
+      expect(customerCreate.mock.calls[0][1]).toEqual({ idempotencyKey: `customer-${TEST_WS_ID}-after-cus_old` })
+      expect(sessionCreate.mock.calls[0][0].customer).toBe('cus_new')
+      const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.id, TEST_WS_ID))
+      expect(ws.stripeCustomerId).toBe('cus_new')
+    }
+  })
+
+  it('any other Stripe failure is still a 500 (nothing is cleared on a guess)', async () => {
+    await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_old' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    customerRetrieve.mockRejectedValue(new Error('Stripe is down'))
+    expect((await start())._status).toBe(500)
+    const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.id, TEST_WS_ID))
+    expect(ws.stripeCustomerId).toBe('cus_old')
   })
 })
 

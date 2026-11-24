@@ -529,10 +529,38 @@ describe('POST /api/webhooks/stripe', () => {
       expect(w.planTier).toBe('growth')
     })
 
+    it('a new subscription replaces a linked one Stripe has no record of at all (R-61)', async () => {
+      await linkSubscription('starter')
+      makeSub({ id: 'sub_2', price: 'price_growth_annual' })
+      // first the new subscription is read (found), then the linked one (Stripe: no such object)
+      retrieve.mockImplementationOnce(async (id: string) => subs.get(id)!)
+        .mockImplementationOnce(async () => { throw Object.assign(new Error("No such subscription: 'sub_1'"), { code: 'resource_missing' }) })
+      await send(checkoutFor('sub_2'))
+      expect(cancel).not.toHaveBeenCalled()
+      expect(await getWs()).toMatchObject({ stripeSubscriptionId: 'sub_2', planTier: 'growth' })
+    })
+
     it('the same subscription arriving again is not a duplicate of itself', async () => {
       makeSub({ id: 'sub_1' }); await linkSubscription('starter')
       await send(event('customer.subscription.updated', { id: 'sub_1' }))
       expect(cancel).not.toHaveBeenCalled()
+    })
+  })
+
+  // R-61: Stripe objects that no longer exist must not leave a workspace stuck on a paid plan or a dead customer.
+  describe('objects Stripe no longer knows (R-61)', () => {
+    it('an event for a subscription Stripe has no record of unlinks it and drops the workspace to Free', async () => {
+      await linkSubscription('growth')
+      retrieve.mockImplementationOnce(async () => { throw Object.assign(new Error("No such subscription: 'sub_1'"), { code: 'resource_missing' }) })
+      const res = await send(event('customer.subscription.updated', { id: 'sub_1' }))
+      expect(res._status).toBe(200)
+      expect(await getWs()).toMatchObject({ planTier: 'free', stripeSubscriptionId: null, subscriptionStatus: null, cancelAtPeriodEnd: false })
+    })
+
+    it('customer.deleted forgets the customer id, so the next Checkout makes a new customer', async () => {
+      await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_gone' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+      expect((await send(event('customer.deleted', { id: 'cus_gone', object: 'customer', deleted: true })))._status).toBe(200)
+      expect((await getWs()).stripeCustomerId).toBeNull()
     })
   })
 

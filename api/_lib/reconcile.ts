@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import type Stripe from 'stripe'
-import { and, asc, isNotNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull } from 'drizzle-orm'
 import { db } from './db'
 import { reportError } from './sentry'
 import { syncSubscription } from './billing'
@@ -10,7 +10,7 @@ import { workspaces } from '../../src/lib/db/schema'
 // subscription from Stripe and let `syncSubscription` mirror it, so a missed `customer.subscription.deleted` or `updated`
 // is repaired within a day instead of never. Stripe stays the source of truth.
 
-/** Subscriptions checked per run. The oldest-synced go first, and a sync stamps `updated_at`, so every workspace comes round. */
+/** Subscriptions checked per run. The oldest-synced go first, and a sync (or a failed one) stamps `updated_at`, so every workspace comes round. */
 export const RECONCILE_BATCH = 100
 
 export interface ReconcileResult {
@@ -41,6 +41,9 @@ export async function reconcileSubscriptions(stripe: Stripe, limit = RECONCILE_B
       }
     } catch (err) {
       out.failed++
+      // Move it to the back of the queue (R-61): a row that always fails used to stay oldest for ever, and 100 of them stopped
+      // reconciliation for everyone else.
+      await db.update(workspaces).set({ updatedAt: new Date() }).where(eq(workspaces.id, row.id)).catch(() => {})
       reportError(err, { route: 'cron/daily-maintenance', step: 'reconcile', workspaceId: row.id })
     }
   }

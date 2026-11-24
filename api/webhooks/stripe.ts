@@ -5,7 +5,7 @@ import { db } from '../_lib/db'
 import { reportError } from '../_lib/sentry'
 import { sendPaymentFailed } from '../_lib/email'
 import { getAppUrl } from '../_lib/url'
-import { invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
+import { forgetCustomer, invoiceSubscriptionId, syncSubscription } from '../_lib/billing'
 import { claimEvent, markProcessed, releaseClaim, emailsAlreadySent, markEmailsSent } from '../_lib/stripeEvents'
 import { workspaces, workspaceMembers } from '../../src/lib/db/schema'
 import { track } from '../_lib/analytics'
@@ -85,6 +85,8 @@ const HANDLED_EVENTS = new Set<string>([
   'customer.subscription.resumed',
   'invoice.paid',
   'invoice.payment_failed',
+  // A customer deleted in Stripe is forgotten, so the next Checkout makes a new one (R-61).
+  'customer.deleted',
   // Money events a human must hear about (R-22): reported, never acted on automatically.
   'charge.refunded',
   'charge.dispute.created',
@@ -123,6 +125,10 @@ async function handleEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
       }
       return
     }
+
+    case 'customer.deleted':
+      await forgetCustomer(event.data.object.id)
+      return
 
     case 'charge.refunded':
       await handleChargeRefunded(event.data.object)
