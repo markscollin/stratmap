@@ -70,7 +70,7 @@ content reviewed by a lawyer.
 
 ## Launch review backlog (2026-11-13)
 
-**Start here for what to work on next:** `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
+**Start here for what to work on next:** `docs/LAUNCH_ROADMAP.md` (2026-11-24 review: phased plan, items R-55 onward, decisions D-6 to D-10). Older items and their history: `docs/LAUNCH_REVIEW_BACKLOG.md`. It lists every open issue from the full pre-launch review
 (ids `R-01`… for code, `O-01`… for owner/dashboard actions, `D-1`… for decisions the owner must make), each with evidence, a suggested fix
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.

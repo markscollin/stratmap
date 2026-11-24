@@ -1,5 +1,7 @@
 # Launch review backlog (2026-11-13)
 
+> **2026-11-24:** new work (R-55 onward) and the phased plan to launch are in `docs/LAUNCH_ROADMAP.md`. This file keeps R-01 to R-54.
+
 Work that came out of the full pre-launch review of commit `b959041`. This is the **live backlog**: the root
 `BACKLOG.md` is the historical sprint list, and `docs/ROADMAP_TO_PRODUCTION.md` is the original roadmap (its
 still-open items are referenced here by number).
