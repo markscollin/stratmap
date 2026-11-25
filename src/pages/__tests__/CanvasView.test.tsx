@@ -96,3 +96,14 @@ describe('header row (R-64)', () => {
     expect((lastProps() as unknown as { toolbarSlot: unknown }).toolbarSlot).toBeUndefined()
   })
 })
+
+describe('role panel and header (R-65)', () => {
+  it('while the role panel is open the header row stops short of it, so the toolbar is never under the panel', async () => {
+    renderChart('editor')
+    await waitFor(() => expect(screen.getByTestId('canvas')).toBeTruthy())
+    expect(screen.getByTestId('canvas-header').style.right).toBe('16px')
+    const { act } = await import('@testing-library/react')
+    act(() => (lastProps() as unknown as { onPanelOpenChange: (o: boolean) => void }).onPanelOpenChange(true))
+    expect(screen.getByTestId('canvas-header').style.right).toBe('396px')
+  })
+})

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { lastSalaryCurrency, rememberSalaryCurrency } from '../lib/salaryCurrency'
 import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash2, Pencil, Download } from 'lucide-react'
 import { useHeadcountStore, type HeadcountPlan, type HeadcountStatus } from '../store/headcountStore'
 import { useWorkspaceDepartmentStore, useDepartmentsLoad, type WorkspaceDepartment } from '../store/workspaceDepartmentStore'
@@ -175,10 +176,6 @@ interface HireFormData {
   salary?: { min: number | null; max: number | null; currency: string | null }
 }
 
-const CURRENCY_KEY = 'stratmap_headcount_currency'
-function lastCurrency(): string {
-  try { return localStorage.getItem(CURRENCY_KEY) || 'USD' } catch { return 'USD' }
-}
 const toNumber = (s: string): number | null => (s.trim() === '' ? null : Number(s.replace(/[, _]/g, '')))
 
 function HireForm({ initialQuarter, plan, canSetSalary, onSubmit, onCancel }: {
@@ -197,7 +194,7 @@ function HireForm({ initialQuarter, plan, canSetSalary, onSubmit, onCancel }: {
   const [notes,    setNotes]    = useState(plan?.notes ?? '')
   const [minText,  setMinText]  = useState(plan?.salaryMin != null ? String(plan.salaryMin) : '')
   const [maxText,  setMaxText]  = useState(plan?.salaryMax != null ? String(plan.salaryMax) : '')
-  const [currency, setCurrency] = useState(plan?.salaryCurrency ?? lastCurrency())
+  const [currency, setCurrency] = useState(plan?.salaryCurrency ?? lastSalaryCurrency())
 
   const min = toNumber(minText), max = toNumber(maxText)
   const hasAmount = min !== null || max !== null
@@ -209,7 +206,7 @@ function HireForm({ initialQuarter, plan, canSetSalary, onSubmit, onCancel }: {
   const isValid = title.trim() !== '' && salaryError === null
 
   const submit = () => {
-    if (canSetSalary && hasAmount) { try { localStorage.setItem(CURRENCY_KEY, currency.trim().toUpperCase()) } catch { /* ignore */ } }
+    if (canSetSalary && hasAmount) rememberSalaryCurrency(currency)
     onSubmit({
       title: title.trim(), departmentId: deptId, roleType, targetQuarter: quarter, chartId, notes,
       ...(canSetSalary ? { salary: hasAmount ? { min, max, currency: currency.trim().toUpperCase() } : { min: null, max: null, currency: null } } : {}),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ROLE_PANEL_WIDTH } from '../features/panel/panelSize'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useChartStore } from '../store'
@@ -38,6 +39,8 @@ export function CanvasView() {
   const isPhone = useIsPhone()
   // The toolbar renders into the header row (R-64); a state ref so the canvas re-renders once the slot exists.
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
+  // While the role panel is open the header row stops short of it, so the panel never covers the toolbar (R-65).
+  const [panelOpen, setPanelOpen] = useState(false)
   // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
   const conflicted = useChartConflict(s => s.chartId) === id
   // A change could not be saved (launch review R-01): read-only until retried or reloaded, so nobody edits a chart that is not being saved.
@@ -147,7 +150,7 @@ export function CanvasView() {
       // One header row (R-64): back, name, status and version on the left, the canvas toolbar on the right. The name gives way
       // (ellipsis) before anything overlaps, and on a narrow screen the toolbar wraps to a second line instead of covering it.
       // The row itself lets clicks through to the canvas; only its controls take them.
-      <div data-testid="canvas-header" style={{ position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+      <div data-testid="canvas-header" style={{ position: 'absolute', top: 16, left: 16, right: panelOpen ? ROLE_PANEL_WIDTH + 16 : 16, transition: 'right .25s', zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 260px', pointerEvents: 'none' }}>
           <button
             onClick={() => navigate('/charts')}
@@ -190,6 +193,7 @@ export function CanvasView() {
         onCommentsChanged={refreshCommentCounts}
         onVersionRestored={() => setReloadKey(k => k + 1)}
         toolbarSlot={isPhone ? undefined : toolbarSlot}
+        onPanelOpenChange={setPanelOpen}
       />
       </div>
     </div>

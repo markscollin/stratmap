@@ -297,7 +297,8 @@ test.describe.serial('canvas saves', () => {
       expect(puts).toHaveLength(0)                        // nothing while typing
       await min.click()                                   // leaving the box saves
       await expect.poll(() => puts.length).toBe(1)
-      expect(puts[0]).toBe('{"salaryBandMax":150000}')
+      // the first amount also saves the currency on screen (GBP unless another was used before, R-65)
+      expect(puts[0]).toBe('{"salaryBandMax":150000,"salaryCurrency":"GBP"}')
 
       await min.fill('200000')                            // above the max: refused before it is sent
       await max.click()

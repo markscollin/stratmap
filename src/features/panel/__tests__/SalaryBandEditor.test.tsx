@@ -64,3 +64,36 @@ describe('SalaryBandEditor', () => {
     expect(onChange).toHaveBeenCalledWith({ salaryCurrency: 'GBP' })
   })
 })
+
+// R-65: placeholders that read as labels, and the currency StratMap prices in (or the one last used) instead of USD.
+describe('SalaryBandEditor defaults (R-65)', () => {
+  it('says Min / Max in the empty boxes, not 0', () => {
+    const { min, max } = setup()
+    expect(min.placeholder).toBe('Min')
+    expect(max.placeholder).toBe('Max')
+  })
+
+  it('with no saved currency it shows GBP, and saves it with the first amount', () => {
+    localStorage.clear()
+    const { onChange, min } = setup({ currency: undefined })
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).value).toBe('GBP')
+    type(min, '50000'); fireEvent.blur(min)
+    expect(onChange).toHaveBeenCalledWith({ salaryBandMin: 50000, salaryCurrency: 'GBP' })
+  })
+
+  it('remembers the last currency picked and starts the next empty band on it', () => {
+    localStorage.clear()
+    const first = setup({ currency: undefined })
+    fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'EUR' } })
+    expect(first.onChange).toHaveBeenCalledWith({ salaryCurrency: 'EUR' })
+    document.body.innerHTML = ''
+    setup({ currency: undefined })
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).value).toBe('EUR')
+  })
+
+  it('a saved currency always wins', () => {
+    localStorage.setItem('stratmap_headcount_currency', 'EUR')
+    setup({ currency: 'USD' })
+    expect((screen.getByLabelText('Currency') as HTMLSelectElement).value).toBe('USD')
+  })
+})

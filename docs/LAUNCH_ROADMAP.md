@@ -257,7 +257,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   - The minimap shows bare grey blocks; colour them by department like `NodeChip`, or hide the minimap under ~20 roles.
 
 ### R-65 Role panel shows invented data and is clipped
-- [ ] (verified) `src/features/panel/JDPanel.tsx:183` shows `node.location ?? 'Remote / Hybrid'`: every role without a location claims to be remote/hybrid.
+- [x] **Done 2026-11-25.** Reproduced at 1366 px. The location line shows only a location someone entered (no more "Remote / Hybrid");
+  the four tabs share the panel width and fit; values read as words ("Full-time", "Nobody (top of the chart)", no title-casing); salary
+  boxes say Min / Max; the currency starts on the one last used for a salary (shared with the headcount form, `src/lib/salaryCurrency.ts`),
+  else GBP, and the first amount saves it. Found while checking: since R-64 the open panel covered the right-aligned toolbar, so the header
+  row now stops short of the panel while it is open (`onPanelOpenChange`, `ROLE_PANEL_WIDTH`), and the footer buttons wrap instead of
+  squashing "Submit for review" onto three lines. Tests: `JDPanel.test.tsx`, `SalaryBandEditor.test.tsx`, `CanvasView.test.tsx`, `canvas-saves.spec.ts`.
+- (verified) `src/features/panel/JDPanel.tsx:183` shows `node.location ?? 'Remote / Hybrid'`: every role without a location claims to be remote/hybrid.
   Show nothing (or "Location not set") instead. At 1366 px the fourth tab is cut to "Commen…" and Overview runs off the right edge. Salary inputs show
   `0` as placeholder (use "Min"/"Max"); the currency defaults to USD while the product prices in GBP (default to the workspace's last-used, else GBP).
 

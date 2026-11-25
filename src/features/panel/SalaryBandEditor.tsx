@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { lastSalaryCurrency, rememberSalaryCurrency } from '../../lib/salaryCurrency'
 
-const SALARY_CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'SGD', 'AED']
+const SALARY_CURRENCIES = ['GBP', 'EUR', 'USD', 'CAD', 'AUD', 'SGD', 'AED']
 
 export interface SalaryBandChange { salaryBandMin?: number | null; salaryBandMax?: number | null; salaryCurrency?: string }
 
@@ -19,6 +20,8 @@ export function SalaryBandEditor({ min, max, currency, onChange }: {
   const [minText, setMinText] = useState(min === undefined ? '' : String(min))
   const [maxText, setMaxText] = useState(max === undefined ? '' : String(max))
   const [error, setError] = useState<string | null>(null)
+  // No currency saved yet: show the last one used here, else GBP (R-65; it used to say USD), and save it with the first amount.
+  const shownCurrency = currency ?? lastSalaryCurrency()
 
   // '' → null (clear), a whole number ≥ 0 → that number, anything else → undefined (invalid)
   const parse = (text: string): number | null | undefined => {
@@ -39,7 +42,7 @@ export function SalaryBandEditor({ min, max, currency, onChange }: {
     setError(null)
     const stored = which === 'min' ? min : max
     if ((mine ?? undefined) === stored) return // nothing changed: send nothing
-    onChange(which === 'min' ? { salaryBandMin: mine } : { salaryBandMax: mine })
+    onChange({ ...(which === 'min' ? { salaryBandMin: mine } : { salaryBandMax: mine }), ...(currency ? {} : { salaryCurrency: shownCurrency }) })
   }
 
   const inputStyle: React.CSSProperties = {
@@ -53,24 +56,24 @@ export function SalaryBandEditor({ min, max, currency, onChange }: {
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <label htmlFor="salary-min" style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Min</label>
-          <input id="salary-min" type="text" inputMode="numeric" placeholder="0" value={minText} aria-invalid={!!error}
+          <input id="salary-min" type="text" inputMode="numeric" placeholder="Min" value={minText} aria-invalid={!!error}
             onChange={e => setMinText(e.target.value)} onBlur={() => commit('min')} onKeyDown={onKey} style={inputStyle} />
         </div>
         <div style={{ flex: 1 }}>
           <label htmlFor="salary-max" style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Max</label>
-          <input id="salary-max" type="text" inputMode="numeric" placeholder="0" value={maxText} aria-invalid={!!error}
+          <input id="salary-max" type="text" inputMode="numeric" placeholder="Max" value={maxText} aria-invalid={!!error}
             onChange={e => setMaxText(e.target.value)} onBlur={() => commit('max')} onKeyDown={onKey} style={inputStyle} />
         </div>
         <div style={{ width: 80 }}>
           <label htmlFor="salary-currency" style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginBottom: 3 }}>Currency</label>
-          <select id="salary-currency" value={currency ?? 'USD'} onChange={e => onChange({ salaryCurrency: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
+          <select id="salary-currency" value={shownCurrency} onChange={e => { rememberSalaryCurrency(e.target.value); onChange({ salaryCurrency: e.target.value }) }} style={{ ...inputStyle, cursor: 'pointer' }}>
             {SALARY_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </div>
       {error && <div role="alert" style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</div>}
       {!error && min !== undefined && max !== undefined && (
-        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{currency ?? 'USD'} {min.toLocaleString()} – {max.toLocaleString()}</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{shownCurrency} {min.toLocaleString()} – {max.toLocaleString()}</div>
       )}
     </div>
   )

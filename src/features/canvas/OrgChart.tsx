@@ -40,9 +40,11 @@ const ImportDialog = lazy(() => import('../import/ImportDialog').then(m => ({ de
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged, onVersionRestored, toolbarSlot }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged, onVersionRestored, toolbarSlot, onPanelOpenChange }: {
   /** Where the page wants the toolbar (R-64): rendered into this element, in the page's header row, so it never covers the chart name. Without it the toolbar floats over the canvas (share and embed pages). */
   toolbarSlot?: HTMLElement | null
+  /** Told when the role panel opens or closes, so the page can keep its header row clear of it (R-65). */
+  onPanelOpenChange?: (open: boolean) => void
   /** Version history (roadmap 5): shown only where the viewer is signed in. Called after a version was restored, so the page reloads the chart. */
   onVersionRestored?: () => void
   /** Open comment threads per role (roadmap 5). Only passed where the viewer is signed in; a public share page has no comments. */
@@ -531,6 +533,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   const nodeMap      = Object.fromEntries(nodes.map(n => [n.id, n]))
   const selectedNode = selectedId ? nodeMap[selectedId] ?? null : null
+  const panelOpen = !!selectedNode
+  useEffect(() => { onPanelOpenChange?.(panelOpen) }, [panelOpen, onPanelOpenChange])
   const editingNode  = editingNodeId ? nodeMap[editingNodeId] ?? null : null
 
   // Dept colour lookup for edges

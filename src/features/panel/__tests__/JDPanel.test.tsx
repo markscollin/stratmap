@@ -189,3 +189,30 @@ describe('JDPanel department (R-47)', () => {
     expect(screen.getByText('Not set')).toBeInTheDocument()
   })
 })
+
+// R-65: the panel showed made-up data and title-cased values.
+describe('JDPanel shows only real data (R-65)', () => {
+  it('no location: nothing about one (it used to claim "Remote / Hybrid"); a real one is shown', () => {
+    const { unmount } = renderPanel('viewer')
+    expect(screen.queryByText(/Remote \/ Hybrid/)).toBeNull()
+    unmount()
+    useUserStore.setState({ permission: 'viewer' })
+    render(<MemoryRouter><JDPanel node={{ ...mockNode, location: 'Leeds' }} onClose={() => {}} /></MemoryRouter>)
+    expect(screen.getByText('Leeds')).toBeInTheDocument()
+  })
+
+  it('values read as words, and a top role "reports to nobody (top of the chart)"', () => {
+    renderPanel('viewer')
+    expect(screen.getAllByText('Full-time')).toHaveLength(2) // under the name and in the overview
+    expect(screen.queryByText('full-time')).toBeNull()
+    expect(screen.getByText('Nobody (top of the chart)')).toBeInTheDocument()
+    expect(screen.queryByText(/root/i)).toBeNull()
+  })
+
+  it('every tab can share the width (none is a fixed size that gets cut off)', () => {
+    render(<MemoryRouter><JDPanel node={mockNode} chartId="c1" onClose={() => {}} /></MemoryRouter>)
+    for (const name of ['Overview', 'Responsibilities', 'Requirements', 'Comments']) {
+      expect(screen.getByRole('button', { name }).style.flex).toBe('1 0 auto')
+    }
+  })
+})

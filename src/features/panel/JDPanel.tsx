@@ -1,4 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
+import { ROLE_PANEL_WIDTH } from './panelSize'
 import { X, Briefcase, MapPin, Clock, FileText, Search } from 'lucide-react'
 import type { OrgNode } from '../../types'
 import type { RoleStatus } from '../../types/chart'
@@ -119,7 +120,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
       onClick={e => e.stopPropagation()}
       style={{
         position: 'absolute', top: 0, right: 0, bottom: 0,
-        width: 'min(380px, 100vw)',
+        width: `min(${ROLE_PANEL_WIDTH}px, 100vw)`,
         background: 'var(--surface)',
         borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column',
@@ -173,7 +174,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{node.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{node.employmentType}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{sentence(node.employmentType)}</div>
                 </div>
               </div>
             )}
@@ -182,7 +183,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
               {[
                 { Icon: Briefcase, label: node.title },
-                { Icon: MapPin,    label: node.location ?? 'Remote / Hybrid' },
+                // Only a location someone entered (R-65): it used to claim "Remote / Hybrid" for every role without one.
+                ...(node.location ? [{ Icon: MapPin, label: node.location }] : []),
                 { Icon: Clock,     label: node.startDate ? `Started ${node.startDate}` : node.status === 'planned' ? 'Hiring soon' : 'Active' },
               ].map(({ Icon, label }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--muted)' }}>
@@ -195,7 +197,8 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginLeft: -20, paddingLeft: 20, marginRight: -20, overflowX: 'auto' }}>
               {(['overview', 'responsibilities', 'requirements', ...(chartId ? ['comments'] : [])] as PanelTab[]).map(t => (
                 <button key={t} onClick={(e) => { e.stopPropagation(); setTab(t); setShowTemplatePick(false) }} style={{
-                  padding: '8px 11px', background: 'transparent', border: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                  // The four tabs share the width so none is cut off in the 380 px panel (R-65); the row still scrolls if it must.
+                  padding: '8px 4px', background: 'transparent', border: 'none', whiteSpace: 'nowrap', flex: '1 0 auto',
                   borderBottom: `2px solid ${tab === t ? 'var(--brand)' : 'transparent'}`,
                   color: tab === t ? 'var(--brand)' : 'var(--muted)',
                   fontSize: 12, fontWeight: tab === t ? 600 : 400,
@@ -319,11 +322,11 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
 
           {/* Footer */}
           {(canEdit || canAdmin) && (
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0 }}>
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 8, flexShrink: 0 }}>
               {canEdit && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onEditNode?.(node) }}
-                  style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
+                  style={{ flex: '1 1 auto', padding: '8px 12px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
                   Edit role
                 </button>
@@ -331,7 +334,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
               {canEdit && onAddReport && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onAddReport(node) }}
-                  style={{ flex: 1, padding: '8px', background: 'var(--brand-bg)', border: '1px solid var(--brand)', borderRadius: 8, color: 'var(--brand)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  style={{ flex: '1 1 auto', padding: '8px 12px', background: 'var(--brand-bg)', border: '1px solid var(--brand)', borderRadius: 8, color: 'var(--brand)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
                   Add direct report
                 </button>
@@ -339,7 +342,7 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
               {jd && canEdit && (jdLocked || approvalLocked) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowApprovalUpgrade(true) }}
-                  style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  style={{ flex: '1 1 auto', padding: '8px 12px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}
                 >
                   Submit for review <PlanBadge feature="approval-workflow" />
                 </button>
@@ -470,7 +473,7 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onStatusChange('in-review') }}
-        style={{ flex: 1, padding: '8px', background: 'var(--grad-purple)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--grad-purple)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
       >
         Submit for review
       </button>
@@ -479,16 +482,16 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
   if (status === 'in-review') {
     if (canAdmin) {
       return (
-        <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+        <div style={{ display: 'flex', gap: 6, flex: '1 1 100%' }}>
           <button
             onClick={(e) => { e.stopPropagation(); onStatusChange('draft') }}
-            style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--danger)', borderRadius: 8, color: 'var(--danger)', fontSize: 12, cursor: 'pointer' }}
+            style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--raised)', border: '1px solid var(--danger)', borderRadius: 8, color: 'var(--danger)', fontSize: 12, cursor: 'pointer' }}
           >
             Changes
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onStatusChange('approved') }}
-            style={{ flex: 1, padding: '8px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--grad-brand)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
           >
             Approve
           </button>
@@ -505,7 +508,7 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onStatusChange('published') }}
-        style={{ flex: 1, padding: '8px', background: 'var(--grad-success)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--grad-success)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
       >
         Publish
       </button>
@@ -516,7 +519,7 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
       return (
         <button
           onClick={(e) => { e.stopPropagation(); onStatusChange('hired') }}
-          style={{ flex: 1, padding: '8px', background: 'var(--grad-success)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--grad-success)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         >
           Mark as hired
         </button>
@@ -526,7 +529,7 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
       return (
         <button
           onClick={() => onStatusChange('draft')}
-          style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
+          style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
         >
           New revision
         </button>
@@ -537,7 +540,7 @@ function StatusAction({ status, canEdit, canAdmin, onStatusChange }: {
     return (
       <button
         onClick={() => onStatusChange('draft')}
-        style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
+        style={{ flex: '1 1 auto', whiteSpace: 'nowrap', padding: '8px 12px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
       >
         Reopen role
       </button>
@@ -555,6 +558,9 @@ const ROLE_TYPE_LABEL: Record<string, string> = {
 }
 
 
+/** "full-time" → "Full-time": values read as words, without title-casing names and departments (R-65). */
+const sentence = (v: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : v)
+
 function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
   node: OrgNode
   dept: { name: string; colour: string } | null | undefined
@@ -565,11 +571,11 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
 }) {
   const manager = node.managerId ? allNodes.find(n => n.id === node.managerId) : null
   const fields = [
-    { label: 'Employment type', value: node.employmentType },
-    { label: 'Status',          value: node.status },
+    { label: 'Employment type', value: sentence(node.employmentType) },
+    { label: 'Status',          value: sentence(node.status) },
     { label: 'Role type',       value: ROLE_TYPE_LABEL[node.roleType ?? 'existing'] },
     { label: 'Department',      value: departmentLabel(dept, node.departmentId) },
-    { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'No manager (root)' },
+    { label: 'Reports to',      value: manager ? `${manager.name} · ${manager.title}` : 'Nobody (top of the chart)' },
   ]
 
   return (
@@ -578,7 +584,7 @@ function OverviewTab({ node, dept, allNodes, jd, canAdmin, onUpdateJD }: {
         {fields.map(({ label, value }) => (
           <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '.5px' }}>{label}</span>
-            <span style={{ fontSize: 13, color: 'var(--text)', textTransform: 'capitalize' }}>{value}</span>
+            <span style={{ fontSize: 13, color: 'var(--text)' }}>{value}</span>
           </div>
         ))}
       </div>
