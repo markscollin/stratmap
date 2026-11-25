@@ -8,10 +8,10 @@ let a: Page
 let b: Page
 
 async function addRole(page: Page, name: string) {
-  await page.getByRole('button', { name: /Add node/ }).click()
+  await page.getByRole('button', { name: /Add role/ }).click()
   await page.getByPlaceholder(/Sarah Chen/).fill(name)
   await page.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
-  await page.getByRole('button', { name: 'Create node' }).click()
+  await page.getByRole('button', { name: 'Create role' }).click()
 }
 
 test.describe.serial('edit conflicts', () => {

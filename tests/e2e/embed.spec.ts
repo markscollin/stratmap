@@ -35,7 +35,7 @@ test('a shared chart can be embedded: the snippet points at /embed, a signed-out
   await expect(guest).toHaveTitle('Public org — StratMap')
   await expect(guest.getByTestId('embed-message')).toHaveCount(0)
   await expect(guest.getByTitle('Version history')).toHaveCount(0)
-  await expect(guest.getByRole('button', { name: /Add node/ })).toHaveCount(0)
+  await expect(guest.getByRole('button', { name: /Add role/ })).toHaveCount(0)
 
   // Turn sharing off: the same embed now says so.
   await page.getByTestId('share-toggle').click()

@@ -36,6 +36,8 @@ export function CanvasView() {
   const { frozen } = useChartLimit()
   // Phones are view-only (roadmap 2.8): pan and pinch, no editing. Tablets edit as usual.
   const isPhone = useIsPhone()
+  // The toolbar renders into the header row (R-64); a state ref so the canvas re-renders once the slot exists.
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
   // Someone else changed this chart since we loaded it (roadmap 2.4): read-only until reloaded.
   const conflicted = useChartConflict(s => s.chartId) === id
   // A change could not be saved (launch review R-01): read-only until retried or reloaded, so nobody edits a chart that is not being saved.
@@ -142,18 +144,24 @@ export function CanvasView() {
           )}
         </>
       ) : (
-      <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          onClick={() => navigate('/charts')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}
-        >
-          <ChevronLeft size={13} /> All charts
-        </button>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', boxShadow: 'var(--shadow-sm)' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{name}</span>
+      // One header row (R-64): back, name, status and version on the left, the canvas toolbar on the right. The name gives way
+      // (ellipsis) before anything overlaps, and on a narrow screen the toolbar wraps to a second line instead of covering it.
+      // The row itself lets clicks through to the canvas; only its controls take them.
+      <div data-testid="canvas-header" style={{ position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 260px', pointerEvents: 'none' }}>
+          <button
+            onClick={() => navigate('/charts')}
+            style={{ pointerEvents: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer', boxShadow: 'var(--shadow-sm)', whiteSpace: 'nowrap' }}
+          >
+            <ChevronLeft size={13} /> All charts
+          </button>
+          <div title={name} data-testid="canvas-chart-name" style={{ pointerEvents: 'auto', minWidth: 0, flex: '0 1 auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+            {name}
+          </div>
+          <span style={{ pointerEvents: 'auto', flexShrink: 0 }}><StatusBadge status={status} /></span>
+          <span style={{ pointerEvents: 'auto', flexShrink: 0 }}><VersionPill version={version} /></span>
         </div>
-        <StatusBadge status={status} />
-        <VersionPill version={version} />
+        <div ref={setToolbarSlot} data-testid="canvas-toolbar-slot" style={{ pointerEvents: 'auto', marginLeft: 'auto', flexShrink: 0 }} />
       </div>
       )}
 
@@ -181,6 +189,7 @@ export function CanvasView() {
         commentCounts={commentCounts}
         onCommentsChanged={refreshCommentCounts}
         onVersionRestored={() => setReloadKey(k => k + 1)}
+        toolbarSlot={isPhone ? undefined : toolbarSlot}
       />
       </div>
     </div>

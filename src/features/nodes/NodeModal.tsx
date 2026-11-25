@@ -223,7 +223,7 @@ function ReportsToSelect({ nodes, value, onChange }: {
   const selected = nodes.find(n => n.id === value)
   return (
     <div style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setOpen(o => !o)} style={{
+      <button type="button" data-testid="reports-to" aria-expanded={open} onClick={() => setOpen(o => !o)} style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 8,
         padding: '9px 12px', background: 'var(--input-bg)',
         border: `1px solid ${open ? 'var(--brand)' : 'var(--border)'}`,
@@ -231,7 +231,7 @@ function ReportsToSelect({ nodes, value, onChange }: {
         borderRadius: 9, cursor: 'pointer', color: selected ? 'var(--text)' : 'var(--dim)',
         fontSize: 14, textAlign: 'left', transition: 'all .15s',
       }}>
-        <span style={{ flex: 1 }}>{selected ? `${selected.name} · ${selected.title}` : 'None (root node)'}</span>
+        <span style={{ flex: 1 }}>{selected ? `${selected.name} · ${selected.title}` : 'None (top of the chart)'}</span>
         <ChevronDown size={13} color="var(--muted)" />
       </button>
       {open && (
@@ -245,7 +245,7 @@ function ReportsToSelect({ nodes, value, onChange }: {
             width: '100%', display: 'flex', alignItems: 'center',
             padding: '9px 12px', background: !value ? 'var(--brand-bg)' : 'transparent',
             border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, textAlign: 'left',
-          }}>None (root node)</button>
+          }}>None (top of the chart)</button>
           {nodes.map(n => (
             <button key={n.id} type="button" onClick={() => { onChange(n.id); setOpen(false) }} style={{
               width: '100%', display: 'flex', flexDirection: 'column',
@@ -296,6 +296,8 @@ export interface NodeModalProps {
   onDelete: (id: string) => void
   /** Removes one reporting line right away (saved by the canvas). Left out on a read-only canvas. */
   onRemoveLine?: (edgeId: string) => void
+  /** Add mode: who the new role reports to unless changed (R-64: the selected role, else the chart's one top role). */
+  defaultReportsTo?: string
 }
 
 const EMPLOYMENT_OPTIONS: { value: EmploymentType; label: string }[] = [
@@ -342,7 +344,7 @@ function RoleTypeControl({ value, onChange }: { value: RoleType; onChange: (v: R
 
 export function NodeModal({
   isOpen, onClose, mode, node, allNodes, allEdges, departments: chartDepartments,
-  onAdd, onUpdate, onDelete, onRemoveLine,
+  onAdd, onUpdate, onDelete, onRemoveLine, defaultReportsTo = '',
 }: NodeModalProps) {
   const { departments: wsDepts, fetch: fetchDepts } = useWorkspaceDepartmentStore()
   const fallbackDept = wsDepts[0]?.id ?? ''
@@ -386,7 +388,7 @@ export function NodeModal({
       setName(''); setJobTitle(''); setDeptId(fallbackDept)
       setEmployment('full-time'); setStatus('active')
       setRoleType('existing')
-      setReportsTo(''); setLocation(''); setIsNew(false)
+      setReportsTo(allNodes.some(n => n.id === defaultReportsTo) ? defaultReportsTo : ''); setLocation(''); setIsNew(false)
     }
   }, [isOpen, mode, node?.id]) // eslint-disable-line
 
@@ -435,14 +437,14 @@ export function NodeModal({
 
   return (
     <Dialog
-      label={mode === 'add' ? 'Add node' : 'Edit role'}
+      label={mode === 'add' ? 'Add role' : 'Edit role'}
       onClose={onClose}
       panelStyle={{ borderRadius: 20, padding: '28px 28px 24px', width: 480, maxHeight: '90vh', overflowY: 'auto' }}
     >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
           <h2 style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.3px' }}>
-            {mode === 'add' ? 'Add node' : 'Edit role'}
+            {mode === 'add' ? 'Add role' : 'Edit role'}
           </h2>
           <button aria-label="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}>
             <X size={18} />
@@ -580,7 +582,7 @@ export function NodeModal({
                 transition: 'all .2s',
                 boxShadow: isValid ? '0 4px 14px var(--brand-glow)' : 'none',
               }}>
-                {mode === 'add' ? 'Create node' : 'Save changes'}
+                {mode === 'add' ? 'Create role' : 'Save changes'}
               </button>
             </>
           )}

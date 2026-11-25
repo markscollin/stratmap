@@ -26,8 +26,8 @@ function Harness({ onClose = () => {} }: { onClose?: () => void }) {
 
 describe('Dialog', () => {
   it('is a labelled modal dialog', () => {
-    render(<Dialog label="Add node" onClose={() => {}}><button>x</button></Dialog>)
-    const d = screen.getByRole('dialog', { name: 'Add node' })
+    render(<Dialog label="Add role" onClose={() => {}}><button>x</button></Dialog>)
+    const d = screen.getByRole('dialog', { name: 'Add role' })
     expect(d).toHaveAttribute('aria-modal', 'true')
   })
 

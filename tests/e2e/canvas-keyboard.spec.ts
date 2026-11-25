@@ -6,14 +6,14 @@ let ctx: BrowserContext
 let page: Page
 
 async function addRole(p: Page, name: string, reportsTo?: string) {
-  await p.getByRole('button', { name: /Add node/ }).click()
+  await p.getByRole('button', { name: /Add role/ }).click()
   await p.getByPlaceholder(/Sarah Chen/).fill(name)
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
-  if (reportsTo) {
-    await p.getByRole('button', { name: /None \(root node\)/ }).click()
-    await p.getByRole('dialog').getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
-  }
-  await p.getByRole('button', { name: 'Create node' }).click()
+  // Reports to: the form suggests a manager since R-64, so always pick: the one asked for, or nobody. (.last(): the option
+  // in the open list comes after the field, which may show the same name.)
+  await p.getByTestId('reports-to').click()
+  await p.getByRole('dialog').getByRole('button', reportsTo ? { name: new RegExp(`^${reportsTo}`) } : { name: 'None (top of the chart)' }).last().click()
+  await p.getByRole('button', { name: 'Create role' }).click()
   await expect(p.getByTestId('node-card').filter({ hasText: name })).toBeVisible()
 }
 

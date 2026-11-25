@@ -78,3 +78,21 @@ describe('CanvasView', () => {
     expect(lastProps().readOnly).toBe(true)
   })
 })
+
+// R-64: the chart name and the toolbar share one header row, so the toolbar can never cover the name.
+describe('header row (R-64)', () => {
+  it('on a desktop the canvas gets the header row\'s toolbar slot, and the name truncates with a tooltip', async () => {
+    renderChart('editor')
+    await waitFor(() => expect((lastProps() as unknown as { toolbarSlot: unknown }).toolbarSlot).toBe(screen.getByTestId('canvas-toolbar-slot')))
+    expect(screen.getByTestId('canvas-header')).toContainElement(screen.getByTestId('canvas-toolbar-slot'))
+    expect(screen.getByTestId('canvas-chart-name')).toHaveAttribute('title', 'Q3 Plan')
+    expect(screen.getByTestId('canvas-chart-name').style.textOverflow).toBe('ellipsis')
+  })
+
+  it('on a phone the toolbar floats as before (the header there is its own bar)', async () => {
+    setScreen('phone')
+    renderChart('editor')
+    await waitFor(() => expect(screen.getByTestId('canvas')).toBeTruthy())
+    expect((lastProps() as unknown as { toolbarSlot: unknown }).toolbarSlot).toBeUndefined()
+  })
+})

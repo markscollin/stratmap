@@ -238,7 +238,16 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   - ~~Say whether prices include VAT~~ handled by `PRICE_TAX_MODE` (R-60); nothing to do here.
 
 ### R-64 First chart on the canvas
-- [ ] (verified from the UX run, screenshot evidence) Each of these is small; together they are the first five minutes:
+- [x] **Done 2026-11-25.** Reproduced at 1280 px (toolbar over the name, "Add node" wrapping). The desktop canvas now has one header row
+  (`canvas-header` in `CanvasView`): back, name (ellipsis + tooltip), status, version, and the toolbar portalled into a slot on the right
+  (`OrgChart toolbarSlot` → `Toolbar slot`); it wraps instead of overlapping. Share/embed pages keep the floating toolbar. "Add role" defaults
+  **Reports to** to the selected role, else the chart's one top role (`defaultReportsTo`), the side panel has "Add direct report", and a role
+  with a manager is placed in the row under them next to their other reports (`placeUnderManager`, `src/features/canvas/addRole.ts`).
+  Fit-to-view never goes below 80% on a chart of 12 roles or fewer (`fitScale`). "node" → "role" everywhere a person reads it ("None (top of
+  the chart)"). The minimap was already coloured by department (R-48); it is now shown from 20 roles up. Tests: `addRole.test.ts`,
+  `OrgChartAddRole.test.tsx`, `CanvasView.test.tsx`, `tests/e2e/first-chart.spec.ts`; e2e helpers now always choose "Reports to"
+  (`data-testid="reports-to"`).
+- (verified from the UX run, screenshot evidence) Each of these is small; together they are the first five minutes:
   - The floating toolbar covers the status pill next to the chart name at 1366 px ("Dr…"). Lay the header and toolbar out so neither overlaps (test at 1280 and 1366).
   - "Reports to" defaults to "None (root node)", so adding a CEO, CTO and Head of People gives three unconnected boxes in a column. When a role is
     selected, "Add role" should default **Reports to** to it (and offer "Add direct report" on the selected card); with no selection and an existing

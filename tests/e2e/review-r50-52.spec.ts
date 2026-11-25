@@ -9,10 +9,13 @@ let slug: string
 const H = () => ({ 'X-Dev-User': slug })
 
 async function addRole(p: Page, name: string) {
-  await p.getByRole('button', { name: /Add node/ }).click()
+  await p.getByRole('button', { name: /Add role/ }).click()
   await p.getByPlaceholder(/Sarah Chen/).fill(name)
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
-  await p.getByRole('button', { name: 'Create node' }).click()
+  // A loose role (the form suggests a manager since R-64): these tests draw the lines themselves.
+  await p.getByTestId('reports-to').click()
+  await p.getByRole('dialog').getByRole('button', { name: 'None (top of the chart)' }).last().click()
+  await p.getByRole('button', { name: 'Create role' }).click()
   await expect(p.getByTestId('node-card').filter({ hasText: name })).toBeVisible()
 }
 const chartId = (p: Page) => /\/charts\/([^/?#]+)/.exec(p.url())![1]

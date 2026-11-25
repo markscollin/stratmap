@@ -4,6 +4,7 @@ import { exportAsPNG, exportAsPDF } from '../../utils/export'
 import { showsBranding } from '../../lib/plans'
 import type { OrgNode, OrgEdge, Department } from '../../types'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
+import { defaultReportsTo, placeUnderManager, fitScale, MINIMAP_FROM_ROLES } from './addRole'
 import { useCanvasState } from './useCanvasState'
 import { saveHistoryStep, saveNewRole, saveRoleEdit, saveRoleDelete, saveNewLine, saveLineDelete, savePositions } from './canvasSync'
 import { NodeCard } from '../nodes/NodeCard'
@@ -39,7 +40,9 @@ const ImportDialog = lazy(() => import('../import/ImportDialog').then(m => ({ de
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged, onVersionRestored }: {
+export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [], initialEdges = [], departments = [], readOnly = false, isPublic = false, brandExports: brandExportsProp, onImported, commentCounts, onCommentsChanged, onVersionRestored, toolbarSlot }: {
+  /** Where the page wants the toolbar (R-64): rendered into this element, in the page's header row, so it never covers the chart name. Without it the toolbar floats over the canvas (share and embed pages). */
+  toolbarSlot?: HTMLElement | null
   /** Version history (roadmap 5): shown only where the viewer is signed in. Called after a version was restored, so the page reloads the chart. */
   onVersionRestored?: () => void
   /** Open comment threads per role (roadmap 5). Only passed where the viewer is signed in; a public share page has no comments. */
@@ -97,6 +100,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
 
   // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  // Who the role being added reports to by default (R-64): the selected role, else the chart's one top role.
+  const [addReportsTo, setAddReportsTo] = useState('')
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
@@ -168,7 +173,8 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     const minX = Math.min(...xs) - 60, minY = Math.min(...ys) - 60
     const maxX = Math.max(...xs) + NODE_W + 60, maxY = Math.max(...ys) + NODE_H + 60
     const cW = maxX - minX, cH = maxY - minY
-    const scale = Math.min((w - 40) / cW, (h - 40) / cH, 1)
+    // A small chart is never zoomed out below 80% just to fit (R-64): a few roles at 58% are unreadable.
+    const scale = fitScale(Math.min((w - 40) / cW, (h - 40) / cH), ns.length)
     const tx = (w - cW * scale) / 2 - minX * scale
     const ty = (h - cH * scale) / 2 - minY * scale
     setTransform({ x: tx, y: ty, scale })
@@ -403,7 +409,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
     setEditingNodeId(nodeId)
   }, [setSelectedId, readOnly])
 
-  const handleOpenAddModal = useCallback(() => {
+  const handleOpenAddModal = useCallback((managerId?: string) => {
     if (isAtNodeLimit(nodes.length)) {
       setShowUpgradeModal(true)
       return
@@ -419,18 +425,20 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       const centreX = (minX + maxX) / 2 - NODE_W / 2
       addNodePosRef.current = { x: centreX, y: maxY + NODE_H + 60 }
     }
+    setAddReportsTo(typeof managerId === 'string' ? managerId : defaultReportsTo(nodes, edges, selectedId))
     setIsAddModalOpen(true)
-  }, [nodes, transform, vpSize, isAtNodeLimit])
+  }, [nodes, edges, selectedId, transform, vpSize, isAtNodeLimit])
 
   const handleAddSubmit = useCallback((data: Omit<import('../../types').OrgNode, 'id'>, reportsToId: string) => {
-    const pos = addNodePosRef.current
+    // A role with a manager goes in the row under them, next to their other reports (R-64); otherwise below the chart.
+    const pos = (reportsToId && placeUnderManager(reportsToId, nodesRef.current, getEdges(), { w: NODE_W, h: NODE_H })) || addNodePosRef.current
     const newRoleId = addNode({ ...data, x: pos.x, y: pos.y })
     const line = reportsToId && newRoleId ? addEdge(reportsToId, newRoleId) : null
     // The role is saved before the line that points at it: the queue keeps the order.
     saveNewRole(chartId, { ...data, id: newRoleId, x: pos.x, y: pos.y })
     if (line) saveNewLine(chartId, line)
     setIsAddModalOpen(false)
-  }, [addNode, addEdge, chartId])
+  }, [addNode, addEdge, getEdges, chartId])
 
   const handleUpdateSubmit = useCallback((nodeId: string, updates: Partial<import('../../types').OrgNode>, reportsToId: string) => {
     updateNode(nodeId, updates)
@@ -649,8 +657,9 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       </div>
 
       <Toolbar
+        slot={toolbarSlot}
         activeTool={activeTool} setActiveTool={setActiveTool}
-        onAddNode={handleOpenAddModal}
+        onAddNode={() => handleOpenAddModal()}
         onImport={() => setIsImportOpen(true)}
         onHistory={onVersionRestored ? () => setIsHistoryOpen(true) : undefined}
         onAutoLayout={handleAutoLayout}
@@ -667,7 +676,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
       />
 
       {!readOnly && nodes.length === 0 && chartId && (
-        <EmptyCanvasCard onAdd={handleOpenAddModal} onImport={() => setIsImportOpen(true)} />
+        <EmptyCanvasCard onAdd={() => handleOpenAddModal()} onImport={() => setIsImportOpen(true)} />
       )}
 
       {isHistoryOpen && chartId && onVersionRestored && (
@@ -720,9 +729,12 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         </div>
       )}
       <ZoomControls scale={transform.scale} onZoom={d => applyZoom(d)} onFit={fitToView} />
-      <Minimap nodes={nodes} departments={deptLookup} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
-        onPanTo={(x, y) => setTransform(t => ({ ...t, x, y }))}
-      />
+      {/* A small chart fits on screen, so a minimap only adds clutter (R-64) */}
+      {nodes.length >= MINIMAP_FROM_ROLES && (
+        <Minimap nodes={nodes} departments={deptLookup} transform={transform} vpW={vpSize.w} vpH={vpSize.h}
+          onPanTo={(x, y) => setTransform(t => ({ ...t, x, y }))}
+        />
+      )}
 
       {/* Connect mode banner */}
       {connectingFrom && (
@@ -756,6 +768,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
           departments={departments}
           onClose={() => setSelectedId(null)}
           onEditNode={node => setEditingNodeId(node.id)}
+          onAddReport={readOnly ? undefined : node => handleOpenAddModal(node.id)}
           chartId={commentCounts ? chartId : undefined}
           initialTab={deepLink.tab}
           commentCount={selectedNode ? commentCounts?.[selectedNode.id] ?? 0 : 0}
@@ -771,6 +784,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
               isOpen
               onClose={() => setIsAddModalOpen(false)}
               mode="add"
+              defaultReportsTo={addReportsTo}
               departments={departments}
               allNodes={nodes}
               allEdges={edges}

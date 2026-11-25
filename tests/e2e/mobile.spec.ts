@@ -11,11 +11,11 @@ let chartUrl = ''
 let shareUrl = ''
 
 async function addRole(p: Page, name: string) {
-  await p.getByRole('button', { name: /Add node/ }).click()
+  await p.getByRole('button', { name: /Add role/ }).click()
   await p.getByPlaceholder(/Sarah Chen/).fill(name)
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
   const saved = p.waitForResponse(r => /\/nodes$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
-  await p.getByRole('button', { name: 'Create node' }).click()
+  await p.getByRole('button', { name: 'Create role' }).click()
   await saved
 }
 
@@ -83,7 +83,7 @@ test.describe.serial('phones and tablets', () => {
     const { ctx, page } = await open(browser, PHONE, chartUrl)
     await expect(page.getByText('Ada Lovelace').first()).toBeVisible()
     await expect(page.getByTestId('phone-view-only')).toContainText('View only on phones')
-    await expect(page.getByRole('button', { name: /Add node/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Add role/ })).toHaveCount(0)
     const box = (await page.getByText('Ada Lovelace').first().boundingBox())!
     expect(box.x).toBeGreaterThanOrEqual(0)
     expect(box.x + box.width).toBeLessThanOrEqual(390)
@@ -134,7 +134,7 @@ test.describe.serial('phones and tablets', () => {
     const { ctx, page } = await open(browser, TABLET, chartUrl)
     await expect(page.getByTestId('sidebar')).toBeVisible()
     await expect(page.getByTestId('nav-menu')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Add node/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Add role/ })).toBeVisible()
     await expect(page.getByTestId('phone-view-only')).toHaveCount(0)
     await ctx.close()
   })

@@ -12,11 +12,11 @@ test.describe.serial('version history', () => {
   let viewerUser: ReturnType<typeof testUser>
 
   async function addRole(p: Page, name: string, title: string) {
-    await p.getByRole('button', { name: /Add node/ }).click()
+    await p.getByRole('button', { name: /Add role/ }).click()
     await p.getByPlaceholder(/Sarah Chen/).fill(name)
     await p.getByPlaceholder('e.g. Senior Engineer').fill(title)
     const saved = p.waitForResponse(r => /\/nodes$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
-    await p.getByRole('button', { name: 'Create node' }).click()
+    await p.getByRole('button', { name: 'Create role' }).click()
     await saved
     await expect(p.getByTestId('node-card').filter({ hasText: title })).toBeVisible()
   }

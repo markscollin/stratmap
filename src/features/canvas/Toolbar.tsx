@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 // The canvas toolbar (split out of OrgChart.tsx, R-35).
 import { MousePointer2, ZoomIn, Plus, Maximize2, GitBranch, Undo2, Redo2, LayoutGrid, Upload, History } from 'lucide-react'
 import type { Department } from '../../types'
@@ -9,7 +10,7 @@ import { ToolBtn } from './ToolBtn'
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
-export function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onHistory, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
+export function Toolbar({ slot, activeTool, setActiveTool, onAddNode, onImport, onHistory, onAutoLayout, onUndo, onRedo, canUndo, canRedo, readOnly, nodeCount, maxNodesPerChart, currentTier, onExport, chartId, isPublic, filterOpen, onFilterOpenChange, departments, filters, onFiltersChange }: {
   activeTool: ActiveTool; setActiveTool: (t: ActiveTool) => void
   onAddNode: () => void; onImport: () => void; onHistory?: () => void; onAutoLayout: () => void; onUndo: () => void; onRedo: () => void
   canUndo: boolean; canRedo: boolean; readOnly: boolean
@@ -18,14 +19,16 @@ export function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onHist
   chartId: string; isPublic: boolean
   filterOpen: boolean; onFilterOpenChange: (open: boolean) => void
   departments: Department[]; filters: ActiveFilters; onFiltersChange: (f: ActiveFilters) => void
+  /** Render into the page's header row instead of floating over the canvas (R-64). */
+  slot?: HTMLElement | null
 }) {
   const editTools: ActiveTool[] = readOnly
     ? ['select', 'pan', 'zoom']
     : ['select', 'pan', 'zoom', 'connect']
-  return (
-    <div data-export-ignore style={{
-      position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-      display: 'flex', alignItems: 'center', gap: 2, zIndex: 20,
+  const bar = (
+    <div data-export-ignore data-testid="canvas-toolbar" style={{
+      ...(slot ? { position: 'relative' } : { position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }),
+      display: 'flex', alignItems: 'center', gap: 2, whiteSpace: 'nowrap',
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 10, padding: '4px 6px', boxShadow: 'var(--shadow-sm)',
     }}>
@@ -69,7 +72,7 @@ export function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onHist
           borderRadius: 6, background: 'var(--brand-bg)', border: '1px solid var(--brand)',
           color: 'var(--brand)', fontSize: 12, cursor: 'pointer',
         }}>
-          <Plus size={12} /> Add node
+          <Plus size={12} /> Add role
         </button>
         {currentTier === 'free' && (
           <>
@@ -87,6 +90,7 @@ export function Toolbar({ activeTool, setActiveTool, onAddNode, onImport, onHist
       </>}
     </div>
   )
+  return slot ? createPortal(bar, slot) : bar
 }
 
 export function Divider() {

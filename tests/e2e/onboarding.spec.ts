@@ -12,12 +12,12 @@ async function submitRole(p: Page, name: string) {
   await p.getByPlaceholder(/Sarah Chen/).fill(name)
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
   const saved = p.waitForResponse(r => /\/nodes$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
-  await p.getByRole('button', { name: 'Create node' }).click()
+  await p.getByRole('button', { name: 'Create role' }).click()
   await saved
   await expect(p.getByText(name).first()).toBeVisible()
 }
 async function addRole(p: Page, name: string) {
-  await p.getByRole('button', { name: /Add node/ }).click()
+  await p.getByRole('button', { name: /Add role/ }).click()
   await submitRole(p, name)
 }
 

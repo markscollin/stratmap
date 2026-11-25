@@ -117,7 +117,7 @@ export function useCanvasState(initialNodes: OrgNode[] = [], initialEdges: OrgEd
   const addEdge = useCallback((sourceId: string, targetId: string): OrgEdge | null => {
     const prev = edgesRef.current
     if (sourceId === targetId) {
-      useToastStore.getState().addToast('Cannot connect a node to itself', 'error')
+      useToastStore.getState().addToast('Cannot connect a role to itself', 'error')
       return null
     }
     if (prev.some(e => e.sourceId === sourceId && e.targetId === targetId)) return null

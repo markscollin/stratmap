@@ -39,11 +39,11 @@ test.describe.serial('comments', () => {
     await onboard(owner, WS)
     await createChart(owner, 'Org')
     chartUrl = owner.url()
-    await owner.getByRole('button', { name: /Add node/ }).click()
+    await owner.getByRole('button', { name: /Add role/ }).click()
     await owner.getByPlaceholder(/Sarah Chen/).fill('Dana Data')
     await owner.getByPlaceholder('e.g. Senior Engineer').fill(ROLE)
     const saved = owner.waitForResponse(r => /\/nodes$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
-    await owner.getByRole('button', { name: 'Create node' }).click()
+    await owner.getByRole('button', { name: 'Create role' }).click()
     await saved
     void run
   })

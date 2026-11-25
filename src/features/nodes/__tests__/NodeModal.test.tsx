@@ -45,19 +45,19 @@ describe('add mode', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('renders the "Add node" heading', () => {
+  it('renders the "Add role" heading', () => {
     render(<NodeModal {...defaultProps()} />)
-    expect(screen.getByText('Add node')).toBeInTheDocument()
+    expect(screen.getByText('Add role')).toBeInTheDocument()
   })
 
-  it('shows "Create node" on the submit button', () => {
+  it('shows "Create role" on the submit button', () => {
     render(<NodeModal {...defaultProps()} />)
-    expect(screen.getByText('Create node')).toBeInTheDocument()
+    expect(screen.getByText('Create role')).toBeInTheDocument()
   })
 
   it('shows validation errors when submitted with empty fields', () => {
     render(<NodeModal {...defaultProps()} />)
-    fireEvent.click(screen.getByText('Create node'))
+    fireEvent.click(screen.getByText('Create role'))
     expect(screen.getByText('Name is required')).toBeInTheDocument()
     expect(screen.getByText('Job title is required')).toBeInTheDocument()
   })
@@ -65,7 +65,7 @@ describe('add mode', () => {
   it('does not call onAdd when required fields are empty', () => {
     const onAdd = vi.fn()
     render(<NodeModal {...defaultProps({ onAdd })} />)
-    fireEvent.click(screen.getByText('Create node'))
+    fireEvent.click(screen.getByText('Create role'))
     expect(onAdd).not.toHaveBeenCalled()
   })
 
@@ -77,7 +77,7 @@ describe('add mode', () => {
 
     await user.type(screen.getByPlaceholderText(/Sarah Chen/), 'Bob Smith')
     await user.type(screen.getByPlaceholderText('e.g. Senior Engineer'), 'CTO')
-    fireEvent.click(screen.getByText('Create node'))
+    fireEvent.click(screen.getByText('Create role'))
 
     expect(onAdd).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Bob Smith', title: 'CTO' }),
@@ -179,7 +179,7 @@ describe('edit mode', () => {
     const otherNode: OrgNode = { ...existingNode, id: 'n2', name: 'Bob' }
     render(<NodeModal {...defaultProps({ mode: 'edit', node: existingNode, allNodes: [existingNode, otherNode] })} />)
     // Open the Reports To dropdown
-    fireEvent.click(screen.getByText('None (root node)'))
+    fireEvent.click(screen.getByText('None (top of the chart)'))
     // Bob should be available as an option
     expect(screen.getByText('Bob')).toBeInTheDocument()
     // Alice (the node being edited) should not appear in the dropdown

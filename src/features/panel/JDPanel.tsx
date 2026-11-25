@@ -37,13 +37,15 @@ const STATUS_LABEL: Record<RoleStatus, string> = {
 // TipTap is large and only needed once a job description is open, so the editor is a separate download (R-24).
 const JDEditor = lazy(() => import('../jd/JDEditor').then(m => ({ default: m.JDEditor })))
 
-export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, initialTab, commentCount = 0, onCommentsChanged, departments: chartDepartments = [] }: {
+export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport, chartId, initialTab, commentCount = 0, onCommentsChanged, departments: chartDepartments = [] }: {
   node: OrgNode | null
   /** The chart's own departments (R-47). A role on a template chart points at these, not at the workspace's. */
   departments?: DepartmentLike[]
   allNodes?: OrgNode[]
   onClose: () => void
   onEditNode?: (node: OrgNode) => void
+  /** Add a role that reports to this one (R-64). Left out on a read-only canvas. */
+  onAddReport?: (node: OrgNode) => void
   /** The chart this role is on. The Comments tab only exists when it is known (roadmap 5). */
   chartId?: string
   /** Open on this tab (a comment email links straight to the discussion). */
@@ -324,6 +326,14 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, chartId, ini
                   style={{ flex: 1, padding: '8px', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--muted)', fontSize: 13, cursor: 'pointer' }}
                 >
                   Edit role
+                </button>
+              )}
+              {canEdit && onAddReport && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddReport(node) }}
+                  style={{ flex: 1, padding: '8px', background: 'var(--brand-bg)', border: '1px solid var(--brand)', borderRadius: 8, color: 'var(--brand)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Add direct report
                 </button>
               )}
               {jd && canEdit && (jdLocked || approvalLocked) && (

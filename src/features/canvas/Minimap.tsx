@@ -57,7 +57,7 @@ export function Minimap({ nodes, departments, transform, vpW, vpH, onPanTo }: {
   }
 
   return (
-    <div data-export-ignore style={{
+    <div data-export-ignore data-testid="minimap" style={{
       position: 'absolute', bottom: 56, left: 16, zIndex: 20,
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 8, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',

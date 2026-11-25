@@ -8,14 +8,14 @@ let page: Page
 let slug: string
 
 async function addRole(p: Page, name: string, reportsTo?: string) {
-  await p.getByRole('button', { name: /Add node/ }).click()
+  await p.getByRole('button', { name: /Add role/ }).click()
   await p.getByPlaceholder(/Sarah Chen/).fill(name)
   await p.getByPlaceholder('e.g. Senior Engineer').fill('Engineer')
-  if (reportsTo) {
-    await p.getByRole('button', { name: /None \(root node\)/ }).click()
-    await p.getByRole('dialog').getByRole('button', { name: new RegExp(`^${reportsTo}`) }).click()
-  }
-  await p.getByRole('button', { name: 'Create node' }).click()
+  // Reports to: the form suggests a manager since R-64, so always pick: the one asked for, or nobody. (.last(): the option
+  // in the open list comes after the field, which may show the same name.)
+  await p.getByTestId('reports-to').click()
+  await p.getByRole('dialog').getByRole('button', reportsTo ? { name: new RegExp(`^${reportsTo}`) } : { name: 'None (top of the chart)' }).last().click()
+  await p.getByRole('button', { name: 'Create role' }).click()
   await expect(p.getByTestId('node-card').filter({ hasText: name })).toBeVisible()
 }
 
@@ -76,12 +76,12 @@ test.describe.serial('canvas saves', () => {
     const alert = page.getByRole('alert').filter({ hasText: "Couldn't save the new role" })
     await expect(alert).toBeVisible()
     await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Add node/ })).toHaveCount(0) // editing is paused
+    await expect(page.getByRole('button', { name: /Add role/ })).toHaveCount(0) // editing is paused
 
     await page.unroute('**/api/charts/*/nodes')
     await alert.getByRole('button', { name: 'Retry' }).click()
     await expect(alert).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Add node/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Add role/ })).toBeVisible()
     await reload(page)
     await expect(page.getByTestId('node-card').filter({ hasText: 'Dana Unsaved' })).toBeVisible()
   })
