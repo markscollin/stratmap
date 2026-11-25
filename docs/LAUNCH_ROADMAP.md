@@ -223,7 +223,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 - **Needs** the owner to approve the visual (old R-41 question).
 
 ### R-63 Pricing page fixes
-- [ ] (verified) `src/pages/PricingPage.tsx`:
+- [x] **Done 2026-11-25.** "Talk to sales" uses `SALES_EMAIL` (`VITE_SALES_EMAIL`, else `VITE_SUPPORT_EMAIL`; hidden with neither, never
+  `sales@stratmap.app`; `check:env` knows it). "Most popular" removed. Starter says "Everything in Free, plus", Growth "Everything in Starter,
+  plus". Every limit and price comes from `PLAN_LIMITS` / `PLAN_PRICES` (the upgrade modal too), cards say "roles" not "nodes", and "2 months
+  free" is worked out from the prices. Signed in: the plan you are on says "Current plan" (paid ones used to offer to buy themselves again), and
+  on a paid plan the Free card says to cancel in Settings → Billing instead of a dead button. VAT: `PRICE_TAX_MODE` (R-60). Tests:
+  `PricingRoute.test.tsx`, `PricingSalesEmail.test.tsx`.
+- (verified) `src/pages/PricingPage.tsx`:
   - `:279` "Talk to sales" is `mailto:sales@stratmap.app`, a domain not owned. Read it from config (`VITE_SALES_EMAIL`, falling back to the support email); hide the CTA if neither is set.
   - `:188` "Most popular" on Starter before any customers. Remove (or "Recommended").
   - The Growth card does not say it includes everything in Starter; add "Everything in Starter, plus".

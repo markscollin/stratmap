@@ -67,7 +67,9 @@ describe('/pricing for signed-in people', () => {
   it('marks the plan they are actually on', () => {
     useBillingStore.getState().setPlan(PLAN_BY_TIER.starter)
     renderRoute()
-    expect(screen.queryByText('Current plan')).toBeNull()   // the Free card is no longer marked as theirs
+    expect(screen.getAllByText('Current plan')).toHaveLength(1)   // on the Starter card, no longer the Free one (R-63)
+    expect(screen.queryByTestId('checkout-starter')).toBeNull()
+    expect(screen.getByTestId('free-downgrade-hint')).toBeTruthy()
     expect(screen.queryByTestId('pricing-cta-free')).toBeNull()
   })
 })
@@ -91,5 +93,57 @@ describe('VAT line (D-6)', () => {
   it('says nothing about VAT while it is undecided', () => {
     renderRoute()
     expect(screen.queryByTestId('price-tax-note')).toBeNull()
+  })
+})
+
+// R-63: pricing page fixes.
+describe('pricing page fixes (R-63)', () => {
+  it('no "Most popular" badge before there are customers', () => {
+    renderRoute()
+    expect(screen.queryByText(/most popular/i)).toBeNull()
+  })
+
+  it('Growth says it includes everything in Starter, Starter everything in Free', () => {
+    renderRoute()
+    expect(screen.getByTestId('plan-includes-growth')).toHaveTextContent('Everything in Starter, plus')
+    expect(screen.getByTestId('plan-includes-starter')).toHaveTextContent('Everything in Free, plus')
+  })
+
+  it('every limit and price on the cards comes from plans.ts, and says "roles", not "nodes"', async () => {
+    const { PLAN_LIMITS, PLAN_PRICES } = await import('../../lib/plans')
+    renderRoute()
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.free.maxNodesPerChart} roles per chart`)).toBeTruthy()
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.starter.maxNodesPerChart} roles per chart`)).toBeTruthy()
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.growth.maxNodesPerChart} roles per chart`)).toBeTruthy()
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.starter.maxCharts} org charts`)).toBeTruthy()
+    for (const t of ['free', 'starter', 'growth'] as const) expect(screen.getByText(`Up to ${PLAN_LIMITS[t].seats} team members`)).toBeTruthy()
+    expect(screen.getByText(`£${PLAN_PRICES.starter.monthly}`)).toBeTruthy()
+    expect(screen.getByText(`£${PLAN_PRICES.growth.monthly}`)).toBeTruthy()
+    expect(screen.queryByText(/nodes/i)).toBeNull()
+  })
+
+  it('without a sales or support address there is no "Talk to sales" (no mailto to a domain we do not own)', () => {
+    renderRoute()
+    expect(screen.queryByTestId('talk-to-sales')).toBeNull()
+    expect(document.body.innerHTML).not.toContain('sales@stratmap.app')
+  })
+
+  it('signed in on a paid plan, the Free card says how to move to Free instead of a dead button', () => {
+    useUserStore.getState().setUser({ id: 'u1', name: 'Ada', email: 'ada@example.com' }, 'owner')
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.growth)
+    renderRoute()
+    expect(screen.getByTestId('free-downgrade-hint')).toHaveTextContent('cancel in Settings → Billing')
+    expect(screen.queryByRole('button', { name: 'Get started free' })).toBeNull()
+  })
+})
+
+describe('the plan you are on (R-63)', () => {
+  it('a paid plan you are already on says "Current plan" and offers no checkout for it', () => {
+    useUserStore.getState().setUser({ id: 'u1', name: 'Ada', email: 'ada@example.com' }, 'owner')
+    useBillingStore.getState().setPlan(PLAN_BY_TIER.growth)
+    renderRoute()
+    expect(screen.getByText('Current plan')).toBeTruthy()
+    expect(screen.queryByTestId('checkout-growth')).toBeNull()
+    expect(screen.getByTestId('checkout-starter')).toBeTruthy()
   })
 })

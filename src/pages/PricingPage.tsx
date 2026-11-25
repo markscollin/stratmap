@@ -8,7 +8,9 @@ import { LegalFooter } from './LegalPages'
 import { Layout } from '../components/layout/Layout'
 import { PublicNav } from '../components/layout/PublicNav'
 import { useUserStore } from '../store/userStore'
-import { PLAN_LIMITS, NEW_WORKSPACE_TRIAL_PLAN, DEFAULT_NEW_WORKSPACE_TRIAL_DAYS } from '../lib/plans'
+import { PLAN_LIMITS, PLAN_PRICES, NEW_WORKSPACE_TRIAL_PLAN, DEFAULT_NEW_WORKSPACE_TRIAL_DAYS } from '../lib/plans'
+import { SALES_EMAIL } from '../lib/contact'
+import type { PlanLimits } from '../lib/plans'
 
 /**
  * /pricing is public (roadmap 2.5): visitors see the plans in the marketing layout and are sent to sign-up;
@@ -32,66 +34,70 @@ export function PricingPage() {
 
   useEffect(() => { document.title = 'Pricing — StratMap' }, [])
 
-  const plans = [
+  // Every number comes from plans.ts (R-63), so the cards cannot drift from what the server enforces.
+  const charts = (l: PlanLimits) => (l.maxCharts < 0 ? 'Unlimited org charts' : l.maxCharts === 1 ? '1 org chart' : `Up to ${l.maxCharts} org charts`)
+  const roles = (l: PlanLimits) => (l.maxNodesPerChart < 0 ? 'Unlimited roles per chart' : `Up to ${l.maxNodesPerChart} roles per chart`)
+  const seats = (l: PlanLimits) => (l.seats < 0 ? 'Unlimited team members' : `Up to ${l.seats} team members`)
+  const pounds = (n: number) => `£${n}`
+  const { free, starter, growth } = PLAN_LIMITS
+  const plans: { tier: 'free' | 'starter' | 'growth'; name: string; monthlyPrice: string; annualPrice: string; description: string; includes?: string; features: { name: string; included: boolean }[] }[] = [
     {
-      tier: 'free' as const,
+      tier: 'free',
       name: 'Free',
       monthlyPrice: '£0',
       annualPrice: '£0',
       description: 'Perfect for getting started',
       features: [
         { name: `${DEFAULT_NEW_WORKSPACE_TRIAL_DAYS}-day Growth trial for every new workspace`, included: true },
-        { name: '1 org chart', included: true },
-        { name: 'Up to 30 nodes', included: true },
-        { name: 'Up to 3 team members', included: true },
-        { name: 'PNG export', included: true },
+        { name: charts(free), included: true },
+        { name: roles(free), included: true },
+        { name: seats(free), included: true },
+        { name: 'Import, PNG and CSV export, comments and share links', included: true },
         { name: 'Job descriptions', included: false },
         { name: 'Approval workflows', included: false },
         { name: 'PDF export', included: false },
         { name: 'AI drafting & auto-layout', included: false },
         { name: 'Headcount planning', included: false },
       ],
-      cta: 'Current plan',
-      ctaDisabled: true,
     },
     {
-      tier: 'starter' as const,
+      tier: 'starter',
       name: 'Starter',
-      monthlyPrice: '£18',
-      annualPrice: '£180',
+      monthlyPrice: pounds(PLAN_PRICES.starter.monthly),
+      annualPrice: pounds(PLAN_PRICES.starter.annual),
       description: 'For growing teams',
-      popular: true,
+      includes: 'Everything in Free, plus',
       features: [
-        { name: 'Up to 5 org charts', included: true },
-        { name: 'Up to 100 nodes', included: true },
-        { name: 'Up to 5 team members', included: true },
+        { name: charts(starter), included: true },
+        { name: roles(starter), included: true },
+        { name: seats(starter), included: true },
         { name: 'Job descriptions', included: true },
         { name: 'Approval workflows', included: true },
         { name: 'PDF export', included: true },
-        { name: `AI JD drafting (${PLAN_LIMITS.starter.aiDraftsPerMonth} per month)`, included: true },
+        { name: `AI JD drafting (${starter.aiDraftsPerMonth} per month)`, included: true },
         { name: 'Auto-layout', included: true },
         { name: 'Headcount planning', included: false },
       ],
-      cta: 'Upgrade to Starter',
     },
     {
-      tier: 'growth' as const,
+      tier: 'growth',
       name: 'Growth',
-      monthlyPrice: '£49',
-      annualPrice: '£490',
+      monthlyPrice: pounds(PLAN_PRICES.growth.monthly),
+      annualPrice: pounds(PLAN_PRICES.growth.annual),
       description: 'For ambitious scaling',
+      includes: 'Everything in Starter, plus',
       features: [
-        { name: 'Unlimited org charts', included: true },
-        { name: 'Up to 500 nodes', included: true },
-        { name: 'Up to 10 team members', included: true },
-        { name: 'All export options', included: true },
-        { name: `${PLAN_LIMITS.growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
-        { name: 'Headcount planning', included: true },
+        { name: charts(growth), included: true },
+        { name: roles(growth), included: true },
+        { name: seats(growth), included: true },
+        { name: `${growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
+        { name: 'Headcount planning and budgets', included: true },
         { name: 'Version history & scenarios', included: true },
       ],
-      cta: 'Upgrade to Growth',
     },
   ]
+  // "2 months free" is what the annual price actually saves, worked out from the prices.
+  const monthsFree = Math.round((PLAN_PRICES.starter.monthly * 12 - PLAN_PRICES.starter.annual) / PLAN_PRICES.starter.monthly)
 
   const getDisplayPrice = (monthly: string, annual: string) => {
     if (billingCycle === 'annual') {
@@ -149,7 +155,7 @@ export function PricingPage() {
         {billingCycle === 'annual' && (
           <div style={{ marginTop: 12 }}>
             <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, background: 'var(--success-bg)', padding: '4px 12px', borderRadius: 6 }}>
-              2 months free
+              {monthsFree} months free
             </span>
           </div>
         )}
@@ -165,30 +171,25 @@ export function PricingPage() {
               style={{
                 position: 'relative',
                 background: 'var(--surface)',
-                border: isCurrent ? '2px solid var(--brand)' : plan.popular ? '2px solid var(--brand)' : '1px solid var(--border)',
+                border: isCurrent ? '2px solid var(--brand)' : '1px solid var(--border)',
                 borderRadius: 16,
                 padding: 28,
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: plan.popular && !isCurrent ? '0 8px 32px rgba(14,165,233,0.15)' : 'var(--shadow-sm)',
+                boxShadow: 'var(--shadow-sm)',
                 transition: 'all .2s',
               }}
               onMouseEnter={(e) => {
-                if (!isCurrent && !plan.ctaDisabled) {
+                if (!isCurrent && plan.tier !== 'free') {
                   e.currentTarget.style.transform = 'translateY(-4px)'
                   e.currentTarget.style.boxShadow = 'var(--shadow)'
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = plan.popular && !isCurrent ? '0 8px 32px rgba(14,165,233,0.15)' : 'var(--shadow-sm)'
+                e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
               }}
             >
-              {plan.popular && !isCurrent && (
-                <div style={{ position: 'absolute', top: -12, left: 16, background: 'var(--grad-brand)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
-                  Most popular
-                </div>
-              )}
 
               <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
                 {plan.name}
@@ -211,6 +212,7 @@ export function PricingPage() {
 
               {/* Features */}
               <div style={{ flex: 1, marginBottom: 24 }}>
+                {plan.includes && <p data-testid={`plan-includes-${plan.tier}`} style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', margin: '0 0 10px' }}>{plan.includes}</p>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {plan.features.map((feature, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -243,25 +245,18 @@ export function PricingPage() {
                 >
                   {plan.tier === 'free' ? 'Start free' : `Start free, upgrade to ${plan.name}`}
                 </Link>
+              ) : isCurrent ? (
+                // The plan they are on: say so, never offer to buy it again (R-63).
+                <button disabled style={{ padding: '11px 20px', background: 'var(--raised)', border: 'none', borderRadius: 9, color: 'var(--dim)', fontSize: 14, fontWeight: 600, cursor: 'default', width: '100%' }}>
+                  Current plan
+                </button>
               ) : plan.tier !== 'free' ? (
                 <CheckoutButton tier={plan.tier} billingCycle={billingCycle} />
               ) : (
-                <button
-                  disabled
-                  style={{
-                    padding: '11px 20px',
-                    background: 'var(--raised)',
-                    border: 'none',
-                    borderRadius: 9,
-                    color: 'var(--dim)',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: 'default',
-                    width: '100%',
-                  }}
-                >
-                  {isCurrent ? 'Current plan' : 'Get started free'}
-                </button>
+                // On a paid plan, Free is reached by cancelling, which Stripe's billing portal handles (R-63).
+                <p data-testid="free-downgrade-hint" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center', margin: 0, lineHeight: 1.6 }}>
+                  To move to Free, cancel in <Link to="/settings?tab=billing" style={{ color: 'var(--brand)' }}>Settings → Billing</Link>. You keep your plan until the end of the period.
+                </p>
               )}
             </div>
           )
@@ -280,11 +275,13 @@ export function PricingPage() {
         <div>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Need something bigger?</h3>
           <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.6 }}>
-            For larger organisations: no limits on seats, charts or roles per chart, and an exportable audit log. Talk to us about what you need.
+            For larger organisations: no limits on seats, charts or roles per chart, and an exportable audit log. {SALES_EMAIL ? 'Talk to us about what you need.' : ''}
           </p>
         </div>
-        <a
-          href="mailto:sales@stratmap.app"
+        {/* Only with a real address (VITE_SALES_EMAIL, else VITE_SUPPORT_EMAIL), R-63 */}
+        {SALES_EMAIL && <a
+          data-testid="talk-to-sales"
+          href={`mailto:${SALES_EMAIL}`}
           style={{
             padding: '11px 24px',
             background: 'var(--grad-brand)',
@@ -300,7 +297,7 @@ export function PricingPage() {
           }}
         >
           Talk to sales
-        </a>
+        </a>}
       </div>
 
       {/* FAQ (simple) */}

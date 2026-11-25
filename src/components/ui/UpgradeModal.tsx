@@ -1,6 +1,7 @@
 import { X, Zap, Lock } from 'lucide-react'
 import type { PlanTier } from '../../types'
 import { Dialog } from './Dialog'
+import { PLAN_LIMITS, PLAN_PRICES } from '../../lib/plans'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -16,17 +17,17 @@ interface UpgradeModalProps {
 const TIER_INFO = {
   starter: {
     name: 'Starter',
-    monthlyPrice: '£18',
-    annualPrice: '£180',
-    features: ['Job descriptions & approval workflows', 'PDF export', 'AI JD drafting (3 per month)', 'Auto-layout', 'Up to 5 charts, 100 roles each'],
+    monthlyPrice: `£${PLAN_PRICES.starter.monthly}`,
+    annualPrice: `£${PLAN_PRICES.starter.annual}`,
+    features: ['Job descriptions & approval workflows', 'PDF export', `AI JD drafting (${PLAN_LIMITS.starter.aiDraftsPerMonth} per month)`, 'Auto-layout', `Up to ${PLAN_LIMITS.starter.maxCharts} charts, ${PLAN_LIMITS.starter.maxNodesPerChart} roles each`],
     icon: Lock,
     colour: '#0EA5E9',
   },
   growth: {
     name: 'Growth',
-    monthlyPrice: '£49',
-    annualPrice: '£490',
-    features: ['Headcount planning', 'Unlimited charts', 'Up to 500 roles per chart', '300 AI drafts a month', 'Up to 10 team members'],
+    monthlyPrice: `£${PLAN_PRICES.growth.monthly}`,
+    annualPrice: `£${PLAN_PRICES.growth.annual}`,
+    features: ['Headcount planning', 'Unlimited charts', `Up to ${PLAN_LIMITS.growth.maxNodesPerChart} roles per chart`, `${PLAN_LIMITS.growth.aiDraftsPerMonth} AI drafts a month`, `Up to ${PLAN_LIMITS.growth.seats} team members`],
     icon: Zap,
     colour: '#8B5CF6',
   },
