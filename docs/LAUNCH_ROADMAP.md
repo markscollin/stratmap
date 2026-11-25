@@ -157,13 +157,12 @@ Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
   `neon-emulator.test.ts`, through the Neon driver).
 
 ### R-60 Checkout sends no tax settings
-- [x] **Done 2026-11-24 (code part; D-6 still open).** Checkout always sends `billing_address_collection: 'required'`, `tax_id_collection`
+- [x] **Done 2026-11-24.** Checkout always sends `billing_address_collection: 'required'`, `tax_id_collection`
   and `customer_update: { address, name: 'auto' }`; `automatic_tax` is on only with `STRIPE_AUTOMATIC_TAX=1` (`checkoutTaxParams` in
   `api/checkout.ts`, `checkout.test.ts`; `check:env` knows the variable). `docs/BILLING.md` (setup step 4) and `OWNER_CHECKLIST.md` say
-  what to switch on and in which order. **D-6 answer (2026-11-24): build it in; the owning company is not decided yet.** So the VAT wording
-  is one setting, `PRICE_TAX_MODE` in `src/lib/taxDetails.ts` (next to the legal facts, since both belong to the selling entity):
-  `null` (now) says nothing, `'inclusive'` / `'exclusive'` puts the matching line under the plan cards. Still the owner's, once the
-  company exists: VAT registration, that setting, the Stripe prices' tax behaviour, then `STRIPE_AUTOMATIC_TAX=1`.
+  what to switch on and in which order. **D-6 (2026-11-25): not a blocker.** The VAT wording is one switch, `PRICE_TAX_MODE` in `src/lib/taxDetails.ts`: `null` (now) says
+  nothing, `'inclusive'` / `'exclusive'` puts the matching line under the plan cards. Turning tax on later is configuration only (that switch,
+  the Stripe prices' tax behaviour, Stripe Tax, `STRIPE_AUTOMATIC_TAX=1`).
 - **Problem (verified).** `api/checkout.ts` (around `:73-86`) has `allow_promotion_codes` but no `automatic_tax`,
   `billing_address_collection`, `tax_id_collection` or `customer_update`. Turning Stripe Tax on in the dashboard does nothing unless the
   session asks for it. The customer is created before Checkout with no address, so it also needs `customer_update: { address: 'auto', name: 'auto' }`.
@@ -222,7 +221,7 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   - The Growth card does not say it includes everything in Starter; add "Everything in Starter, plus".
   - Plan numbers in card copy are typed by hand; read seats/charts/roles from `PLAN_LIMITS` like the AI numbers already are, and add a test.
   - Signed in on a paid plan, the Free card shows a disabled "Get started free"; show nothing or "Downgrade via Manage billing".
-  - Say whether prices include VAT (R-60 / D-6).
+  - ~~Say whether prices include VAT~~ handled by `PRICE_TAX_MODE` (R-60); nothing to do here.
 
 ### R-64 First chart on the canvas
 - [ ] (verified from the UX run, screenshot evidence) Each of these is small; together they are the first five minutes:
@@ -340,7 +339,7 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 
 | ID | Question | Blocks |
 |---|---|---|
-| D-6 | Are you VAT-registered (UK) and do you need to collect tax elsewhere? Are £18/£49 inclusive or exclusive of VAT? | R-60, R-63 |
+| D-6 | ~~VAT~~ Answered 2026-11-25: not a blocker; built and switched off (`PRICE_TAX_MODE`, `STRIPE_AUTOMATIC_TAX`). | — |
 | D-7 | May an editor take a JD or headcount plan out of "approved"? Does an editor's content edit of an approved item send it back to review? | R-68 |
 | D-8 | Which HR system first (e.g. HiBob, BambooHR, Personio, Rippling)? Which plan gets it? | R-78 |
 | D-9 | Is it acceptable that auto-layout and PDF export can be bypassed by a determined Free user? | R-76 |

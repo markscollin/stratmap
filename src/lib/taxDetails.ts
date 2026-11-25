@@ -1,10 +1,7 @@
-// How prices are shown with respect to VAT (R-60, owner decision D-6). Like the legal facts in legalDetails.ts, this belongs to
-// whichever company ends up selling StratMap: VAT registration, and so whether prices include VAT, is decided per legal entity.
-//
-// FILL THIS IN once the company is registered (or decided not to register):
+// How prices are shown with respect to VAT (R-60, D-6: not a launch blocker; tax is off until this and STRIPE_AUTOMATIC_TAX are set).
 //   'inclusive' : the £ prices on the pricing page include VAT (Stripe prices with tax behaviour "inclusive");
 //   'exclusive' : VAT is added on top at checkout (Stripe prices with tax behaviour "exclusive", Stripe Tax on, STRIPE_AUTOMATIC_TAX=1);
-//   null        : not decided; the pricing page says nothing about VAT.
+//   null        : the pricing page says nothing about VAT.
 // Change the Stripe prices' tax behaviour to match in the same release (docs/BILLING.md, "Stripe dashboard setup" step 4).
 export type PriceTaxMode = 'inclusive' | 'exclusive' | null
 
