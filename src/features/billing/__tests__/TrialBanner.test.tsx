@@ -61,3 +61,32 @@ describe('TrialBanner', () => {
     expect(screen.queryByTestId('trial-banner')).toBeNull()
   })
 })
+
+// R-66: the banner can be put away for the day, and on a chart's canvas it is one short line.
+describe('TrialBanner (R-66)', () => {
+  beforeEach(() => { localStorage.clear(); useBillingStore.setState({ trial: { plan: 'growth', endsAt: inDays(9) } }) })
+
+  it('"Hide until tomorrow" hides it, and it stays hidden today on every page', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const { unmount } = mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the trial notice until tomorrow' }))
+    expect(screen.queryByTestId('trial-banner')).toBeNull()
+    unmount()
+    mount()
+    expect(screen.queryByTestId('trial-banner')).toBeNull()
+  })
+
+  it('comes back on another day', () => {
+    localStorage.setItem('stratmap_trial_banner_dismissed', '2000-01-01')
+    mount()
+    expect(screen.getByTestId('trial-banner')).toBeInTheDocument()
+  })
+
+  it('is one short line on a chart\'s canvas, the full explanation elsewhere', () => {
+    render(<MemoryRouter initialEntries={['/charts/c1']}><TrialBanner /></MemoryRouter>)
+    const b = screen.getByTestId('trial-banner')
+    expect(b).toHaveAttribute('data-compact', 'true')
+    expect(b).toHaveTextContent('Your free Growth trial has 9 days left.')
+    expect(b).not.toHaveTextContent('Nothing is deleted')
+  })
+})

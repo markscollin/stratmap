@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { greetingName } from '../lib/greetingName'
 import { useNavigate } from 'react-router-dom'
 import { Plus, X, Zap } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
@@ -120,7 +121,7 @@ export function OnboardingPage() {
         }
       }
 
-      const firstName = user?.name.split(' ')[0] ?? 'there'
+      const firstName = greetingName(user?.name)
       if (quickStart) {
         const { nodes, edges, departments } = buildChartTemplate('quickstart')
         const chart = await createChart('Current Structure', nodes, edges, departments)

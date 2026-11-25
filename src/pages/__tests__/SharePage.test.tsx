@@ -65,7 +65,7 @@ describe('SharePage on a phone (roadmap 2.8)', () => {
     const footer = await screen.findByTestId('share-footer')
     expect(footer.style.position).not.toBe('absolute')
     expect(screen.getByText('Q3 Plan')).toBeTruthy()
-    expect(screen.getByText('View only')).toBeTruthy()
+    expect(screen.queryByText('View only')).toBeNull() // said once, by the chart's toolbar (mocked here), not twice (R-66)
     expect(screen.getByTestId('canvas')).toBeTruthy()
     // header, canvas, footer in that order
     const root = footer.parentElement!

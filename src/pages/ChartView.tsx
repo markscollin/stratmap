@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus, Search, X, MoreHorizontal, UserCircle, Calendar, Users, Building2,
   Clock, ExternalLink, Copy, GitBranch, Trash2, Globe,
@@ -376,7 +376,7 @@ export function ChartView() {
     searchParams.get('import') === '1' ? 'import' : searchParams.get('new') === '1' ? 'new' : null)
   const navigate = useNavigate()
   const { canEdit, canAdmin } = usePermission()
-  const { isAtChartLimit, currentTier } = usePlanLimits()
+  const { isAtChartLimit, currentTier, hasFeature } = usePlanLimits()
   const [search, setSearch]         = useState('')
   const [statusFilter, setFilter]   = useState<ChartStatus | 'all'>('all')
   const wantsDialog = deepLink !== null && canEdit
@@ -475,7 +475,14 @@ export function ChartView() {
         </div>
       </div>
 
-      <ApprovalCycleBar statusFilter={statusFilter} counts={statusCounts} onFilter={setFilter} />
+      {/* The approval cycle is a Starter feature: without it, one line instead of seven states nobody can use (R-66). */}
+      {hasFeature('approval-workflow') ? (
+        <ApprovalCycleBar statusFilter={statusFilter} counts={statusCounts} onFilter={setFilter} />
+      ) : (
+        <p data-testid="approvals-teaser" style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 18px' }}>
+          Approvals (draft → review → approved → live) come with Starter and up. <Link to="/pricing" style={{ color: 'var(--brand)' }}>See plans</Link>
+        </p>
+      )}
 
       {/* Search bar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, alignItems: 'center' }}>

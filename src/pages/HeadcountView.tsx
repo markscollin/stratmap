@@ -595,7 +595,7 @@ function ChartFilter({ value, onChange }: { value: Set<string>; onChange: (v: Se
         borderRadius: 8, cursor: 'pointer', fontSize: 12,
         color: count > 0 ? 'var(--brand)' : 'var(--text)',
       }}>
-        Charts {count > 0 ? `(${count})` : 'All'}
+        {count > 0 ? `Charts (${count})` : 'All charts'}
         <ChevronDown size={12} />
       </button>
       {open && (

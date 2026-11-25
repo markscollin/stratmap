@@ -268,7 +268,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   `0` as placeholder (use "Min"/"Max"); the currency defaults to USD while the product prices in GBP (default to the workspace's last-used, else GBP).
 
 ### R-66 Free users see the approval jargon; trial banner on the canvas
-- [ ] (reported) The empty Charts page shows an "Approval cycle" strip (`src/pages/ChartView.tsx:32-52`) with seven states Free users cannot use: show it
+- [x] **Done 2026-11-25.** Each point reproduced in the code. The Charts page shows the approval strip only with `approval-workflow`,
+  else one line "Approvals (draft → review → approved → live) come with Starter and up." with a link to plans. `TrialBanner` has "Hide until
+  tomorrow" (stored per day in `stratmap_trial_banner_dismissed`) and is one short line on a chart's canvas. The headcount filter reads
+  "All charts" / "Charts (n)". The share page says "View only" once (the toolbar's). The welcome toast: the Clerk path never used the user
+  id, but fell back to the email address when there was no name; `greetingName` (`src/lib/greetingName.ts`) now says "there" for an email or
+  an id. Tests: `ChartView.test.tsx`, `TrialBanner.test.tsx`, `HeadcountView.test.tsx`, `SharePage.test.tsx`, `greetingName.test.ts`.
+- (reported) The empty Charts page shows an "Approval cycle" strip (`src/pages/ChartView.tsx:32-52`) with seven states Free users cannot use: show it
   only when the workspace has `approval-workflow`, or collapse it into a one-line "Approvals: Starter and up". The trial banner (~60 px) shows on every page
   including the canvas and cannot be dismissed: let it be dismissed per day, and on the canvas show a compact version. Also: the headcount filter label reads
   "Charts All"; the public share page says "View only" twice; check the welcome toast uses the person's name with real Clerk, not the user id.

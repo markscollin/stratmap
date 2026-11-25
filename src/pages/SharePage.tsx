@@ -76,12 +76,7 @@ export function SharePage() {
       }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{data.name}</span>
       </div>
-      <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8, padding: '5px 10px', boxShadow: 'var(--shadow-sm)', flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500 }}>View only</span>
-      </div>
+      {/* No "View only" pill here: the chart's toolbar already says it (R-66). */}
     </>
   )
 

@@ -192,3 +192,20 @@ describe('ChartView — a failed load', () => {
     expect(fetchCharts).toHaveBeenCalledTimes(1)
   })
 })
+
+// R-66: Free workspaces do not get a seven-state approval strip they cannot use.
+describe('ChartView — approval cycle strip (R-66)', () => {
+  it('Free: one line saying approvals come with Starter, no strip', () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.free })
+    renderView('editor')
+    expect(screen.getByTestId('approvals-teaser')).toHaveTextContent('Approvals (draft → review → approved → live) come with Starter and up.')
+    expect(screen.queryByText('Approval cycle')).toBeNull()
+  })
+
+  it('Starter and up: the strip, to filter by status', () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.starter })
+    renderView('editor')
+    expect(screen.getByText('Approval cycle')).toBeInTheDocument()
+    expect(screen.queryByTestId('approvals-teaser')).toBeNull()
+  })
+})

@@ -99,3 +99,13 @@ describe('HeadcountView CSV export (roadmap 2.2)', () => {
     expect(useToastStore.getState().toasts.at(-1)?.message).toMatch(/no plans for/)
   })
 })
+
+// R-66: the chart filter said "Charts All".
+describe('HeadcountView chart filter label (R-66)', () => {
+  it('reads "All charts" with nothing picked', async () => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.growth })
+    renderView()
+    expect(await screen.findByRole('button', { name: /^All charts/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Charts\s*All/)).toBeNull()
+  })
+})
