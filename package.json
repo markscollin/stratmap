@@ -23,7 +23,8 @@
     "test:e2e:local": "node scripts/e2e-local.mjs",
     "test:e2e:remote": "playwright test",
     "check:env": "node scripts/check-env.mjs",
-    "check:webhook": "node scripts/check-webhook.mjs"
+    "check:webhook": "node scripts/check-webhook.mjs",
+    "make:landing-images": "MAKE_LANDING_IMAGES=1 node scripts/e2e-local.mjs tests/e2e/landing-images.spec.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

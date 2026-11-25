@@ -206,7 +206,15 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 ## Phase 3: conversion and first-run UX (before launch)
 
 ### R-62 Landing page has no product visual (absorbs R-41)
-- [ ] **Problem (verified).** `src/pages/LandingPage.tsx` is 89 lines: headline, two buttons, three text cards, footer. No screenshot, no demo,
+- [x] **Done 2026-11-25.** Owner picked: the Scale-up template with made-up names, as a picture. `npm run make:landing-images`
+  (`tests/e2e/landing-images.spec.ts`, skipped in normal runs) builds that chart in the real app, shares it and screenshots the read-only
+  `/embed` view, controls hidden and cropped, into `public/landing/chart-{dark,light}.png` (~100 kB each); the page shows the one for the
+  current theme (`.theme-dark-only` / `.theme-light-only` in `globals.css`), captioned "Example chart. The names are made up."; on a phone it
+  keeps a readable width and scrolls sideways, starting at the middle. Added "How it works" (import → arrange → share and plan), a pricing
+  teaser and five FAQ entries (free plan, trial end, getting data out, who sees salaries, where data is kept: no region claimed). Prices now
+  live in `PLAN_PRICES` (`plans.ts`) and every number on the page comes from there or `PLAN_LIMITS`. "Not a slide that goes stale" and
+  "living document" are gone until R-77. Landing chunk 3.6 kB gzip. Tests: `LandingPage.test.tsx`.
+- **Problem (verified).** `src/pages/LandingPage.tsx` is 89 lines: headline, two buttons, three text cards, footer. No screenshot, no demo,
   no pricing teaser, no FAQ. For a canvas product this is the biggest conversion leak. Also: "One living chart, not a slide that goes stale" is a
   promise the product does not keep without R-77/R-78; soften it until then.
 - **Fix.** A real chart image in the hero (light and dark, made from a template chart via the existing export, or a live read-only embed of a

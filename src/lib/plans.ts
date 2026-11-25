@@ -31,6 +31,12 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   enterprise: { seats: -1, maxCharts: -1, maxNodesPerChart: -1,  aiDraftsPerMonth: 1000 },
 }
 
+/** List prices in pounds (the Stripe prices must match: docs/OWNER_CHECKLIST.md, O-04). One place for every page that shows a price. */
+export const PLAN_PRICES = {
+  starter: { monthly: 18, annual: 180 },
+  growth: { monthly: 49, annual: 490 },
+} as const
+
 /**
  * Free workspaces carry a "Made with StratMap" mark on PNG exports and on public share pages
  * (roadmap 2.6). Every paid tier is without it. PDF is already paid-only and CSV is data, so

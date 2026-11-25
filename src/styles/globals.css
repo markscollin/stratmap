@@ -108,3 +108,8 @@ input, select { outline: none; }
 @keyframes slideDown   { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
 @keyframes livePulse   { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.6)} }
 @keyframes barGrow     { from{width:0} to{width:var(--w)} }
+
+/* Pictures that exist in a dark and a light version (the landing page's example chart, R-62): show the one for the current theme. */
+.theme-light-only { display: none; }
+:root[data-theme='light'] .theme-light-only { display: block; }
+:root[data-theme='light'] .theme-dark-only { display: none; }
