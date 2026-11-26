@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { headcountPlanLocked, APPROVED_PLAN_MESSAGE } from '../lib/approvals'
 import { lastSalaryCurrency, rememberSalaryCurrency } from '../lib/salaryCurrency'
 import { Plus, X, ChevronLeft, ChevronRight, ChevronDown, Settings, Check, Trash2, Pencil, Download } from 'lucide-react'
 import { useHeadcountStore, type HeadcountPlan, type HeadcountStatus } from '../store/headcountStore'
@@ -336,7 +337,8 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly
         {/* Title row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', flex: 1, lineHeight: 1.35 }}>{plan.title}</span>
-          {!readOnly && <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: hov ? 1 : 0, transition: 'opacity .12s' }}>
+          {/* D-7 (R-68): an approved hire is read-only for editors apart from its status */}
+          {!readOnly && !headcountPlanLocked(plan.status, canApprove) && <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: hov ? 1 : 0, transition: 'opacity .12s' }}>
             <button onClick={onEdit} title="Edit" style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--muted)', borderRadius: 4, display: 'flex' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--nav-hover)'; e.currentTarget.style.color = 'var(--text)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)' }}
@@ -390,6 +392,13 @@ function PlanCard({ plan, onEdit, onDelete, onStatusChange, canApprove, readOnly
               background: 'transparent', border: '1px solid var(--brand)',
               color: 'var(--brand)', cursor: 'pointer',
             }}>Mark filled</button>
+          )}
+          {!readOnly && plan.status === 'approved' && (
+            <button onClick={() => onStatusChange('planned')} title={headcountPlanLocked(plan.status, canApprove) ? APPROVED_PLAN_MESSAGE : undefined} style={{
+              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+              background: 'transparent', border: '1px solid var(--border)',
+              color: 'var(--muted)', cursor: 'pointer',
+            }}>Back to planned</button>
           )}
         </div>
       </div>

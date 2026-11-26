@@ -13,7 +13,7 @@ vi.mock('../_lib/auth', () => ({
 import { requireAuth } from '../_lib/auth'
 import handler from '../charts/[id]/jd/[nodeId]'
 import {
-  setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, testDb,
+  setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, seedMember, testDb,
   TEST_USER_ID, TEST_WS_ID, TEST_CHART_ID, TEST_NODE_ID, TEST_JD_ID,
 } from './helpers/db'
 import { createReq } from './helpers/req'
@@ -194,5 +194,37 @@ describe('salary band rules (R-12)', () => {
     await put({ salaryBandMin: 50000, salaryBandMax: 80000 })
     expect((await put({ salaryBandMin: null }))._status).toBe(200)
     expect(await stored()).toMatchObject({ salaryBandMin: null, salaryBandMax: 80000 })
+  })
+})
+
+// D-7 (R-68): editors may un-approve; an editor's edit of an approved JD's text sends it back to review; an admin's does not.
+describe('approved job descriptions (R-68)', () => {
+  const put = async (userId: string, body: Record<string, unknown>) => {
+    vi.mocked(requireAuth).mockResolvedValue({ userId, workspaceId: TEST_WS_ID })
+    const res = createRes()
+    await handler(createReq({ method: 'PUT', query: { id: TEST_CHART_ID, nodeId: TEST_NODE_ID }, body }) as never, res as never)
+    return res
+  }
+  const status = async () => (await testDb.select({ s: schema.jobDescriptions.status }).from(schema.jobDescriptions))[0].s
+  beforeEach(async () => {
+    await seedMember('u-ed', 'editor')
+    await testDb.insert(schema.jobDescriptions).values({ id: 'jd-a', nodeId: TEST_NODE_ID, chartId: TEST_CHART_ID, status: 'approved', responsibilities: '<p>Old</p>', requirements: '', version: 1, updatedBy: TEST_USER_ID })
+  })
+
+  it('an editor changing the text sends it back to review', async () => {
+    const res = await put('u-ed', { responsibilities: '<p>New</p>' })
+    expect(res._status).toBe(200)
+    expect(res._body).toMatchObject({ status: 'in-review', responsibilities: '<p>New</p>' })
+    expect(await status()).toBe('in-review')
+  })
+
+  it('an editor may take it out of approved on purpose', async () => {
+    expect((await put('u-ed', { status: 'draft' }))._status).toBe(200)
+    expect(await status()).toBe('draft')
+  })
+
+  it('an admin (or owner) editing the text keeps it approved', async () => {
+    expect((await put(TEST_USER_ID, { responsibilities: '<p>Owner tweak</p>' }))._status).toBe(200)
+    expect(await status()).toBe('approved')
   })
 })

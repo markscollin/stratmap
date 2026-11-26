@@ -330,3 +330,37 @@ describe('DELETE /api/headcount/[id]', () => {
     expect(res._status).toBe(405)
   })
 })
+
+// D-7 (R-68): an approved hire is read-only for editors apart from its status; admins can do anything.
+describe('approved hire plans (R-68)', () => {
+  const call = async (userId: string, method: 'PUT' | 'DELETE', body?: Record<string, unknown>) => {
+    vi.mocked(requireAuth).mockResolvedValue({ userId, workspaceId: TEST_WS_ID })
+    const res = createRes()
+    await itemHandler(createReq({ method, query: { id: TEST_PLAN_ID }, body }) as never, res as never)
+    return res
+  }
+  beforeEach(async () => {
+    const { seedMember } = await import('./helpers/db')
+    await seedGrowthWorkspace(); await seedChart(); await seedWorkspaceDept(); await seedHeadcountPlan()
+    await seedMember('u-ed', 'editor')
+    await testDb.update(schema.headcountPlans).set({ status: 'approved' }).where(eq(schema.headcountPlans.id, TEST_PLAN_ID))
+  })
+
+  it('an editor cannot change or delete it', async () => {
+    const edit = await call('u-ed', 'PUT', { title: 'Sneaky rename' })
+    expect(edit._status).toBe(403)
+    expect(edit._body).toMatchObject({ error: 'approved-locked' })
+    expect((await call('u-ed', 'DELETE'))._status).toBe(403)
+    expect(await testDb.select().from(schema.headcountPlans)).toHaveLength(1)
+  })
+
+  it('an editor may move it back to planned, and then edit it', async () => {
+    expect((await call('u-ed', 'PUT', { status: 'planned' }))._status).toBe(200)
+    expect((await call('u-ed', 'PUT', { title: 'Renamed' }))._status).toBe(200)
+  })
+
+  it('an admin or owner can edit and delete it while approved', async () => {
+    expect((await call(TEST_USER_ID, 'PUT', { title: 'Owner rename' }))._status).toBe(200)
+    expect((await call(TEST_USER_ID, 'DELETE'))._status).toBe(204)
+  })
+})

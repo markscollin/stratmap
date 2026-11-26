@@ -3,6 +3,8 @@ import type { JobDescription } from '../types/jd'
 import type { RoleStatus } from '../types/chart'
 import { api } from '../lib/apiClient'
 import { saveChange } from '../features/canvas/canvasSync'
+import { jdEditSendsBackToReview } from '../lib/approvals'
+import { useUserStore } from './userStore'
 
 function makeDefault(nodeId: string): JobDescription {
   return {
@@ -84,6 +86,10 @@ export const useJobDescriptionStore = create<JDStore>((set, get) => ({
     const existing = get().jobDescriptions[nodeId] ?? makeDefault(nodeId)
     const { salaryBandMin, salaryBandMax, ...rest } = updates
     const updated: JobDescription = { ...existing, ...rest, updatedAt: new Date().toISOString() }
+    // D-7 (R-68): an editor's change to an approved JD's text sends it back to review. The server does the same; this shows it at once.
+    const permission = useUserStore.getState().permission
+    const textEdit = rest.responsibilities !== undefined || rest.requirements !== undefined || rest.level !== undefined
+    if (textEdit && jdEditSendsBackToReview(existing.status, permission === 'owner' || permission === 'admin')) updated.status = 'in-review'
     if (salaryBandMin !== undefined) updated.salaryBandMin = salaryBandMin ?? undefined
     if (salaryBandMax !== undefined) updated.salaryBandMax = salaryBandMax ?? undefined
     set(s => ({ jobDescriptions: { ...s.jobDescriptions, [nodeId]: updated } }))

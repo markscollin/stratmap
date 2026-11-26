@@ -216,3 +216,20 @@ describe('JDPanel shows only real data (R-65)', () => {
     }
   })
 })
+
+// D-7 (R-68): an editor is warned before editing an approved job description; an admin is not.
+describe('approved job description notice (R-68)', () => {
+  const approvedJD = { ...draftJD, status: 'approved' as const }
+  it('an editor sees that changing it sends it back to review', () => {
+    useJobDescriptionStore.setState({ jobDescriptions: { n1: approvedJD } })
+    renderPanel('editor')
+    fireEvent.click(screen.getByRole('button', { name: 'Responsibilities' }))
+    expect(screen.getByTestId('approved-jd-notice')).toHaveTextContent('goes back to review')
+  })
+  it('an admin sees no notice', () => {
+    useJobDescriptionStore.setState({ jobDescriptions: { n1: approvedJD } })
+    renderPanel('admin')
+    fireEvent.click(screen.getByRole('button', { name: 'Responsibilities' }))
+    expect(screen.queryByTestId('approved-jd-notice')).toBeNull()
+  })
+})

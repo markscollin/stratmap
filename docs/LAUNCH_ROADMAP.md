@@ -295,7 +295,12 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   JDs for 30 days after a restore. **Done when** restore A → restore "Before restoring A" gives back comments and JDs (test).
 
 ### R-68 Editors can un-approve or rewrite approved JDs and headcount plans
-- [ ] (verified for JDs) `api/charts/[id]/jd/[nodeId].ts:24,95` checks only the status being moved **to**: an editor can move an approved/published/hired JD back
+- [x] **Done 2026-11-26 (D-7 answered).** One pure rule, `src/lib/approvals.ts`, used by API and UI: editors **may** take a JD or hire out of
+  approved (now a visible "Back to planned" on approved hires); an editor's change to an approved/published/hired JD's text sends it back to
+  `in-review` (server in `jd/[nodeId].ts`, the store does the same on screen, and the panel warns before typing); an editor cannot edit or
+  delete an approved hire (403 `approved-locked`; Edit/Delete hidden on the card), admins and owners can. Tests: `approvals.test.ts`,
+  `jd.test.ts`, `headcount.test.ts`, `jobDescriptionApproval.test.ts`, `JDPanel.test.tsx`, `HeadcountView.test.tsx`.
+- (verified for JDs) `api/charts/[id]/jd/[nodeId].ts:24,95` checks only the status being moved **to**: an editor can move an approved/published/hired JD back
   to draft, or rewrite its text while it stays approved. `api/headcount/[id].ts:~40`: only `→ approved` is restricted; editors can move approved plans back, edit
   them, or delete them. Approvals are a paid feature; as built they are advisory. **Needs D-7.** Suggested: leaving an approved state needs admin, and an editor's
   content edit of an approved item sets it back to `in-review` (with a notice in the UI). Mirror the R-08 pattern (one pure rule shared by UI and API, tested together).

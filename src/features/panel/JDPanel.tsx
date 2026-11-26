@@ -1,4 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
+import { jdEditSendsBackToReview, APPROVED_JD_NOTICE } from '../../lib/approvals'
 import { ROLE_PANEL_WIDTH } from './panelSize'
 import { X, Briefcase, MapPin, Clock, FileText, Search } from 'lucide-react'
 import type { OrgNode } from '../../types'
@@ -271,6 +272,13 @@ export function JDPanel({ node, allNodes = [], onClose, onEditNode, onAddReport,
                     onApply={handleApplyTemplate}
                     onClose={() => setShowTemplatePick(false)}
                   />
+                )}
+
+                {/* D-7 (R-68): an editor is told before they type that changing an approved JD sends it back to review */}
+                {canEdit && jdEditSendsBackToReview(jd.status, canAdmin) && (
+                  <p data-testid="approved-jd-notice" role="note" style={{ fontSize: 12, color: 'var(--warn)', background: 'var(--warn-bg)', borderRadius: 8, padding: '8px 10px', margin: '0 0 10px' }}>
+                    {APPROVED_JD_NOTICE}
+                  </p>
                 )}
 
                 {/* Editor */}

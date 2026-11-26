@@ -8,6 +8,7 @@ import { logAudit } from '../_lib/audit'
 import { checkHeadcountReferences } from '../_lib/references'
 import { db } from '../_lib/db'
 import { headcountPlans } from '../../src/lib/db/schema'
+import { headcountPlanLocked, APPROVED_PLAN_MESSAGE } from '../../src/lib/approvals'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -26,10 +27,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Reading plans stays open (GET /api/headcount) so a downgraded workspace keeps its data.
     if (!(await requireFeature(auth.workspaceId, res, 'headcount-planning'))) return
 
+    // D-7 (R-68): an approved hire is read-only for editors apart from its status (they may move it back to Planned on purpose).
+    const [current] = await db.select({ status: headcountPlans.status }).from(headcountPlans)
+      .where(and(eq(headcountPlans.id, id), eq(headcountPlans.workspaceId, auth.workspaceId))).limit(1)
+    if (!current) return req.method === 'DELETE' ? res.status(204).end() : res.status(404).json({ error: 'Not found' }) // a delete is idempotent
+    const locked = headcountPlanLocked(current.status, atLeast(permission, 'admin'))
+    if (locked && req.method === 'DELETE') {
+      return res.status(403).json({ error: 'approved-locked', required: 'admin', message: APPROVED_PLAN_MESSAGE })
+    }
+
     if (req.method === 'PUT') {
       const body = parseBody(HeadcountUpdate, req, res)
       if (!body) return
       const { title, departmentId, roleType, targetQuarter, chartId, status, notes, salaryMin, salaryMax, salaryCurrency } = body
+      if (locked && Object.entries(body).some(([k, v]) => k !== 'status' && v !== undefined)) {
+        return res.status(403).json({ error: 'approved-locked', required: 'admin', message: APPROVED_PLAN_MESSAGE })
+      }
       const touchesSalary = HEADCOUNT_SALARY_FIELDS.some(f => body[f] !== undefined)
       // Salary ranges are owner/admin only (same rule as job-description salary bands).
       if (touchesSalary && !atLeast(permission, 'admin')) {

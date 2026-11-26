@@ -109,3 +109,28 @@ describe('HeadcountView chart filter label (R-66)', () => {
     expect(screen.queryByText(/Charts\s*All/)).toBeNull()
   })
 })
+
+// D-7 (R-68): an approved hire is read-only for editors apart from its status.
+describe('approved hires (R-68)', () => {
+  beforeEach(() => {
+    useBillingStore.setState({ plan: PLAN_BY_TIER.growth })
+    vi.mocked(api.get).mockImplementation((path: string) => Promise.resolve(path === '/api/headcount' ? [{ ...PLAN, status: 'approved' }] : []) as never)
+  })
+
+  it('an editor gets no Edit or Delete on it, but can move it back to planned', async () => {
+    useUserStore.setState({ permission: 'editor' })
+    renderView()
+    expect(await screen.findByText('Platform Engineer')).toBeInTheDocument()
+    expect(screen.queryByTitle('Edit')).toBeNull()
+    expect(screen.queryByTitle('Delete')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Back to planned' })).toBeInTheDocument()
+  })
+
+  it('an admin keeps Edit and Delete', async () => {
+    useUserStore.setState({ permission: 'admin' })
+    renderView()
+    expect(await screen.findByText('Platform Engineer')).toBeInTheDocument()
+    expect(screen.getByTitle('Edit')).toBeInTheDocument()
+    expect(screen.getByTitle('Delete')).toBeInTheDocument()
+  })
+})

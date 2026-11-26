@@ -7,6 +7,7 @@ import { JDUpdate, SALARY_FIELDS } from '../../../_lib/schemas'
 import { db } from '../../../_lib/db'
 import { logAudit } from '../../../_lib/audit'
 import { charts, jobDescriptions, nodes } from '../../../../src/lib/db/schema'
+import { jdEditSendsBackToReview } from '../../../../src/lib/approvals'
 
 // Salary bands are confidential: only admins/owners may read or write them.
 function canSeeSalary(permission: Permission | null): boolean {
@@ -98,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const [existing] = await db
         .select({
-          id: jobDescriptions.id, version: jobDescriptions.version,
+          id: jobDescriptions.id, version: jobDescriptions.version, status: jobDescriptions.status,
           salaryBandMin: jobDescriptions.salaryBandMin, salaryBandMax: jobDescriptions.salaryBandMax, salaryCurrency: jobDescriptions.salaryCurrency,
         })
         .from(jobDescriptions)
@@ -115,9 +116,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing) {
         // Only bump version when explicitly requested (e.g. client passes higher version on draft revert)
         const version = body.version !== undefined ? body.version : existing.version
+        // D-7 (R-68): an editor who changes the text of an approved job description sends it back to review, so an approval never
+        // stands for words nobody approved. Editors may still move it out of approved on purpose (a status change, above).
+        const textEdit = body.responsibilities !== undefined || body.requirements !== undefined || body.level !== undefined
+        const backToReview = textEdit && body.status === undefined && jdEditSendsBackToReview(existing.status, atLeast(permission, 'admin'))
         const [updated] = await db
           .update(jobDescriptions)
-          .set({ ...body, version, updatedAt: new Date(), updatedBy: auth.userId })
+          .set({ ...body, ...(backToReview ? { status: 'in-review' as const } : {}), version, updatedAt: new Date(), updatedBy: auth.userId })
           .where(eq(jobDescriptions.id, existing.id))
           .returning()
         await logSalaryChange(auth, chartId, nodeId, SALARY_FIELDS.filter(f => body[f] !== undefined && body[f] !== (existing[f] ?? null)))
