@@ -95,6 +95,7 @@ export const pendingInvites = pgTable('pending_invites', {
   index('pending_invites_workspace_id_email_idx').on(t.workspaceId, t.email),
   uniqueIndex('pending_invites_token_hash_idx').on(t.tokenHash),
   index('pending_invites_email_idx').on(t.email),
+  index('pending_invites_invited_by_idx').on(t.invitedBy), // R-73: invites a person sent are removed when they leave or are deleted
 ])
 
 // ─── Workspace Departments ────────────────────────────────────────────────────
@@ -129,7 +130,10 @@ export const departments = pgTable('departments', {
   name: text('name').notNull(),
   colour: text('colour').notNull(),
   workspaceDepartmentId: text('workspace_department_id').references(() => workspaceDepartments.id, { onDelete: 'set null' }),
-}, (t) => [index('departments_chart_id_idx').on(t.chartId)])
+}, (t) => [
+  index('departments_chart_id_idx').on(t.chartId),
+  index('departments_workspace_department_id_idx').on(t.workspaceDepartmentId), // R-73: behind the FK when a workspace department is deleted
+])
 
 // ─── Nodes & Edges ───────────────────────────────────────────────────────────
 
@@ -197,7 +201,11 @@ export const headcountPlans = pgTable('headcount_plans', {
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [index('headcount_plans_workspace_id_idx').on(t.workspaceId)])
+}, (t) => [
+  index('headcount_plans_workspace_id_idx').on(t.workspaceId),
+  index('headcount_plans_chart_id_idx').on(t.chartId),             // R-73: behind the FK when a chart is deleted
+  index('headcount_plans_department_id_idx').on(t.departmentId),   // R-73: behind the FK when a department is deleted
+])
 
 // ─── Role Templates ──────────────────────────────────────────────────────────
 
@@ -318,6 +326,8 @@ export const roleComments = pgTable('role_comments', {
 }, (t) => [
   index('role_comments_chart_node_idx').on(t.chartId, t.nodeId),
   index('role_comments_workspace_idx').on(t.workspaceId),
+  index('role_comments_node_idx').on(t.nodeId),     // R-73: deleting a role cascades on node_id alone
+  index('role_comments_parent_idx').on(t.parentId), // R-73: deleting a comment cascades to its replies
 ])
 
 // Per-person email settings (not per workspace: it is about the person's inbox). A missing row means the defaults.
@@ -363,7 +373,10 @@ export const chartSnapshots = pgTable('chart_snapshots', {
   nodeCount: integer('node_count').notNull().default(0),
   edgeCount: integer('edge_count').notNull().default(0),
   data: jsonb('data').$type<SnapshotData>().notNull(),
-}, (t) => [index('chart_snapshots_chart_idx').on(t.chartId, t.createdAt)])
+}, (t) => [
+  index('chart_snapshots_chart_idx').on(t.chartId, t.createdAt),
+  index('chart_snapshots_workspace_idx').on(t.workspaceId), // R-73: behind the FK when a workspace is erased
+])
 
 // ─── Deleted roles (launch review R-02, owner decision D-1) ──────────────────
 // Deleting a role really removes it, but first keeps a copy here (the role, its comments and its reporting lines)

@@ -70,3 +70,11 @@ branch copy) to see which migrations it would adopt. Tests: `api/__tests__/migra
 `npm run test:live` runs the Phase 0 security checks through the real API handlers
 against `DATABASE_URL`. Use a Neon **dev branch**, never production. Every row is created
 in a throwaway workspace and deleted at the end.
+
+## Indexes on big tables (R-73)
+
+Every foreign key needs an index on its column (`api/__tests__/fk-indexes.test.ts` checks it). Today the tables are small, so a plain
+`CREATE INDEX` in a migration is fine. `scripts/migrate.mjs` runs each migration inside a transaction, which means `CREATE INDEX
+CONCURRENTLY` (the version that does not block writes) cannot be used. Before any table holds millions of rows, add a "no-transaction"
+marker to the runner (for example a first line `-- migrate:no-transaction`) and use it for index migrations on that table.
+

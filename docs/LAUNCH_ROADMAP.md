@@ -360,7 +360,12 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   invitee's address to Sentry when an invite email fails; send the invite id instead. Add both to `audit.test.ts` / a Sentry PII test.
 
 ### R-73 Missing indexes behind cascades
-- [ ] (verified for the first) `role_comments` is indexed on `(chart_id, node_id)` and `workspace_id` only (`schema.ts:317-318`): deleting a role cascades on `node_id` and
+- [x] **Done 2026-11-26.** Migration 0018 adds the six listed indexes plus `headcount_plans.department_id`, found the same way
+  (`role_comments.node_id`, `role_comments.parent_id`, `departments.workspace_department_id`, `headcount_plans.chart_id`,
+  `headcount_plans.department_id`, `pending_invites.invited_by`, `chart_snapshots.workspace_id`). `api/__tests__/fk-indexes.test.ts` now fails
+  if any single-column foreign key is not the leading column of an index. Plain `CREATE INDEX` is fine while tables are small; the
+  "no-transaction" note is in `docs/MIGRATIONS.md`.
+- (verified for the first) `role_comments` is indexed on `(chart_id, node_id)` and `workspace_id` only (`schema.ts:317-318`): deleting a role cascades on `node_id` and
   scans the table. Also reported unindexed: `role_comments.parent_id`, `departments.workspace_department_id`, `headcount_plans.chart_id`, `pending_invites.invited_by`,
   `chart_snapshots.workspace_id`. Add them (small tables today, so a normal migration is fine). Note for later: `scripts/migrate.mjs` runs each migration in a transaction, so
   `CREATE INDEX CONCURRENTLY` is impossible; add a "no-transaction" marker before any table is big.

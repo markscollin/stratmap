@@ -529,6 +529,7 @@ Growth feature (`'version-history'` in `PAID_FEATURES`). Tests: `api/__tests__/s
 Schema changes are versioned SQL in `drizzle/`, and production deploys apply them automatically
 (`vercel.json` buildCommand → `npm run vercel-build` → build, then `scripts/migrate.mjs --deploy`).
 Workflow: edit `src/lib/db/schema.ts` → `npm run db:generate` → review and commit the SQL.
+**Every foreign-key column needs an index** (R-73; `fk-indexes.test.ts` fails otherwise).
 **Never `drizzle-kit push` against production.**
 
 **CI (roadmap 3.1):** `.github/workflows/ci.yml` runs `typecheck` (app + `api/` via `tsconfig.api.json`),
