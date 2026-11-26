@@ -216,7 +216,7 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   "living document" are gone until R-77. Landing chunk 3.6 kB gzip. Tests: `LandingPage.test.tsx`.
 - **Problem (verified).** `src/pages/LandingPage.tsx` is 89 lines: headline, two buttons, three text cards, footer. No screenshot, no demo,
   no pricing teaser, no FAQ. For a canvas product this is the biggest conversion leak. Also: "One living chart, not a slide that goes stale" is a
-  promise the product does not keep without R-77/R-78; soften it until then.
+  promise the product does not keep without R-77/R-78; soften it until then. (R-77 shipped 2026-11-26: the landing page now says a newer export can be uploaded and reviewed.)
 - **Fix.** A real chart image in the hero (light and dark, made from a template chart via the existing export, or a live read-only embed of a
   public sample chart through `/embed/:code`), a "how it works" strip (import → arrange → share/plan), a pricing teaser linking to `/pricing`,
   and 4–6 FAQ entries (data location, export/leaving, security, trial). No invented testimonials or logos. Keep the landing bundle budget (R-24).
@@ -404,7 +404,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 ## Phase 5: the product bets (why customers stay or leave)
 
 ### R-77 Keep a chart current: update from a file
-- [ ] The import only adds roles or makes a new chart. Customers' people data lives elsewhere and changes weekly; without a way to re-sync, the chart goes stale, which is the
+- [x] 2026-11-26: "Update this chart from the file" in the import dialog (default for a chart that came from a file). Rows match roles by
+  the file's ID, then email, then a name only one role has (both keys are now stored on the role, `nodes.external_id`/`email`, migration
+  0020, private; the chart CSV export writes them back). The review lists joiners, leavers, moves and field changes; only columns in the
+  file change; open/planned roles made in StratMap are kept; leavers can be kept. `POST /api/charts/:id/sync` applies it through the
+  version-restore path (atomic, revision-claimed, removed roles to the 3-day trash, a "Before update from file" version first); positions
+  and photos of existing roles never change. Tests: `updateFromFile.test.ts`, `sync.test.ts`, `ImportDialog.test.tsx`, `update-from-file.spec.ts`.
+  The import only adds roles or makes a new chart. Customers' people data lives elsewhere and changes weekly; without a way to re-sync, the chart goes stale, which is the
   exact problem the landing page says StratMap solves. Build "Update from file": re-upload the same CSV/XLSX (or a new export from the HR system), match rows to roles by the
   ID column (then email), and show a diff (joiners, leavers, moves, title changes) to accept before applying, through the same atomic path as R-59. Positions of unchanged roles stay.
   Reuse `importOrg.ts`'s mapping and rules. This is cheaper than an integration and covers every HR system.
@@ -429,9 +435,9 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 |---|---|---|
 | D-6 | ~~VAT~~ Answered 2026-11-25: not a blocker; built and switched off (`PRICE_TAX_MODE`, `STRIPE_AUTOMATIC_TAX`). | — |
 | D-7 | Answered 2026-11-26: editors **may** take a JD or hire plan out of approved; an editor's content edit of an approved JD sends it back to review; editors cannot edit or delete an approved hire plan (admins can). | R-68 |
-| D-8 | Which HR system first (e.g. HiBob, BambooHR, Personio, Rippling)? Which plan gets it? | R-78 |
+| D-8 | Answered 2026-11-26: **BambooHR** first. Plan not stated; builder's default: Growth and up. | R-78 |
 | D-9 | Answered 2026-11-26: acceptable; write it down. | R-76 |
-| D-10 | What does a 50–500 person company buy: a "Scale" tier (price?) or add-ons? | R-79 |
+| D-10 | Answered 2026-11-26: a self-serve **Scale** tier; the builder proposes the numbers (the owner can change them in `plans.ts`). | R-79 |
 | R-41 | Which chart (or image) should the landing page show? | R-62 |
 
 ---

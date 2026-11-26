@@ -30,6 +30,7 @@ export type AuditAction =
   | 'workspace.ownership_transferred'
   | 'workspace.exported'
   | 'chart.restored'
+  | 'chart.updated_from_file'
   | 'chart.branched'
 
 export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace' | 'headcount'

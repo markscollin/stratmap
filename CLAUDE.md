@@ -75,7 +75,7 @@ content reviewed by a lawyer.
 and what "done" means. Tick items there as they ship. The root `BACKLOG.md` is historical.
 - **Owner actions:** `docs/OWNER_CHECKLIST.md` lists everything that needs the owner's accounts, in priority order. `npm run check:env -- <file>` checks a `vercel env pull` file (names and verdicts only, never values); `npm run check:webhook -- <preview-url> <whsec>` sends a signed test event to a deployed webhook (the R-05 check). Tests: `api/__tests__/owner-scripts.test.ts`.
 - **Known broken until fixed:** nothing from the P0 band. R-04 needs the owner's legal facts and R-05 a deployed-preview check (both below).
-- Real test counts (2026-11-26, after R-75): **1,056 frontend (+2 skipped launch-gate) + 998 API**, **127 e2e (full run 127/127, plus 1 skipped: the landing-image generator, which runs only with `npm run make:landing-images`**; a lone first-test failure at cold start is a known startup flake, rerun it). Note: e2e serves the working tree through Vite, so editing files while it runs can fail a test through a hot reload. Typecheck clean, lint 0 errors (14 warnings), build OK, `npm audit --omit=dev` 0 advisories (22 with dev tooling, see "P3 tail"). Older counts elsewhere in this file are stale; this line is the one to update.
+- Real test counts (2026-11-26, after R-77): **1,075 frontend (+2 skipped launch-gate) + 1,007 API**, **131 e2e (full run 131/131, plus 1 skipped: the landing-image generator, which runs only with `npm run make:landing-images`**; a lone first-test failure at cold start is a known startup flake, rerun it). Note: e2e serves the working tree through Vite, so editing files while it runs can fail a test through a hot reload. Typecheck clean, lint 0 errors (14 warnings), build OK, `npm audit --omit=dev` 0 advisories (22 with dev tooling, see "P3 tail"). Older counts elsewhere in this file are stale; this line is the one to update.
 
 ### Daily maintenance, share fields, references, bundle, CSP, a11y (P2 band, 2026-11-15)
 - **`GET /api/cron/daily-maintenance`** (Vercel cron 03:41 UTC, `CRON_SECRET` like the purge; auth in `api/_lib/cron.ts`): (R-22) re-reads up to 100 workspaces' Stripe subscriptions through `syncSubscription`, oldest-synced first, and reports each correction to Sentry as a probable missed webhook (`api/_lib/reconcile.ts`); (R-27) `pruneRateLimits` deletes limiter rows whose window ended over an hour ago (`rate_limits.window_seconds`, migration 0014; a limiter failure is still fail-open but sampled to Sentry); (R-40) `sendTrialNotices` emails owners/admins 3 days before and after a trial ends, once each (`workspaces.trial_warned_at` / `trial_ended_notice_at`, cleared by `grant-trial`). One step failing never stops the others. (R-71) Quick steps run first; reconciliation and daily versions stop at a 45 s budget (`CRON_BUDGET_MS`, `vercel.json` `maxDuration: 60` for `api/cron/*.ts`); both cron jobs ping `CRON_HEARTBEAT_URL_DAILY`/`_PURGE` (`pingHeartbeat`, `/fail` on failure). The webhook also handles `charge.refunded` and `charge.dispute.created`: Sentry plus an email to the optional `BILLING_ALERT_EMAIL`, never an automatic action (`api/_lib/billingAlerts.ts`). Tests: `daily-maintenance.test.ts`.
@@ -282,6 +282,17 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   (changing it earlier remounts with stale nodes).
 - **Tests:** `src/lib/__tests__/importOrg.test.ts`, `readSheetFile.test.ts` (real `.xlsx` fixture), `ImportDialog.test.tsx`,
   `api/__tests__/import.test.ts`, `tests/e2e/import.spec.ts`.
+- **Update from file (R-77, 2026-11-26):** the dialog's third target, preselected when a role on the chart has a file key. Imports store
+  the row's ID and email on the role (`nodes.external_id`, `nodes.email`, migration 0020; **private**: `PRIVATE_NODE_FIELDS`, never on a
+  share page); the chart CSV export writes them back (ID column = the stored ID, else a number; an `Email` column at the end). The pure
+  `src/lib/updateFromFile.ts` (`buildUpdatePlan`) matches rows by ID, then email, then a unique name (only for roles with no key), and
+  returns joiners, leavers, moves, edits and the whole resulting chart. Rules: only mapped columns change; a role in the file gets the
+  manager the file names (its first line in is replaced, other drawn lines stay unless they touch a leaver); leavers are people or
+  file roles that the file lacks (open/planned roles made in StratMap stay); joiners go under their manager (`placeUnderManager`).
+  `POST /api/charts/:id/sync` `{ nodes, edges, departments }` (structural, editor, every plan) applies it with `applySnapshot`
+  (atomic, revision-claimed, removed roles to the trash with comments/JDs, `deletedBy` = the person) after an automatic version
+  "Before update from file"; **existing roles keep their position and photo whatever the body says**; it refuses growth past the
+  role limit; audit `chart.updated_from_file` (counts only).
 
 ## Export (roadmap 2.2, 2026-11-06)
 
@@ -336,7 +347,7 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
 - **Site URL:** `siteUrl()` uses `APP_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else `VERCEL_URL`, else the `*.vercel.app` default. **Set `APP_URL` to the
   custom domain when there is one** (canonical, `og:url`, `og:image`, sitemap all follow it).
 - **OG image:** `public/og-image.png` (1200×630), regenerated from `scripts/og/og.html` with `node scripts/og/make-og.mjs`.
-- **Landing page (R-62):** hero pictures `public/landing/chart-{dark,light}.png` come from the real app (`npm run make:landing-images`, with `PW_CHROMIUM_PATH` in the sandbox); prices on public pages, the pricing cards and the upgrade modal come from `PLAN_PRICES` in `plans.ts`, limits from `PLAN_LIMITS` (R-63); "Talk to sales" uses `SALES_EMAIL` (`src/lib/contact.ts`) and is hidden without an address. Never claim the chart keeps itself current until R-77 exists.
+- **Landing page (R-62):** hero pictures `public/landing/chart-{dark,light}.png` come from the real app (`npm run make:landing-images`, with `PW_CHROMIUM_PATH` in the sandbox); prices on public pages, the pricing cards and the upgrade modal come from `PLAN_PRICES` in `plans.ts`, limits from `PLAN_LIMITS` (R-63); "Talk to sales" uses `SALES_EMAIL` (`src/lib/contact.ts`) and is hidden without an address. Never claim the chart keeps itself current: "upload a newer export" (R-77) is true, an automatic HR sync is not (until R-78).
 - **robots.txt blocks the app but NOT `/share/`**: Slack/X/LinkedIn bots obey robots.txt and must read the preview. Share pages are kept out of search with `noindex` instead.
 - **Rewrites (`vercel.json`):** `/share/:code` → `api/share-page.ts`; everything else that isn't `/api/`, `/assets/` or a file (has a dot) → `/app.html`.
   Real files (`/pricing/index.html`, assets) win first. The function bundles `dist/app.html` (`includeFiles`) and falls back to fetching it from the deployment.

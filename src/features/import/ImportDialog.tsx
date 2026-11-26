@@ -6,13 +6,14 @@ import {
   type ColumnMapping, type ImportField, type ParsedSheet,
 } from '../../lib/importOrg'
 import { readSheetFile, SheetFileError } from '../../lib/readSheetFile'
+import { buildUpdatePlan, CHANGED_FIELD_LABEL, type UpdatePlan } from '../../lib/updateFromFile'
 import { useBillingStore } from '../../store/billingStore'
 import { useChartStore } from '../../store/chartStore'
 import { useToastStore } from '../../store/toastStore'
 import { useChartLimit } from '../../hooks/useChartLimit'
 import { api, ApiError } from '../../lib/apiClient'
-import { NODE_W } from '../nodes/nodeSize'
-import type { Department, OrgNode } from '../../types'
+import { NODE_W, NODE_H } from '../nodes/nodeSize'
+import type { Department, OrgEdge, OrgNode } from '../../types'
 import { Dialog } from '../../components/ui/Dialog'
 
 // Roadmap 2.1: import people from a CSV or Excel file.
@@ -22,12 +23,16 @@ import { Dialog } from '../../components/ui/Dialog'
 //      problem in the file blocks the import (the user fixes the file and retries).
 
 type Step = 'file' | 'map' | 'review'
-type Target = 'append' | 'new'
+type Target = 'append' | 'new' | 'update'
 
 export interface ImportDialogProps {
   onClose: () => void
   /** Set when opened from a chart: offers "add to this chart" as well as "new chart". */
-  chart?: { id: string; name: string; nodes: OrgNode[]; departments: Department[] }
+  chart?: {
+    id: string; name: string; nodes: OrgNode[]; departments: Department[]
+    /** For "Update from file" (R-77): the chart's lines, and every department a role can use (the chart's first, then the workspace's). */
+    edges?: OrgEdge[]; allDepartments?: Department[]
+  }
   /** Called after roles were added to `chart`, so the canvas can reload. */
   onImported?: () => void
 }
@@ -48,7 +53,10 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
   const [fileError, setFileError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
   const [mapping, setMapping] = useState<ColumnMapping | null>(null)
-  const [targetChoice, setTarget] = useState<Target>(chart ? 'append' : 'new')
+  // A chart that came from a file is most likely being brought up to date with a newer one.
+  const [targetChoice, setTarget] = useState<Target>(
+    !chart ? 'new' : chart.nodes.some(n => n.externalId || n.email) ? 'update' : 'append')
+  const [removeLeavers, setRemoveLeavers] = useState(true)
   const [newName, setNewName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -88,8 +96,15 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
     return { x: Math.max(...chart.nodes.map(n => n.x)) + NODE_W + GAP_X, y: Math.min(...chart.nodes.map(n => n.y)) }
   }, [chart, target])
 
+  const update = useMemo<UpdatePlan | null>(() => {
+    if (!sheet || !mapping || !chart || target !== 'update') return null
+    return buildUpdatePlan(sheet, mapping, {
+      nodes: chart.nodes, edges: chart.edges ?? [], departments: chart.allDepartments ?? chart.departments,
+    }, { maxNodes, removeLeavers, size: { w: NODE_W, h: NODE_H } })
+  }, [sheet, mapping, chart, target, maxNodes, removeLeavers])
+
   const plan = useMemo(() => {
-    if (!sheet || !mapping) return null
+    if (!sheet || !mapping || target === 'update') return null
     const appending = !!chart && target === 'append'
     return buildImportPlan(sheet, mapping, {
       maxNodes,
@@ -101,6 +116,22 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
 
   const canCreateNew = target === 'new' ? !newChartBlocked && newName.trim().length > 0 : true
   const canImport = !!plan && !plan.blocked && plan.stats.imported > 0 && canCreateNew && !submitting
+
+  async function runUpdate() {
+    if (!chart || !update || update.blocked || !update.hasChanges || submitting) return
+    setSubmitting(true)
+    setServerError(null)
+    try {
+      const { nodes, edges, newDepartments } = update.result
+      await api.post(`/api/charts/${chart.id}/sync`, { nodes, edges, departments: newDepartments })
+      addToast(`Updated ${chart.name} from ${fileName}.`, 'success')
+      onImported?.()
+      onClose()
+    } catch (err) {
+      setServerError(err instanceof ApiError ? err.userMessage : 'Something went wrong. Nothing was changed.')
+      setSubmitting(false)
+    }
+  }
 
   async function runImport() {
     if (!plan || !canImport) return
@@ -151,6 +182,15 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
             sheet={sheet} fileName={fileName} mapping={mapping} onChange={setMapping}
             chart={chart} target={target} onTarget={setTarget} newChartBlocked={newChartBlocked}
             onBack={() => setStep('file')} onNext={() => setStep('review')}
+          />
+        )}
+
+        {step === 'review' && update && (
+          <UpdateReview
+            update={update} maxNodes={maxNodes} removeLeavers={removeLeavers} onRemoveLeavers={setRemoveLeavers}
+            serverError={serverError} submitting={submitting}
+            onUpgrade={() => { onClose(); navigate('/pricing') }}
+            onBack={() => setStep('map')} onApply={() => void runUpdate()}
           />
         )}
 
@@ -256,6 +296,11 @@ function MapStep({ sheet, fileName, mapping, onChange, chart, target, onTarget, 
             <input type="radio" name="import-target" checked={target === 'append'} onChange={() => onTarget('append')} />
             Add to this chart ({chart.name})
           </label>
+          <label style={radioRow}>
+            <input type="radio" name="import-target" checked={target === 'update'} onChange={() => onTarget('update')} />
+            Update this chart from the file
+            <span style={{ fontSize: 11, color: 'var(--dim)' }}> (joiners, leavers, moves; you review every change)</span>
+          </label>
           <label style={{ ...radioRow, opacity: newChartBlocked ? 0.55 : 1 }}>
             <input type="radio" name="import-target" checked={target === 'new'} disabled={newChartBlocked} onChange={() => onTarget('new')} />
             Create a new chart
@@ -264,6 +309,11 @@ function MapStep({ sheet, fileName, mapping, onChange, chart, target, onTarget, 
         </fieldset>
       )}
 
+      {target === 'update' && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+          Each row finds its role by <strong>ID</strong>, then <strong>email</strong>, then a name only one role has. Columns left as "not in my file" are not changed.
+        </p>
+      )}
       <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
         Match your columns. A row needs a <strong>name</strong> or a <strong>title</strong>; leave the name blank for a role you haven't filled yet.
       </p>
@@ -409,6 +459,110 @@ function ReviewStep({ plan, chart, target, maxNodes, newName, onNewName, newChar
   )
 }
 
+/** R-77: the changes an update would make, to accept or go back. Nothing is written until "Apply". */
+function UpdateReview({ update, maxNodes, removeLeavers, onRemoveLeavers, serverError, submitting, onUpgrade, onBack, onApply }: {
+  update: UpdatePlan; maxNodes: number; removeLeavers: boolean; onRemoveLeavers: (v: boolean) => void
+  serverError: string | null; submitting: boolean; onUpgrade: () => void; onBack: () => void; onApply: () => void
+}) {
+  const errors = update.issues.filter(i => i.severity === 'error')
+  const warnings = update.issues.filter(i => i.severity === 'warning')
+  const shown = [...errors, ...warnings].slice(0, MAX_ISSUES_SHOWN)
+  const removing = update.leavers.filter(l => l.removed).length
+  const total = update.joiners.length + removing + update.moves.length + update.edits.length
+  const canApply = !update.blocked && update.hasChanges && !submitting
+  const matched = update.matchedBy.id + update.matchedBy.email + update.matchedBy.name
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8, marginBottom: 14 }}>
+        <Stat label="Joiners" value={update.joiners.length} testId="stat-joiners" />
+        <Stat label={removeLeavers ? 'Leavers' : 'Not in file'} value={update.leavers.length} testId="stat-leavers" />
+        <Stat label="Moves" value={update.moves.length} testId="stat-moves" />
+        <Stat label="Changed" value={update.edits.length} testId="stat-changed" />
+        <Stat label="Unchanged" value={update.unchanged} />
+      </div>
+
+      {!update.blocked && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+          {matched} row{matched === 1 ? '' : 's'} matched a role
+          {update.matchedBy.email || update.matchedBy.name
+            ? ` (${update.matchedBy.id} by ID, ${update.matchedBy.email} by email, ${update.matchedBy.name} by name)` : ' by ID'}.
+          {update.kept > 0 && ` ${update.kept} role${update.kept === 1 ? '' : 's'} not in the file stay${update.kept === 1 ? 's' : ''} as ${update.kept === 1 ? 'it is' : 'they are'} (open and planned roles made here${removeLeavers ? '' : ', and leavers'}).`}
+          {' '}Positions of existing roles don't change, and the chart is saved as a version first.
+        </p>
+      )}
+      {update.overLimit && (
+        <div role="alert" style={{ ...errorBox, marginBottom: 12 }}>
+          <strong>Over your plan's limit.</strong> Your plan allows {maxNodes} roles per chart; this would make {update.overLimit.wouldHave}.{' '}
+          <button onClick={onUpgrade} style={{ ...linkBtn, display: 'inline', textDecoration: 'underline' }}>See plans</button>
+        </div>
+      )}
+      {shown.length > 0 && (
+        <ul aria-label="Problems found" style={issueList}>
+          {shown.map((i, idx) => (
+            <li key={idx} style={{ display: 'flex', gap: 8, padding: '7px 10px', fontSize: 12, borderTop: idx ? '1px solid var(--border)' : 'none', color: 'var(--text)' }}>
+              {i.severity === 'error'
+                ? <AlertCircle size={14} color="var(--danger)" style={{ flexShrink: 0, marginTop: 1 }} />
+                : <AlertTriangle size={14} color="var(--warn)" style={{ flexShrink: 0, marginTop: 1 }} />}
+              <span><strong>{i.row ? `Row ${i.row}` : 'File'}</strong> · {i.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!update.blocked && !update.hasChanges && (
+        <p style={{ ...okBox, marginBottom: 12 }}><Check size={14} /> The chart already matches this file. Nothing to change.</p>
+      )}
+
+      {!update.blocked && (
+        <div aria-label="Changes" style={{ display: 'grid', gap: 10 }}>
+          <ChangeList title="Joiners" items={update.joiners.map(j => ({ id: j.id, text: j.label, note: j.manager ? `reports to ${j.manager}` : 'top of the chart' }))} />
+          <ChangeList title={removeLeavers ? 'Leavers (removed)' : 'Not in the file (kept)'} items={update.leavers.map(l => ({ id: l.id, text: l.label }))} />
+          <ChangeList title="Moves" items={update.moves.map(m => ({ id: m.id, text: m.label, note: `${m.from ?? 'nobody'} → ${m.to ?? 'nobody'}` }))} />
+          <ChangeList title="Changed" items={update.edits.map(e => ({
+            id: e.id, text: e.label,
+            note: e.changes.map(c => `${CHANGED_FIELD_LABEL[c.field]}: ${c.from || '(none)'} → ${c.to || '(none)'}`).join('; '),
+          }))} />
+        </div>
+      )}
+
+      {update.leavers.length > 0 && !update.blocked && (
+        <label style={{ ...radioRow, marginTop: 12 }}>
+          <input type="checkbox" checked={removeLeavers} onChange={e => onRemoveLeavers(e.target.checked)} />
+          Remove people who aren't in the file (they can be restored for 3 days)
+        </label>
+      )}
+
+      {serverError && <p role="alert" style={{ ...errorBox, marginTop: 12 }}>{serverError}</p>}
+
+      <Footer>
+        <button onClick={onBack} disabled={submitting} style={secondaryBtn}>Back</button>
+        <button onClick={onApply} disabled={!canApply} style={{ ...primaryBtn, flex: 2, opacity: canApply ? 1 : 0.5, cursor: canApply ? 'pointer' : 'default' }}>
+          {submitting ? 'Updating…' : `Apply ${total} change${total === 1 ? '' : 's'}`}
+        </button>
+      </Footer>
+    </div>
+  )
+}
+
+function ChangeList({ title, items }: { title: string; items: { id: string; text: string; note?: string }[] }) {
+  const LIMIT = 30
+  if (items.length === 0) return null
+  return (
+    <section aria-label={title} style={{ background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', fontSize: 12 }}>
+      <h3 style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>{title} · {items.length}</h3>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 150, overflowY: 'auto' }}>
+        {items.slice(0, LIMIT).map(i => (
+          <li key={i.id} style={{ color: 'var(--text)', lineHeight: 1.6 }}>
+            {i.text}{i.note && <span style={{ color: 'var(--muted)' }}> · {i.note}</span>}
+          </li>
+        ))}
+        {items.length > LIMIT && <li style={{ color: 'var(--muted)' }}>…and {items.length - LIMIT} more</li>}
+      </ul>
+    </section>
+  )
+}
+
 /** A short indented outline of the reporting tree, so mistakes are easy to spot. */
 function Outline({ plan }: { plan: ReturnType<typeof buildImportPlan> }) {
   const LIMIT = 14
@@ -460,4 +614,5 @@ const secondaryBtn: React.CSSProperties = { flex: 1, padding: '11px', background
 const linkBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: 'var(--brand)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }
 const radioRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text)', padding: '4px 0' }
 const errorBox: React.CSSProperties = { padding: '10px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 10, fontSize: 13, lineHeight: 1.5 }
+const issueList: React.CSSProperties = { listStyle: 'none', padding: 0, margin: '0 0 14px', maxHeight: 190, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 10 }
 const okBox: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--success-bg, var(--raised))', color: 'var(--success)', borderRadius: 10, fontSize: 13 }

@@ -51,13 +51,14 @@ test.describe.serial('import people', () => {
   })
 
   test('adds people to the open chart without disturbing what is there', async () => {
-    await page.getByTitle('Import people (CSV or Excel)').click()
+    await page.getByTitle('Import or update from a file (CSV or Excel)').click()
     await chooseFile({
       name: 'ops.csv', mimeType: 'text/csv',
       buffer: csv('Name,Title,Reports to', 'Pat Example,Head of Ops,', 'Riley Example,Ops Analyst,Pat Example'),
     })
-    // From a chart you choose where the roles go; adding is the default.
-    await expect(dialog().getByRole('radio', { name: /Add to this chart/ })).toBeChecked()
+    // From a chart you choose where the roles go. This chart came from a file, so "update" is offered first (R-77).
+    await expect(dialog().getByRole('radio', { name: /Update this chart from the file/ })).toBeChecked()
+    await dialog().getByRole('radio', { name: /Add to this chart/ }).check()
     await dialog().getByRole('button', { name: 'Review' }).click()
     await expect(dialog().getByTestId('stat-imported')).toHaveText('2')
     await dialog().getByRole('button', { name: 'Import 2 roles' }).click()
@@ -73,11 +74,12 @@ test.describe.serial('import people', () => {
   })
 
   test('errors in the file block the import and name the row', async () => {
-    await page.getByTitle('Import people (CSV or Excel)').click()
+    await page.getByTitle('Import or update from a file (CSV or Excel)').click()
     await chooseFile({
       name: 'bad.csv', mimeType: 'text/csv',
       buffer: csv('Name,Title,Reports to', 'Zed Example,CFO,', 'Una Example,Controller,Nobody'),
     })
+    await dialog().getByRole('radio', { name: /Add to this chart/ }).check()
     await dialog().getByRole('button', { name: 'Review' }).click()
     const problems = dialog().getByRole('list', { name: 'Problems found' })
     await expect(problems).toContainText('Row 3')
@@ -91,8 +93,9 @@ test.describe.serial('import people', () => {
   test('an import that would exceed the plan is refused whole', async () => {
     // The chart has 6 roles; Free allows 30.
     const rows = Array.from({ length: 30 }, (_, i) => `Extra ${i} Example,Analyst,`)
-    await page.getByTitle('Import people (CSV or Excel)').click()
+    await page.getByTitle('Import or update from a file (CSV or Excel)').click()
     await chooseFile({ name: 'many.csv', mimeType: 'text/csv', buffer: csv('Name,Title,Reports to', ...rows) })
+    await dialog().getByRole('radio', { name: /Add to this chart/ }).check()
     await dialog().getByRole('button', { name: 'Review' }).click()
     await expect(dialog().getByText("Over your plan's limit")).toBeVisible()
     await expect(dialog().getByText(/this would make 36/)).toBeVisible()

@@ -10,7 +10,7 @@ import { toCsv, type CsvCell } from './csvText'
 
 export const CHART_CSV_HEADERS = [
   'ID', 'Name', 'Title', 'Department', 'Reports to', 'Location', 'Start date',
-  'Role type', 'Status', 'Employment type', 'X', 'Y', 'Department colour',
+  'Role type', 'Status', 'Employment type', 'X', 'Y', 'Department colour', 'Email',
 ] as const
 
 const ROLE_TYPE_LABEL: Record<RoleType, string> = {
@@ -37,7 +37,7 @@ export interface ChartExport {
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** Roles with no name of their own (open roles are named after their title) export a blank Name. */
-function isUnfilled(n: OrgNode): boolean {
+export function isUnfilled(n: OrgNode): boolean {
   return n.name === n.title && (n.status === 'open' || n.status === 'planned' || n.status === 'backfill')
 }
 
@@ -97,7 +97,21 @@ function chartRows({ nodes, edges, departments }: ChartExportInput): { rows: Csv
   // Anything left is in a loop with no top: start from each, with no manager.
   nodes.map(n => n.id).filter(id => !seen.has(id)).sort(order).forEach(id => walk(id, null))
 
-  const rowId = new Map(emitted.map((e, i) => [e.id, String(i + 1)]))
+  // A role that came from a file keeps that file's ID (R-77), so an exported, edited file can update the chart it came from.
+  // Everything else is numbered 1, 2, 3…, skipping any number a kept ID already uses.
+  const kept = new Map<string, string>()
+  const keptKeys = new Set<string>()
+  for (const { id } of emitted) {
+    const ext = byId.get(id)!.externalId?.trim()
+    if (ext && !keptKeys.has(ext.toLowerCase())) { kept.set(id, ext); keptKeys.add(ext.toLowerCase()) }
+  }
+  let next = 0
+  const rowId = new Map(emitted.map(e => {
+    const own = kept.get(e.id)
+    if (own) return [e.id, own]
+    do next++; while (keptKeys.has(String(next)))
+    return [e.id, String(next)]
+  }))
   const multiManager = [...parents.values()].filter(p => p.length > 1).length
 
   const rows: CsvCell[][] = []
@@ -118,6 +132,7 @@ function chartRows({ nodes, edges, departments }: ChartExportInput): { rows: Csv
       round2(n.x),
       round2(n.y),
       dept?.colour ?? '',
+      n.email ?? '',
     ])
   }
   return { rows, multiManager }

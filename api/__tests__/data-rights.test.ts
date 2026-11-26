@@ -468,7 +468,7 @@ describe('workspace export', () => {
     const res = await get('csv')
     expect(res._headers['Content-Type']).toContain('text/csv')
     const lines = res._written.replace(/^\uFEFF/, '').trim().split('\r\n')
-    expect(lines[0]).toBe('Chart,ID,Name,Title,Department,Reports to,Location,Start date,Role type,Status,Employment type,X,Y,Department colour')
+    expect(lines[0]).toBe('Chart,ID,Name,Title,Department,Reports to,Location,Start date,Role type,Status,Employment type,X,Y,Department colour,Email')
     expect(lines).toHaveLength(1 + 1 + 2)                       // header + 1 role in chart 1 + 2 in chart 2
     const rows = lines.slice(1).map(l => l.split(','))
     const ids = rows.map(r => r[1])

@@ -185,6 +185,55 @@ describe('ImportDialog', () => {
     expect(await screen.findByLabelText('New chart name')).toBeInTheDocument()
   })
 
+  describe('Update from file (R-77)', () => {
+    const FROM_FILE = () => ({
+      id: 'c1', name: 'Main chart', departments: [],
+      nodes: [
+        { id: 'a', name: 'Alex', title: 'CEO', departmentId: '', managerId: null, status: 'active' as const, employmentType: 'full-time' as const, x: 300, y: 0, externalId: '1' },
+        { id: 'b', name: 'Sam', title: 'CTO', departmentId: '', managerId: 'a', status: 'active' as const, employmentType: 'full-time' as const, x: 300, y: 160, externalId: '2' },
+        { id: 'c', name: 'Kim', title: 'Designer', departmentId: '', managerId: 'a', status: 'active' as const, employmentType: 'full-time' as const, x: 600, y: 160, externalId: '3' },
+      ] as OrgNode[],
+      edges: [{ id: 'e1', sourceId: 'a', targetId: 'b' }, { id: 'e2', sourceId: 'a', targetId: 'c' }],
+    })
+    const NEWER = 'ID,Name,Title,Reports to\n1,Alex,CEO,\n2,Sam,Chief Technology Officer,1\n4,Lee,Engineer,2\n'
+
+    it('is chosen for a chart that came from a file, lists every change and applies them in one request', async () => {
+      vi.mocked(api.post).mockResolvedValue({ roles: 3 })
+      const onImported = vi.fn()
+      renderDialog({ chart: FROM_FILE(), onImported })
+      await upload(NEWER)
+      await screen.findByText(/people.csv/)
+      expect(screen.getByRole('radio', { name: /Update this chart from the file/ })).toBeChecked()
+      fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+
+      expect(await screen.findByTestId('stat-joiners')).toHaveTextContent('1')
+      expect(screen.getByTestId('stat-leavers')).toHaveTextContent('1')
+      expect(screen.getByTestId('stat-changed')).toHaveTextContent('1')
+      expect(within(screen.getByRole('region', { name: 'Joiners' })).getByText('Lee')).toBeInTheDocument()
+      expect(within(screen.getByRole('region', { name: 'Leavers (removed)' })).getByText('Kim')).toBeInTheDocument()
+      expect(screen.getByText(/Title: CTO → Chief Technology Officer/)).toBeInTheDocument()
+      expect(api.post).not.toHaveBeenCalled() // reviewing writes nothing
+
+      fireEvent.click(screen.getByRole('button', { name: 'Apply 3 changes' }))
+      await waitFor(() => expect(onImported).toHaveBeenCalled())
+      const [url, body] = vi.mocked(api.post).mock.calls[0] as [string, { nodes: OrgNode[]; edges: { sourceId: string; targetId: string }[] }]
+      expect(url).toBe('/api/charts/c1/sync')
+      expect(body.nodes.map(n => n.name).sort()).toEqual(['Alex', 'Lee', 'Sam'])
+      expect(body.edges.map(e => `${e.sourceId}>${e.targetId}`)).toContain('b>' + body.nodes.find(n => n.name === 'Lee')!.id)
+    })
+
+    it('can keep the leavers, and says when nothing would change', async () => {
+      renderDialog({ chart: FROM_FILE() })
+      await upload('ID,Name,Title,Reports to\n1,Alex,CEO,\n2,Sam,CTO,1\n')
+      fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
+      expect(await screen.findByRole('button', { name: 'Apply 1 change' })).toBeEnabled()
+      fireEvent.click(screen.getByRole('checkbox', { name: /Remove people who aren't in the file/ }))
+      expect(screen.getByText(/The chart already matches this file/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Apply 0 changes' })).toBeDisabled()
+      expect(within(screen.getByRole('region', { name: 'Not in the file (kept)' })).getByText('Kim')).toBeInTheDocument()
+    })
+  })
+
   // What "Export as CSV" writes, in a few rows: positions, formatting and reporting lines.
   const EXPORT_CSV = [
     'ID,Name,Title,Department,Reports to,Location,Start date,Role type,Status,Employment type,X,Y,Department colour',

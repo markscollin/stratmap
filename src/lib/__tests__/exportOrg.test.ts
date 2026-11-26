@@ -57,7 +57,7 @@ describe('buildChartCsv', () => {
     expect(sheet.rows.map(r => r[1])).toEqual(['Person a', 'Person b', 'Person c'])
     expect(sheet.rows.map(r => r[0])).toEqual(['1', '2', '3'])
     expect(sheet.rows.map(r => r[4])).toEqual(['', '1', '1'])
-    expect(sheet.rows[1].slice(10)).toEqual(['50', '200', '#0EA5E9'])
+    expect(sheet.rows[1].slice(10)).toEqual(['50', '200', '#0EA5E9', ''])
   })
 
   it('reads reporting lines from the drawn connections, not the stored manager', () => {
@@ -105,6 +105,23 @@ describe('buildChartCsv', () => {
     expect(csv).toContain(`"'=HYPERLINK(""x"")"`)
     expect(csv).toContain("'-cmd")
     expect(csv).toContain("'@home")
+  })
+
+  it('keeps the ID and email a role got from a file, and numbers the rest around them (R-77)', () => {
+    const nodes = [
+      node('a', { x: 0, externalId: 'E-7', email: 'a@x.com' }),
+      node('b', { x: 10, y: 100, externalId: '2' }),
+      node('c', { x: 20, y: 100 }),
+      node('d', { x: 30, y: 100 }),
+    ]
+    const { csv } = buildChartCsv({ nodes, edges: [edge('a', 'b'), edge('a', 'c'), edge('a', 'd')], departments: [] })
+    const rows = sheet(csv).rows
+    expect(rows.map(r => r[0])).toEqual(['E-7', '2', '1', '3'])
+    expect(rows.map(r => r[4])).toEqual(['', 'E-7', 'E-7', 'E-7'])
+    expect(rows[0][CHART_CSV_HEADERS.indexOf('Email')]).toBe('a@x.com')
+    // Importing it back keeps both keys on the roles.
+    const plan = buildImportPlan(sheet(csv), guessMapping(sheet(csv).headers))
+    expect(plan.nodes.map(n => [n.externalId, n.email ?? null])).toEqual([['E-7', 'a@x.com'], ['2', null], ['1', null], ['3', null]])
   })
 
   it('exports an empty chart as just a header', () => {

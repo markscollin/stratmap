@@ -13,6 +13,7 @@ export interface AuditEventView {
 
 const cap = (s: unknown) => (typeof s === 'string' && s ? s.charAt(0).toUpperCase() + s.slice(1) : 'someone')
 const str = (v: unknown, fallback: string) => (typeof v === 'string' && v ? v : fallback)
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 const SALARY_PARTS: Record<string, string> = { salaryBandMin: 'minimum', salaryBandMax: 'maximum', salaryCurrency: 'currency' }
 const HEADCOUNT_PARTS: Record<string, string> = { salaryMin: 'minimum', salaryMax: 'maximum', salaryCurrency: 'currency' }
@@ -34,6 +35,7 @@ export function describeAudit(e: AuditEventView): string {
     case 'workspace.deleted': return `${who} deleted the workspace`
     case 'workspace.ownership_transferred': return `${who} made ${email} the owner of the workspace`
     case 'workspace.restored': return `${who} restored the workspace`
+    case 'chart.updated_from_file': return `${who} updated ${chart} from a file (${num(d.added)} added, ${num(d.removed)} removed, ${num(d.changed)} changed)`
     case 'chart.restored': return `${who} restored ${chart} to the version ${str(d.versionName, 'an earlier version')}`
     case 'chart.branched': return `${who} created ${chart} from the version ${str(d.versionName, 'a saved version')}`
     case 'workspace.exported': return `${who} exported the workspace data`

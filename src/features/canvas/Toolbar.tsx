@@ -60,7 +60,7 @@ export function Toolbar({ slot, activeTool, setActiveTool, onAddNode, onImport, 
           onClick={onAutoLayout}
         />
       </>}
-      {!readOnly && <ToolBtn Icon={Upload} label="Import people (CSV or Excel)" active={false} onClick={onImport} />}
+      {!readOnly && <ToolBtn Icon={Upload} label="Import or update from a file (CSV or Excel)" active={false} onClick={onImport} />}
       <ExportBtn onExport={onExport} />
       {onHistory && <ToolBtn Icon={History} label="Version history" active={false} onClick={onHistory} />}
       {/* Share settings are an editor action (enforced by the API too) */}

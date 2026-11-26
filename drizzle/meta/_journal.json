@@ -141,6 +141,13 @@
       "when": 1795682217309,
       "tag": "0019_awesome_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795711104650,
+      "tag": "0020_tired_ultimatum",
+      "breakpoints": true
     }
   ]
 }

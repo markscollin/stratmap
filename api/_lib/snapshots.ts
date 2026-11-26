@@ -100,7 +100,7 @@ export async function freeSquattedIds(chartId: string, data: SnapshotData): Prom
  * brought back (a job description written for them earlier re-attaches, since it is keyed by role id). Reporting lines
  * are replaced. The chart's name, status and sharing are not touched.
  */
-export async function applySnapshot(chartId: string, workspaceId: string, snapshotData: SnapshotData, opts: { claimRevision?: { expected: number | undefined } } = {}): Promise<void> {
+export async function applySnapshot(chartId: string, workspaceId: string, snapshotData: SnapshotData, opts: { claimRevision?: { expected: number | undefined }; deletedBy?: string } = {}): Promise<void> {
   const data = await freeSquattedIds(chartId, snapshotData)
   const [currentNodes, currentDepts, workspaceDepts] = await Promise.all([
     db.select({ id: nodes.id }).from(nodes).where(eq(nodes.chartId, chartId)),
@@ -128,7 +128,7 @@ export async function applySnapshot(chartId: string, workspaceId: string, snapsh
       ? readIn(deletedNodes, returning, chartId, deletedNodes.nodeId).then(rows => rows.filter(r => r.deletedAt > trashCutoff()))
       : Promise.resolve([] as (typeof deletedNodes.$inferSelect)[]),
   ])
-  const deletedBy = 'system:restore'
+  const deletedBy = opts.deletedBy ?? 'system:restore'
   const copies = removedRows.map(node => ({
     id: crypto.randomUUID(), chartId, nodeId: node.id, deletedBy, deletedAt: new Date(),
     data: {
@@ -169,6 +169,7 @@ export async function applySnapshot(chartId: string, workspaceId: string, snapsh
           status: sql`excluded.status`, employmentType: sql`excluded.employment_type`, roleType: sql`excluded.role_type`,
           avatarUrl: sql`excluded.avatar_url`, location: sql`excluded.location`, startDate: sql`excluded.start_date`,
           x: sql`excluded.x`, y: sql`excluded.y`, isNew: sql`excluded.is_new`,
+          externalId: sql`excluded.external_id`, email: sql`excluded.email`,
         },
         setWhere: eq(nodes.chartId, chartId),
       }))

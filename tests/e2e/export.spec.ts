@@ -58,7 +58,7 @@ test.describe.serial('export chart as CSV', () => {
     await expect(page.getByText('Sam Example').first()).toBeVisible()
 
     first = await exportCsv('first')
-    expect(first[0]).toEqual(['ID', 'Name', 'Title', 'Department', 'Reports to', 'Location', 'Start date', 'Role type', 'Status', 'Employment type', 'X', 'Y', 'Department colour'])
+    expect(first[0]).toEqual(['ID', 'Name', 'Title', 'Department', 'Reports to', 'Location', 'Start date', 'Role type', 'Status', 'Employment type', 'X', 'Y', 'Department colour', 'Email'])
     const rows = first.slice(1)
     expect(rows).toHaveLength(4)
     // Tree order with IDs, reports-to by ID, and the exact positions from the source file.
@@ -74,7 +74,7 @@ test.describe.serial('export chart as CSV', () => {
   })
 
   test('importing the export gives the same chart: same shape, same lines', async () => {
-    await page.getByTitle('Import people (CSV or Excel)').click()
+    await page.getByTitle('Import or update from a file (CSV or Excel)').click()
     await dialog().getByTestId('import-file').setInputFiles(path.join(downloads, 'first.csv'))
     // The layout and formatting columns were recognised.
     await expect(dialog().getByLabel('X position')).toHaveValue('10')

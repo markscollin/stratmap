@@ -10,7 +10,8 @@ export const SHARED_NODE_FIELDS = [
 ] as const satisfies readonly (keyof typeof nodes.$inferSelect)[]
 
 /** Columns that exist on `nodes` and are deliberately never in a share response. */
-export const PRIVATE_NODE_FIELDS = ['chartId'] as const satisfies readonly (keyof typeof nodes.$inferSelect)[]
+// externalId/email (R-77) are the spreadsheet keys for "Update from file": a person's work email is never public.
+export const PRIVATE_NODE_FIELDS = ['chartId', 'externalId', 'email'] as const satisfies readonly (keyof typeof nodes.$inferSelect)[]
 
 type Row = typeof nodes.$inferSelect
 export type PublicNode = Pick<Row, (typeof SHARED_NODE_FIELDS)[number]>

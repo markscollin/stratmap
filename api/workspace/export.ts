@@ -32,6 +32,7 @@ const toNode = (r: typeof nodes.$inferSelect): OrgNode => ({
   id: r.id, name: r.name, title: r.title, departmentId: r.departmentId ?? '', managerId: r.managerId,
   status: r.status, employmentType: r.employmentType, roleType: r.roleType ?? undefined,
   location: r.location ?? undefined, startDate: r.startDate ?? undefined, x: r.x, y: r.y,
+  ...(r.externalId ? { externalId: r.externalId } : {}), ...(r.email ? { email: r.email } : {}),
 })
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

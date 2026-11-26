@@ -17,6 +17,7 @@ export const MAX_IMPORT_BYTES = 5 * 1024 * 1024
 
 const NAME_MAX = 200
 const DATE_MAX = 40
+const EMAIL_MAX = 320
 const FALLBACK_TITLE = 'Team member'
 
 export type ImportField =
@@ -357,10 +358,10 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     if (dateRaw && date.looksOdd) issue(row, 'warning', `Start date "${dateRaw}" is not YYYY-MM-DD; kept as written.`)
 
     recs.push({
-      row, rowId: cell(r, mapping.rowId), name, title, vacant,
+      row, rowId: clip(cell(r, mapping.rowId), NAME_MAX, 'ID'), name, title, vacant,
       department: clip(cell(r, mapping.department), NAME_MAX, 'Department'),
       managerRef: cell(r, mapping.manager),
-      email: cell(r, mapping.email).toLowerCase(),
+      email: clip(cell(r, mapping.email).toLowerCase(), EMAIL_MAX, 'Email'),
       location: clip(cell(r, mapping.location), NAME_MAX, 'Location'),
       startDate: clip(date.value, DATE_MAX, 'Start date'),
       roleType, status, employmentType, x, y, colour,
@@ -472,6 +473,9 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     ...(rec.roleType ? { roleType: rec.roleType } : {}),
     ...(rec.location ? { location: rec.location } : {}),
     ...(rec.startDate ? { startDate: rec.startDate } : {}),
+    // R-77: kept on the role so a later "Update from file" finds it again.
+    ...(rec.rowId ? { externalId: rec.rowId } : {}),
+    ...(rec.email ? { email: rec.email } : {}),
     x: 0, y: 0,
   }))
   const edges: OrgEdge[] = []

@@ -693,7 +693,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
         <Suspense fallback={null}>
           <ImportDialog
             onClose={() => setIsImportOpen(false)}
-            chart={{ id: chartId, name: chartName, nodes, departments }}
+            chart={{ id: chartId, name: chartName, nodes, departments, edges, allDepartments: deptLookup }}
             onImported={onImported}
           />
         </Suspense>

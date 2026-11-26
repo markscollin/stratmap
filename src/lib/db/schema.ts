@@ -154,6 +154,10 @@ export const nodes = pgTable('nodes', {
   x: real('x').notNull().default(0),
   y: real('y').notNull().default(0),
   isNew: boolean('is_new').default(false),
+  // R-77: how a spreadsheet row finds this role again on "Update from file": the file's ID column, then its email.
+  // Private (never on a share page, see api/_lib/sharedFields.ts).
+  externalId: text('external_id'),
+  email: text('email'),
 }, (t) => [index('nodes_chart_id_idx').on(t.chartId)])
 
 export const edges = pgTable('edges', {

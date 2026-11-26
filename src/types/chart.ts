@@ -27,6 +27,10 @@ export interface OrgNode {
   x: number
   y: number
   isNew?: boolean
+  /** R-77: the file's ID for this role, set by an import; "Update from file" matches rows by it. */
+  externalId?: string | null
+  /** R-77: the person's email from an import (lower case); the second way a row is matched. */
+  email?: string | null
 }
 
 export interface OrgEdge {

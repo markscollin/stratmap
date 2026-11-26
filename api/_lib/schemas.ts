@@ -47,6 +47,12 @@ const nodeFields = {
   isNew: z.boolean().nullable().optional(),
 }
 
+/** R-77: the spreadsheet keys a role is matched by on "Update from file". Only imports write them. */
+const importKeyFields = {
+  externalId: z.string().trim().max(200).nullable().optional(),
+  email: z.string().trim().toLowerCase().max(320).nullable().optional(),
+}
+
 export const NodeCreate = z.object({ ...nodeFields, id: Id.optional() })
 
 export const NodeUpdate = z.object(nodeFields).partial()
@@ -65,7 +71,7 @@ export const ChartCreate = z.object({
   name: Name,
   isSample: z.boolean().optional(),
   status: enumOf(chartStatusEnum).optional(),
-  templateNodes: z.array(z.object({ ...nodeFields, id: Id })).max(MAX_TEMPLATE_NODES).default([]),
+  templateNodes: z.array(z.object({ ...nodeFields, ...importKeyFields, id: Id })).max(MAX_TEMPLATE_NODES).default([]),
   templateEdges: z.array(z.object({ id: Id.optional(), sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2).default([]),
   templateDepts: z.array(z.object({
     id: Id,
@@ -77,9 +83,19 @@ export const ChartCreate = z.object({
 
 /** Roadmap 2.1: people imported from a spreadsheet into an existing chart. */
 export const ChartImport = z.object({
-  nodes: z.array(z.object({ ...nodeFields, id: Id })).min(1).max(MAX_TEMPLATE_NODES),
+  nodes: z.array(z.object({ ...nodeFields, ...importKeyFields, id: Id })).min(1).max(MAX_TEMPLATE_NODES),
   edges: z.array(z.object({ sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2).default([]),
   /** Every department the nodes use; same-named ones on the chart are reused. */
+  departments: z.array(z.object({ id: Id, name: Name, colour: Colour })).max(500).default([]),
+})
+
+/**
+ * R-77 "Update from file": the whole chart as it should be after the update (the client worked out the changes and the
+ * person accepted them), plus the departments it creates. The server keeps every existing role's position and photo.
+ */
+export const ChartSync = z.object({
+  nodes: z.array(z.object({ ...nodeFields, ...importKeyFields, id: Id })).max(MAX_TEMPLATE_NODES),
+  edges: z.array(z.object({ id: Id, sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2),
   departments: z.array(z.object({ id: Id, name: Name, colour: Colour })).max(500).default([]),
 })
 
