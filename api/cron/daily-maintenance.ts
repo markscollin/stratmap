@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Stripe from 'stripe'
-import { cronAuthorised } from '../_lib/cron'
+import { cronAuthorised, pingHeartbeat, CRON_BUDGET_MS } from '../_lib/cron'
 import { reportError } from '../_lib/sentry'
 import { pruneRateLimits } from '../_lib/rateLimit'
 import { reconcileSubscriptions, type ReconcileResult } from '../_lib/reconcile'
@@ -24,17 +24,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     scheduledVersions: ScheduledSnapshotResult | 'failed'
   } = { reconcile: 'failed', rateLimitsPruned: 'failed', trialNotices: 'failed', scheduledVersions: 'failed' }
 
-  try {
-    report.reconcile = process.env.STRIPE_SECRET_KEY
-      ? await reconcileSubscriptions(new Stripe(process.env.STRIPE_SECRET_KEY))
-      : 'stripe-not-configured'
-  } catch (err) { fail('reconcile', err) }
+  // Quick steps first, then the slow ones with a time budget (R-71): a run that hits the function's time limit used to be killed
+  // part-way, skipping every later step, every day. Now the slow steps stop in time and leave the rest for tomorrow.
+  const deadline = Date.now() + CRON_BUDGET_MS
   try { report.rateLimitsPruned = await pruneRateLimits() } catch (err) { fail('prune-rate-limits', err) }
   try { report.trialNotices = await sendTrialNotices() } catch (err) { fail('trial-notices', err) }
-  try { report.scheduledVersions = await takeScheduledSnapshots() } catch (err) { fail('scheduled-versions', err) }
+  try {
+    report.reconcile = process.env.STRIPE_SECRET_KEY
+      ? await reconcileSubscriptions(new Stripe(process.env.STRIPE_SECRET_KEY), undefined, deadline)
+      : 'stripe-not-configured'
+  } catch (err) { fail('reconcile', err) }
+  try { report.scheduledVersions = await takeScheduledSnapshots(new Date(), undefined, deadline) } catch (err) { fail('scheduled-versions', err) }
 
   console.log('[daily-maintenance]', JSON.stringify(report))
   const failed = Object.values(report).includes('failed')
+  await pingHeartbeat('DAILY', !failed)
   return res.status(failed ? 500 : 200).json(report)
 }
 

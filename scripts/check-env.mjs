@@ -47,6 +47,8 @@ const RULES = [
   ['block', 'BILLING_ALERT_EMAIL', (v) => v.includes('@') || 'should be an email address', 'your own address: refunds and disputes in Stripe are emailed here (they are always sent to Sentry too)'],
   ['info', 'VITE_SALES_EMAIL', (v) => v.includes('@') || 'should be an email address', 'where "Talk to sales" on the pricing page goes (else VITE_SUPPORT_EMAIL; with neither the button is hidden; build-time)'],
   ['info', 'STRIPE_AUTOMATIC_TAX', (v) => v === '1' || 'should be 1 (on) or unset (off)', 'set to 1 only after registering for tax and turning on Stripe Tax (R-60, D-6)'],
+  ['warn', 'CRON_HEARTBEAT_URL_DAILY', (v) => v.startsWith('https://') || 'should be an https heartbeat URL', 'a daily-maintenance run that stops happening alerts nobody without it (docs/MONITORING.md 2b)'],
+  ['warn', 'CRON_HEARTBEAT_URL_PURGE', (v) => v.startsWith('https://') || 'should be an https heartbeat URL', 'a purge run that stops happening alerts nobody without it (docs/MONITORING.md 2b)'],
   ['info', 'POSTHOG_KEY', () => true, 'product analytics (only for people who accept cookies)'],
 ]
 

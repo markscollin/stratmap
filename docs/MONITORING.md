@@ -7,9 +7,10 @@ What the code gives you, and what you set up in dashboards. The "done" test from
 
 | Thing | Where | Turns on when |
 |---|---|---|
-| Browser error reporting | `@sentry/react` in `src/main.tsx` + the ErrorBoundary | `VITE_SENTRY_DSN` is set **at build time** |
+| Browser error reporting | `src/lib/crashReporting.ts` (started from `main.tsx`; it loads `@sentry/react` on demand and sends errors caught before that) + `CrashBoundary` | `VITE_SENTRY_DSN` is set **at build time** |
 | Server error reporting | `api/_lib/sentry.ts` `reportError()`, called from checkout, the Stripe webhook, AI drafting and invites | `SENTRY_DSN` is set |
 | Health check | `GET /api/health` | always on |
+| Cron heartbeats (R-71) | `pingHeartbeat()` in `api/_lib/cron.ts`, at the end of both daily jobs | `CRON_HEARTBEAT_URL_DAILY` / `CRON_HEARTBEAT_URL_PURGE` are set |
 
 Both Sentry keys do nothing until set, so nothing is reported from local or e2e runs.
 
@@ -48,6 +49,18 @@ Create two monitors on your real domain (or the `*.vercel.app` URL until you hav
 
 Settings worth choosing: check every **3 minutes**; alert only after **2 failed checks in a row** (stops one-off blips from waking you);
 use two or more regions; send to **phone push or SMS** as well as email.
+
+### 2b. Heartbeats for the daily jobs (R-71)
+
+Vercel Cron does not retry a failed run, and a job that stops running makes no noise. In Better Stack (or healthchecks.io) create two
+**heartbeat** monitors with a period of 1 day and a grace of a few hours, one for the maintenance job (03:41 UTC) and one for the purge
+(03:17 UTC). Put their URLs in Vercel as `CRON_HEARTBEAT_URL_DAILY` and `CRON_HEARTBEAT_URL_PURGE`. A good run requests the URL; a run where a
+step failed requests it with `/fail` added, which both services treat as a failure; a run that never happens sends nothing, and the monitor
+alerts when the grace runs out.
+
+The jobs have a 60-second limit (`vercel.json`, the most every Vercel plan allows). The slow steps (billing reconciliation, daily versions) stop
+after about 45 seconds and leave the rest for the next day, so the run is never cut off half-way. After moving to Vercel Pro you can raise
+`maxDuration` for `api/cron/*.ts` to 300.
 
 ### 3. Status page
 Better Stack and Checkly can publish a hosted status page that shows these two monitors. Create one, add both, and (once you have a domain)

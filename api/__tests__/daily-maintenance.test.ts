@@ -37,7 +37,7 @@ import { setupSchema, cleanDb, seedWorkspace, seedChart, seedNode, testDb, TEST_
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
 import * as schema from '../../src/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 const DAY = 86_400_000
 const PERIOD_END = 1_900_000_000
@@ -290,5 +290,46 @@ describe('the trial email text', () => {
     expect(mail.html).toContain(`${PLAN_LIMITS.free.maxNodesPerChart} roles per chart`)
     expect(mail.html).toContain('https://app.test/pricing')
     expect(mail.subject).toContain('ends on 2026-12-01')
+  })
+})
+
+// R-71: the cron jobs tell an uptime monitor they ran, and the slow steps stop in time instead of being killed part-way.
+describe('R-71: heartbeats and the time budget', () => {
+  const fetchSpy = vi.fn(async () => new Response('ok'))
+  beforeEach(() => { fetchSpy.mockClear(); vi.stubGlobal('fetch', fetchSpy) })
+  afterEach(() => { vi.unstubAllGlobals(); delete process.env.CRON_HEARTBEAT_URL_DAILY })
+
+  it('a good run pings the heartbeat URL; a failed run pings it with /fail; no URL, no request', async () => {
+    delete process.env.STRIPE_SECRET_KEY
+    await run()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    process.env.CRON_HEARTBEAT_URL_DAILY = 'https://uptime.example.com/hb/abc'
+    await run()
+    expect(fetchSpy.mock.calls.map(c => (c as unknown[])[0])).toEqual(['https://uptime.example.com/hb/abc'])
+    fetchSpy.mockClear()
+    process.env.STRIPE_SECRET_KEY = 'sk_test_x'
+    await testDb.execute(sql`ALTER TABLE rate_limits RENAME TO rate_limits_gone`)
+    try { expect((await run())._status).toBe(500) } finally { await testDb.execute(sql`ALTER TABLE rate_limits_gone RENAME TO rate_limits`) }
+    expect(fetchSpy.mock.calls.map(c => (c as unknown[])[0])).toEqual(['https://uptime.example.com/hb/abc/fail'])
+  })
+
+  it('reconciliation and daily versions stop at the deadline and say what they left for tomorrow', async () => {
+    const { reconcileSubscriptions } = await import('../_lib/reconcile')
+    const { takeScheduledSnapshots } = await import('../_lib/scheduledSnapshots')
+    const Stripe = (await import('stripe')).default
+    await testDb.update(schema.workspaces).set({ planTier: 'growth', stripeSubscriptionId: 'sub_1', stripeCustomerId: 'cus_1', subscriptionStatus: 'active' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    sub()
+    await seedChart(); await seedNode()
+    const past = Date.now() - 1
+    expect(await reconcileSubscriptions(new Stripe('sk') as never, 100, past)).toMatchObject({ checked: 0 })
+    expect(await takeScheduledSnapshots(new Date(), 200, past)).toMatchObject({ saved: 0, deferred: 1 })
+  })
+})
+
+describe('R-71: vercel.json', () => {
+  it('gives the cron functions a time limit every plan accepts', async () => {
+    const fs = await import('node:fs')
+    const cfg = JSON.parse(fs.readFileSync('vercel.json', 'utf8')) as { functions: Record<string, { maxDuration?: number }> }
+    expect(cfg.functions['api/cron/*.ts']?.maxDuration).toBe(60)
   })
 })

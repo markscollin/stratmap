@@ -40,6 +40,13 @@ To make a long random secret (CRON_SECRET, ADMIN_SECRET): `openssl rand -hex 32`
 | 13 | **Dependabot (R-36).** GitHub → repo Settings → Code security → switch on "Dependabot alerts" and "Dependabot security updates". The weekly update config is already in `.github/dependabot.yml`. | Security fixes arrive as pull requests; without the switch only the weekly ones do. |
 | 14 | **Before the next production deploy:** the deploy applies migrations 0015 (unique membership index; removes duplicate memberships first) and 0016 (`trial_grants`) by itself. A production build now **fails** if `VITE_CLERK_PUBLISHABLE_KEY` is missing in Vercel Production (R-34): check it is set. | A failed build is the safe outcome, but better to know. |
 
+### Function region and cron limits (R-71)
+- **Region:** in Neon, look up your project's region (e.g. AWS eu-west-2, London). In Vercel → Settings → Functions → Region, pick the
+  closest one (`lhr1` for London, `fra1` for Frankfurt, `iad1` for US East). Every request makes several database calls in a row, so a
+  function in another region adds that distance to each of them. (It can also be set in `vercel.json` as `"regions": ["lhr1"]`; ask me to.)
+- **After Vercel Pro (O-02):** raise `maxDuration` for `api/cron/*.ts` in `vercel.json` from 60 to 300, and set up the two cron heartbeats
+  in `docs/MONITORING.md` (step 2b).
+
 ## C. Local development
 
 If you run `vercel dev` **without** Clerk keys, add `ALLOW_DEV_BYPASS=1` to `.env.local`. With real Clerk keys nothing is needed.

@@ -20,7 +20,7 @@ export interface ReconcileResult {
   failed: number
 }
 
-export async function reconcileSubscriptions(stripe: Stripe, limit = RECONCILE_BATCH): Promise<ReconcileResult> {
+export async function reconcileSubscriptions(stripe: Stripe, limit = RECONCILE_BATCH, deadline = Infinity): Promise<ReconcileResult> {
   const rows = await db
     .select({ id: workspaces.id, subscriptionId: workspaces.stripeSubscriptionId, planTier: workspaces.planTier, status: workspaces.subscriptionStatus })
     .from(workspaces)
@@ -30,6 +30,7 @@ export async function reconcileSubscriptions(stripe: Stripe, limit = RECONCILE_B
 
   const out: ReconcileResult = { checked: 0, corrected: 0, failed: 0 }
   for (const row of rows) {
+    if (Date.now() > deadline) break // out of time (R-71): the rest are oldest-synced, so they come first tomorrow
     if (!row.subscriptionId) continue
     out.checked++
     try {

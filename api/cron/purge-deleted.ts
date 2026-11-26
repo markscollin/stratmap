@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { cronAuthorised } from '../_lib/cron'
+import { cronAuthorised, pingHeartbeat } from '../_lib/cron'
 import { reportError } from '../_lib/sentry'
 import { purgeExpiredWorkspaces } from '../_lib/workspaceLifecycle'
 import { purgeExpiredTrash, purgeOrphanJobDescriptions } from '../_lib/nodeTrash'
@@ -17,10 +17,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const trashPurged = await purgeExpiredTrash()
     const orphanJds = await purgeOrphanJobDescriptions() // R-38
     console.log(`[purge-deleted] erased ${purged} workspace(s), ${trashPurged} deleted role cop${trashPurged === 1 ? 'y' : 'ies'}, ${orphanJds} orphaned job description(s)`)
+    await pingHeartbeat('PURGE', true)
     return res.json({ purged, trashPurged, orphanJds })
   } catch (err) {
     console.error('/api/cron/purge-deleted', err)
     reportError(err, { route: '/api/cron/purge-deleted' })
+    await pingHeartbeat('PURGE', false)
     return res.status(500).json({ error: 'Internal server error' })
   }
 }

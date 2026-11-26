@@ -339,7 +339,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   when it matches 0 rows), and make DELETE/PUT idempotent before the claim, as POST already is.
 
 ### R-71 Cron duration, function region, cron heartbeat
-- [ ] (suspected) `vercel.json` sets no `maxDuration` for `api/cron/*` and no `regions`. The daily job does up to 100 Stripe calls, 200 chart snapshots and emails in one
+- [x] **Done 2026-11-26 (code part).** `vercel.json` gives `api/cron/*.ts` `maxDuration: 60` (accepted on every plan; raise to 300 after Pro).
+  The daily job runs the quick steps first, then reconciliation and daily versions against a 45 s budget (`CRON_BUDGET_MS`): they stop cleanly
+  and report what they left (`deferred`) instead of being killed. Both cron jobs ping `CRON_HEARTBEAT_URL_DAILY` / `_PURGE` at the end (`/fail`
+  on a failed step; `pingHeartbeat` in `api/_lib/cron.ts`, `check:env` warns without them). `docs/MONITORING.md` has the heartbeat setup and no
+  longer says Sentry starts statically in `main.tsx`. **Owner:** the function region must match the Neon region, which only the owner can see
+  (`docs/OWNER_CHECKLIST.md`). Tests: `daily-maintenance.test.ts`.
+- (suspected) `vercel.json` sets no `maxDuration` for `api/cron/*` and no `regions`. The daily job does up to 100 Stripe calls, 200 chart snapshots and emails in one
   run; a timeout skips the later steps every day and Vercel crons do not retry. With no region pinned near Neon, every API request's 6–10 sequential queries cross regions.
   **Fix:** `maxDuration` for the cron functions, `regions` matching the Neon region, and a heartbeat (Sentry Cron Monitors or an uptime "heartbeat" URL hit at the end of
   each run) in `docs/MONITORING.md`, which should also stop saying Sentry starts statically in `main.tsx`.

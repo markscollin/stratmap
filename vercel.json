@@ -3,6 +3,9 @@
   "functions": {
     "api/share-page.ts": {
       "includeFiles": "dist/app.html"
+    },
+    "api/cron/*.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

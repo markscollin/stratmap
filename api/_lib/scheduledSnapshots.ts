@@ -39,7 +39,7 @@ function canonical(value: unknown): string {
 }
 
 /** Every time comparison in this job uses `now` (never the system clock), so a test can pin the date (R-55). */
-export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHEDULED_CHARTS_PER_RUN): Promise<ScheduledSnapshotResult> {
+export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHEDULED_CHARTS_PER_RUN, deadline = Infinity): Promise<ScheduledSnapshotResult> {
   const out: ScheduledSnapshotResult = { saved: 0, unchanged: 0, deferred: 0, failed: 0 }
 
   const rows = await db.select({
@@ -55,7 +55,9 @@ export async function takeScheduledSnapshots(now = new Date(), maxCharts = SCHED
   const todays = Array.from({ length: Math.min(maxCharts, eligible.length) }, (_, i) => eligible[(start + i) % eligible.length])
   out.deferred = eligible.length - todays.length
 
-  for (const chart of todays) {
+  for (const [i, chart] of todays.entries()) {
+    // Out of time (R-71): stop cleanly; the charts not reached count as deferred and come round on a later day.
+    if (Date.now() > deadline) { out.deferred += todays.length - i; break }
     try {
       const [latest] = await db.select({ kind: chartSnapshots.kind, createdAt: chartSnapshots.createdAt, data: chartSnapshots.data })
         .from(chartSnapshots).where(eq(chartSnapshots.chartId, chart.id)).orderBy(desc(chartSnapshots.createdAt), desc(chartSnapshots.id)).limit(1)
