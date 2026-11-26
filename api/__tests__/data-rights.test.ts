@@ -340,6 +340,19 @@ describe('deleting an account', () => {
     expect(logs.filter(e => e.action === 'member.left').map(e => e.workspaceId).sort()).toEqual(['ws-2', TEST_WS_ID])
   })
 
+  // R-72: an ownership transfer stored the old owner's address as `previousOwnerEmail`, which account deletion missed.
+  it('scrubs every key that holds their address (previousOwnerEmail too), and leaves other people\'s', async () => {
+    await seedMember('u-ed', 'editor', 'ed@co.com')
+    await testDb.insert(schema.auditLog).values({
+      id: 'a-t', workspaceId: TEST_WS_ID, actorUserId: 'u-ed', action: 'workspace.ownership_transferred', targetType: 'member', targetId: TEST_USER_ID,
+      details: { email: 'test@example.com', previousOwnerEmail: 'ED@co.com', chartName: 'ed@co.com is not an address field' },
+    })
+    as('u-ed')
+    expect((await remove())._status).toBe(200)
+    const [row] = await testDb.select().from(schema.auditLog).where(eq(schema.auditLog.id, 'a-t'))
+    expect(row.details).toEqual({ email: 'test@example.com', chartName: 'ed@co.com is not an address field' })
+  })
+
   // Launch review R-09: the address on a member row was typed by the browser, so it must not decide whose invites go.
   it('cannot remove invites or log entries addressed to someone else, even if a member row claims that address', async () => {
     await seedMember('u-mallory', 'editor', 'victim@co.com')                 // Mallory told the server her email was the victim's

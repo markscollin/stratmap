@@ -22,6 +22,8 @@ export function toInviteView(row: InviteRow, now = new Date()) {
 
 /** Emails an invite link. Failures are logged, never thrown: the invite is already saved. */
 export async function sendInviteEmail(opts: {
+  /** Identifies the invite in error reports (R-72): never the address itself. */
+  inviteId: string
   workspaceId: string
   inviterUserId: string
   email: string
@@ -41,8 +43,9 @@ export async function sendInviteEmail(opts: {
       inviteUrl: inviteUrl(opts.token),
     })
   } catch (err) {
-    console.error('[invites] email send failed for', opts.email, err)
-    reportError(err, { route: 'invites', email: opts.email })
+    // The invite's id, never the invitee's address (R-72): error reports are not a place for personal data.
+    console.error('[invites] email send failed for invite', opts.inviteId, err)
+    reportError(err, { route: 'invites', inviteId: opts.inviteId })
   }
 }
 

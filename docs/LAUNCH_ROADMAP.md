@@ -351,7 +351,11 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   each run) in `docs/MONITORING.md`, which should also stop saying Sentry starts statically in `main.tsx`.
 
 ### R-72 Personal data left behind
-- [ ] (verified) `api/workspace/transfer-ownership.ts:65` stores `previousOwnerEmail` in audit `details`, but account deletion only strips the key `email`
+- [x] **Done 2026-11-26.** Account deletion now removes every audit-detail key ending in `email` (any case: `email`, `previousOwnerEmail`, later
+  ones) whose value is one of the person's verified addresses, in one statement over `jsonb_each`; other keys and other people's addresses
+  stay. A failed invite email is logged and reported with the invite id, never the address (`sendInviteEmail({ inviteId })`). Tests:
+  `data-rights.test.ts`, `invite-email-report.test.ts`.
+- (verified) `api/workspace/transfer-ownership.ts:65` stores `previousOwnerEmail` in audit `details`, but account deletion only strips the key `email`
   (`api/_lib/workspaceLifecycle.ts:153,157`). Strip every `*Email` key (or store the email only under `email`). (Reported) `api/_lib/invites.ts:~45` sends the
   invitee's address to Sentry when an invite email fails; send the invite id instead. Add both to `audit.test.ts` / a Sentry PII test.
 

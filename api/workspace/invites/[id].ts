@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return sendPlanLimit(res, 'seats', plan, plan.limits.seats)
       }
     }
-    await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email: updated.email, token })
+    await sendInviteEmail({ inviteId: updated.id, workspaceId: auth.workspaceId, inviterUserId: auth.userId, email: updated.email, token })
     await logAudit({
       workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.resent',
       targetType: 'invite', targetId: updated.id, details: { email: updated.email, role: updated.permission },

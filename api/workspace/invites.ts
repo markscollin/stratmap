@@ -102,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'invite.sent',
         targetType: 'invite', targetId: row.id, details: { email, role: permission },
       })
-      await sendInviteEmail({ workspaceId: auth.workspaceId, inviterUserId: auth.userId, email, token })
+      await sendInviteEmail({ inviteId: row.id, workspaceId: auth.workspaceId, inviterUserId: auth.userId, email, token })
     }
 
     if (created.length) {

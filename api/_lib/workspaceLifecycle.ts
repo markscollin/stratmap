@@ -175,9 +175,12 @@ export async function deleteAccount(userId: string): Promise<AccountDeletion> {
   if (emails.length > 0) {
     await db.delete(pendingInvites).where(inArray(sql`lower(${pendingInvites.email})`, emails))
     // Their email must not survive in anyone's activity log: events about them, and invites that named them.
+    // Every key that holds an address (`email`, `previousOwnerEmail`, any later `…Email`), not only `email` (R-72).
+    const theirs = sql.join(emails.map(e => sql`${e}`), sql`, `)
+    const isTheirs = sql`lower(e.k) like '%email' and jsonb_typeof(e.v) = 'string' and lower(e.v #>> '{}') in (${theirs})`
     await db.update(auditLog)
-      .set({ details: sql`${auditLog.details} - 'email'` })
-      .where(sql`lower(${auditLog.details} ->> 'email') in (${sql.join(emails.map(e => sql`${e}`), sql`, `)})`)
+      .set({ details: sql`(select coalesce(jsonb_object_agg(e.k, e.v), '{}'::jsonb) from jsonb_each(${auditLog.details}) as e(k, v) where not (${isTheirs}))` })
+      .where(sql`exists (select 1 from jsonb_each(${auditLog.details}) as e(k, v) where ${isTheirs})`)
   }
   await db.update(pendingInvites).set({ invitedBy: null }).where(eq(pendingInvites.invitedBy, userId))
   await db.update(auditLog).set({ details: sql`${auditLog.details} - 'email'` })

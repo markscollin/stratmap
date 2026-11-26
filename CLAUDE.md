@@ -427,7 +427,7 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   `link_revoked`, `share.public_on` / `public_off` (only when the value actually changes), `salary.updated`. To log a new kind of event add it to `AuditAction`, call `logAudit`, and add a line
   in `src/lib/auditText.ts`.
 - **Owner-decided: never salary amounts.** `salary.updated` stores only the role title and which parts changed (`changed: 'salaryBandMin,salaryBandMax'`). `details` must never hold amounts,
-  invite tokens or other secrets; `api/__tests__/audit.test.ts` checks both. Emails (member/invitee) are stored in `details` because the member row is gone after a removal.
+  invite tokens or other secrets; `api/__tests__/audit.test.ts` checks both. Emails (member/invitee) are stored in `details` because the member row is gone after a removal. **Never put an email address in an error report or log line** (report an id instead, R-72).
 - **Reading:** `GET /api/workspace/audit?limit&before` (owner/admin, newest first, `nextBefore` cursor, readable on every plan). `?format=csv` needs the Enterprise feature `audit-export`
   (in `PAID_FEATURES`; 402 `plan-feature` otherwise) and goes through `toCsv` (formula-safe). Actors are resolved from current members; someone who left shows as "A former member".
 - **UI:** Settings → **Activity** tab, shown to owner/admin only (`ActivityTab`). Non-Enterprise plans see a `LockedFeatureCard` instead of the export button. `api.getText()` is the client helper for text downloads.
@@ -448,7 +448,7 @@ All rules live in `api/_lib/workspaceLifecycle.ts`; tests are `api/__tests__/dat
 - **Purge:** `GET /api/cron/purge-deleted` (Vercel cron, daily 03:17 UTC, `vercel.json` "crons"; it also erases expired deleted-role copies, R-02) needs `Authorization: Bearer $CRON_SECRET`; **without `CRON_SECRET` set it returns 503 and does nothing**. It deletes workspaces deleted more
   than 30 days ago; every table cascades from `workspaces`, and a test proves no row is left. When you add a table with a `workspace_id`, give it `onDelete: 'cascade'` and add it to the purge test's `seedEverything`.
 - **Account deletion:** `DELETE /api/account {confirm:'DELETE'}` (`requireUser`). **Owner-decided: an owned workspace is deleted with the account** (soft delete, members emailed). Their memberships elsewhere are removed
-  (logged as `member.left`, with no personal data), their email is removed from every audit log row, pending invites to their email are deleted, then the Clerk user is deleted **last** (`deleteUserAccount` in
+  (logged as `member.left`, with no personal data), their email is removed from every audit log row (every `…email` key holding one of their verified addresses, R-72; name any new address key so it ends in `Email`), pending invites to their email are deleted, then the Clerk user is deleted **last** (`deleteUserAccount` in
   `api/_lib/identity.ts`; a failure is a 502 and a retry finishes the job). Known consequence: the owner can no longer sign in, so they cannot restore a workspace deleted this way; it is erased after 30 days.
   Authored-content ids (`charts.ownerId`, `updatedBy`) are opaque ids and stay; PostHog and Stripe's own records (invoices) are not touched.
 - **Export:** `GET /api/workspace/export` (owner/admin, free, 10 per hour per workspace) is one JSON file (workspace, members, invites, departments, charts with roles/lines/JDs incl. salary bands, templates, headcount plans,
