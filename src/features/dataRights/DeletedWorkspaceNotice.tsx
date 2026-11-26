@@ -40,7 +40,7 @@ export function DeletedWorkspaceNotice() {
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--text)' }}>
             <strong>{w.name}</strong> was deleted. You can restore it until{' '}
             <strong>{new Date(w.eraseOn).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</strong>, after which it is permanently erased.
-            A restored workspace starts on the Free plan.
+            A paid plan comes back with it and renews as before, unless the period you paid for has already ended; otherwise it is on the Free plan.
           </p>
           <button
             onClick={() => void restore(w.id)}

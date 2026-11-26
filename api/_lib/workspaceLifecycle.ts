@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import Stripe from 'stripe'
-import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { db } from './db'
 import { logAudit } from './audit'
 import { sendWorkspaceDeleted } from './email'
@@ -53,6 +53,8 @@ export async function softDeleteWorkspace(ws: DeletableWorkspace, actorUserId: s
   const members = await db.select({ email: workspaceMembers.email, userId: workspaceMembers.userId })
     .from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ws.id))
 
+  // Whether the subscription was set to renew before this: only then does a restore turn renewal back on (R-69.3).
+  const [before] = await db.select({ cancelAtPeriodEnd: workspaces.cancelAtPeriodEnd }).from(workspaces).where(eq(workspaces.id, ws.id)).limit(1)
   const stripeState = await endAtPeriodEnd(ws.stripeSubscriptionId)
 
   const deletedAt = new Date()
@@ -75,7 +77,7 @@ export async function softDeleteWorkspace(ws: DeletableWorkspace, actorUserId: s
 
   await logAudit({
     workspaceId: ws.id, actorUserId, action: 'workspace.deleted', targetType: 'workspace', targetId: ws.id,
-    details: { eraseOn: eraseDate(deletedAt).toISOString().slice(0, 10) },
+    details: { eraseOn: eraseDate(deletedAt).toISOString().slice(0, 10), stoppedRenewal: stripeState === 'scheduled' && !before?.cancelAtPeriodEnd },
   })
 
   // Best-effort: a failed email never undoes the deletion.
@@ -85,7 +87,7 @@ export async function softDeleteWorkspace(ws: DeletableWorkspace, actorUserId: s
   return true
 }
 
-export type RestoreResult = { ok: true } | { ok: false; error: 'not-found' | 'expired' | 'owns-another-workspace' }
+export type RestoreResult = { ok: true; renewalResumed?: boolean } | { ok: false; error: 'not-found' | 'expired' | 'owns-another-workspace' }
 
 /** Brings a soft-deleted workspace back. Only its owner, only inside the window, and never if that would give them a second workspace. */
 export async function restoreWorkspace(workspaceId: string, userId: string, now = new Date()): Promise<RestoreResult> {
@@ -100,7 +102,31 @@ export async function restoreWorkspace(workspaceId: string, userId: string, now 
 
   await db.update(workspaces).set({ deletedAt: null, deletedBy: null, updatedAt: now }).where(eq(workspaces.id, workspaceId))
   await logAudit({ workspaceId, actorUserId: userId, action: 'workspace.restored', targetType: 'workspace', targetId: workspaceId })
-  return { ok: true }
+  const renewalResumed = await resumeRenewalAfterRestore(ws, now)
+  return { ok: true, ...(renewalResumed !== null ? { renewalResumed } : {}) }
+}
+
+/**
+ * Deleting a paid workspace stopped its renewal (D-4). Restoring it means the owner wants it back, so renewal is turned back on
+ * (R-69.3), but only when the deletion was what stopped it (an owner who had already cancelled keeps that) and the paid period
+ * has not ended. A Stripe failure never undoes the restore: it is reported, and the owner can resume in the billing portal.
+ * Returns null when there was nothing to resume.
+ */
+async function resumeRenewalAfterRestore(ws: typeof workspaces.$inferSelect, now: Date): Promise<boolean | null> {
+  if (!ws.stripeSubscriptionId || !ws.cancelAtPeriodEnd || !process.env.STRIPE_SECRET_KEY) return null
+  if (ws.planExpiresAt && ws.planExpiresAt <= now) return null
+  const [deletion] = await db.select({ details: auditLog.details }).from(auditLog)
+    .where(and(eq(auditLog.workspaceId, ws.id), eq(auditLog.action, 'workspace.deleted')))
+    .orderBy(desc(auditLog.createdAt)).limit(1)
+  if (!deletion || (deletion.details as { stoppedRenewal?: unknown })?.stoppedRenewal !== true) return null
+  try {
+    await new Stripe(process.env.STRIPE_SECRET_KEY).subscriptions.update(ws.stripeSubscriptionId, { cancel_at_period_end: false })
+    await db.update(workspaces).set({ cancelAtPeriodEnd: false, updatedAt: new Date() }).where(eq(workspaces.id, ws.id))
+    return true
+  } catch (err) {
+    reportError(err, { route: '/api/workspace/restore', note: `restored workspace ${ws.id}, but could not turn renewal back on for ${ws.stripeSubscriptionId}` })
+    return false
+  }
 }
 
 /** Erases every workspace that has been deleted for longer than the restore window. Returns how many. */

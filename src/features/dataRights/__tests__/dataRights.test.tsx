@@ -171,7 +171,7 @@ describe('DeletedWorkspaceNotice', () => {
     vi.mocked(api.post).mockResolvedValue({ restored: true } as never)
     render(<DeletedWorkspaceNotice />)
     expect(await screen.findByText(/was deleted/)).toBeInTheDocument()
-    expect(screen.getByText(/starts on the Free plan/)).toBeInTheDocument()
+    expect(screen.getByText(/paid plan comes back with it/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Restore workspace' }))
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/workspace/restore', { workspaceId: 'ws-1' }))
     expect(switchWorkspace).toHaveBeenCalledWith('ws-1')

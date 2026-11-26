@@ -306,7 +306,16 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   content edit of an approved item sets it back to `in-review` (with a notice in the UI). Mirror the R-08 pattern (one pure rule shared by UI and API, tested together).
 
 ### R-69 Billing races and lapsed states
-- [ ] (reported; reproduce each with a test first) in `api/_lib/billing.ts` and `api/checkout.ts`:
+- [x] **Done 2026-11-26.** Each part reproduced first (`api/__tests__/billing-races.test.ts`, plus `checkout.test.ts`, `data-rights.test.ts`,
+  `owner-scripts.test.ts`). (1) The link write is a compare-and-set on the link that was read; when another subscription got linked meanwhile the
+  sync decides again, so one is linked and the other cancelled and refunded (before: the second overwrote the first, which kept billing unseen).
+  (2) `unpaid`/`paused`/`incomplete` are lapsed, not live: Checkout gives such a workspace a new session (not the Portal), and the new subscription
+  replaces the lapsed one (cancelled, no refund) instead of being refunded as a duplicate. (3) Restoring a deleted paid workspace resumes renewal
+  when the deletion stopped it (`stoppedRenewal` in the deletion's audit details); a Stripe failure never blocks the restore. (4) `billing_synced_at`
+  (migration 0017): a write needs a Stripe read at least as new as the stored one. (5) A subscription for a workspace deleted meanwhile is cancelled,
+  refunded and reported, never linked. (6) `BILLING_ALERT_EMAIL` blocks in `check:env`. Owner side (Portal `always_invoice`, limited promotion
+  codes) is in `docs/BILLING.md` and the owner checklist.
+- (reported; reproduce each with a test first) in `api/_lib/billing.ts` and `api/checkout.ts`:
   1. Duplicate-subscription handling (R-19) writes the link with an unconditional `UPDATE … WHERE id` after reading it earlier (`~:159-169`). With parallel
      webhooks for two subscriptions, both can be cancelled and refunded. Use compare-and-set: `WHERE stripe_subscription_id IS NULL OR stripe_subscription_id = :id`.
   2. `unpaid`, `paused` and `incomplete` count as live (`~:51,138`): a lapsed customer cannot buy again through Checkout, and a new subscription would be refunded as a duplicate.

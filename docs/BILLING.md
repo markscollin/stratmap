@@ -47,6 +47,13 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
   the dashboard) is unlinked and the workspace drops to Free (reported to Sentry) by `syncSubscription`, whichever path reads it (webhook,
   reconciliation, Checkout). Checkout checks a stored customer first and makes a new one (new idempotency key) if it is gone or deleted.
   A reconciliation row that fails for another reason gets `updated_at` bumped, so it goes to the back of the queue.
+- **Races and lapsed states (R-69):** `syncSubscription` writes only if the link is still the one it read and no newer Stripe read is stored
+  (`workspaces.billing_synced_at`, migration 0017), so two subscriptions landing together leave one linked and the other cancelled and refunded,
+  and a slow, older read never overwrites a newer one. Only `active`, `trialing` and `past_due` count as live (`LIVE_SUBSCRIPTION_STATUSES`): a
+  workspace whose subscription is `unpaid`, `paused` or `incomplete` gets a new Checkout (same customer), and the new subscription replaces the
+  lapsed one, which is cancelled without a refund. A subscription that completes for a workspace deleted meanwhile is cancelled, refunded and
+  reported, never linked. Restoring a deleted paid workspace turns renewal back on if the deletion stopped it (the `workspace.deleted` audit entry
+  records `stoppedRenewal`). `BILLING_ALERT_EMAIL` is required for launch (`check:env` blocks without it).
 - **Checkout:** if a workspace already has a subscription, Checkout returns a **Customer Portal** URL instead
   (`{ url, portal: true }`), so nobody ends up with two parallel subscriptions. Checkout reuses an existing Stripe customer.
 - **Portal:** `POST /api/billing/portal` (admin only) returns to `/settings?tab=billing`. It returns 409 `no-billing-account`
@@ -60,6 +67,8 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
    - Allow updating the payment method, viewing invoices, and cancelling. For cancellation, choose **at end of billing period**.
    - Allow switching plans between the Starter and Growth products (monthly and annual prices).
      Set **downgrades to take effect at the end of the billing period** and **prorate upgrades**.
+     For upgrades choose **charge the prorated amount immediately** (`always_invoice`), so an upgrade is paid for when it is used (R-69).
+   - **Promotion codes:** Checkout allows them; create codes only from the coupons you mean to offer and give each a limit (redemptions, expiry, first-time customers), since any code that exists can be typed in.
 3. **Subscriptions and emails → Manage failed payments:** turn on Smart Retries. After all retries fail,
    choose **cancel the subscription** or **mark it as unpaid**. Both downgrade to Free.
    You can leave Stripe's own failed-payment emails off, because StratMap sends its own.

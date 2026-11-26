@@ -160,9 +160,28 @@ describe('restoring a workspace', () => {
     await deleted()
     expect((await restore())._status).toBe(200)
     const ws = await getWs()
-    expect(ws).toMatchObject({ deletedAt: null, deletedBy: null, planTier: 'growth', stripeSubscriptionId: 'sub_1', cancelAtPeriodEnd: true })
+    // R-69.3: deleting stopped the renewal, so restoring turns it back on (the owner wants the workspace back).
+    expect(ws).toMatchObject({ deletedAt: null, deletedBy: null, planTier: 'growth', stripeSubscriptionId: 'sub_1', cancelAtPeriodEnd: false })
+    expect(updateMock).toHaveBeenLastCalledWith('sub_1', { cancel_at_period_end: false })
     expect(await testDb.select().from(schema.nodes)).toHaveLength(1)
     expect(await auditActions()).toContain('workspace.restored')
+  })
+
+  it('R-69.3: a subscription the owner had already cancelled before deleting stays cancelled after a restore', async () => {
+    await testDb.update(schema.workspaces).set({ cancelAtPeriodEnd: true }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    await deleted()
+    updateMock.mockClear()
+    expect((await restore())._status).toBe(200)
+    expect(updateMock).not.toHaveBeenCalled()
+    expect((await getWs()).cancelAtPeriodEnd).toBe(true)
+  })
+
+  it('R-69.3: if Stripe cannot resume the renewal, the workspace is still restored (and it is reported)', async () => {
+    await deleted()
+    updateMock.mockRejectedValueOnce(new Error('stripe down'))
+    const res = await restore()
+    expect(res._status).toBe(200)
+    expect((await getWs())).toMatchObject({ deletedAt: null, cancelAtPeriodEnd: true })
   })
 
   it('nobody else can restore it, and a live workspace cannot be "restored"', async () => {

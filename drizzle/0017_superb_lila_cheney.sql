@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "billing_synced_at" timestamp;

@@ -8,7 +8,7 @@ import { CheckoutCreate } from './_lib/schemas'
 import { reportError } from './_lib/sentry'
 import { getAppUrl } from './_lib/url'
 import { db } from './_lib/db'
-import { createPortalSession, forgetCustomer, isStripeMissing, priceIdFor, syncSubscription } from './_lib/billing'
+import { createPortalSession, forgetCustomer, isStripeMissing, priceIdFor, syncSubscription, LIVE_SUBSCRIPTION_STATUSES } from './_lib/billing'
 import { workspaces } from '../src/lib/db/schema'
 import { hasAnalyticsConsent } from './_lib/analytics'
 import { isDevBypassAllowed } from './_lib/devBypass'
@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const appUrl = getAppUrl()
 
     const readLinks = async () => (await db
-      .select({ stripeCustomerId: workspaces.stripeCustomerId, stripeSubscriptionId: workspaces.stripeSubscriptionId })
+      .select({ stripeCustomerId: workspaces.stripeCustomerId, stripeSubscriptionId: workspaces.stripeSubscriptionId, subscriptionStatus: workspaces.subscriptionStatus })
       .from(workspaces).where(eq(workspaces.id, auth.workspaceId)).limit(1))[0]
     let ws = await readLinks()
 
@@ -72,7 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // A workspace that already subscribes changes plan in the Customer Portal.
     // A second Checkout would start a second, parallel subscription.
-    if (ws?.stripeSubscriptionId && ws.stripeCustomerId) {
+    // Only a LIVE subscription (active, trialing, past due) goes there (R-69.2): a lapsed one (unpaid, paused, incomplete) cannot be
+    // revived by changing plan, so its workspace gets a new Checkout, and the new subscription replaces the old one when it lands.
+    if (ws?.stripeSubscriptionId && ws.stripeCustomerId && LIVE_SUBSCRIPTION_STATUSES.has(ws.subscriptionStatus ?? '')) {
       return res.json({ url: await createPortalSession(stripe, ws.stripeCustomerId), portal: true })
     }
 

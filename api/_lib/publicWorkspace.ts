@@ -8,7 +8,7 @@ type WorkspaceRow = typeof workspaces.$inferSelect
 // effective one (trial and lapsed cancels applied), and the bookkeeping for trial emails stays internal.
 export function publicWorkspace(ws: WorkspaceRow) {
   const {
-    stripeCustomerId, stripeSubscriptionId: _sub, subscriptionStatus, planExpiresAt, cancelAtPeriodEnd,
+    stripeCustomerId, stripeSubscriptionId: _sub, subscriptionStatus, planExpiresAt, cancelAtPeriodEnd, billingSyncedAt: _synced,
     trialWarnedAt: _w, trialEndedNoticeAt: _e,
     ...rest
   } = ws

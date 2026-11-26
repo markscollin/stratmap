@@ -18,6 +18,7 @@ const GOOD = {
   APP_URL: 'https://stratmap.example.com', ANTHROPIC_API_KEY: 'sk-ant-abc',
   SENTRY_DSN: 'https://k@o.ingest.sentry.io/1', VITE_SENTRY_DSN: 'https://k@o.ingest.sentry.io/1',
   EMAIL_FROM: 'StratMap <hi@stratmap.example.com>', VITE_SUPPORT_EMAIL: 'help@stratmap.example.com',
+  BILLING_ALERT_EMAIL: 'owner@stratmap.example.com', // a launch requirement since R-69.6: refunds and disputes must reach a person
 }
 const checkEnv = (vars: Record<string, string>) => {
   const file = path.join(dir, `env-${Math.random().toString(36).slice(2)}`)
@@ -143,5 +144,14 @@ describe('scripts/check-webhook.mjs', () => {
     expect((await runWebhook('https://stratmap-seven.vercel.app', 'whsec_x')).code).toBe(2)
     expect((await runWebhook('https://stratmap.app', 'whsec_x')).code).toBe(2)
     expect((await runWebhook('http://127.0.0.1:1', 'not-a-secret')).code).toBe(2)
+  })
+})
+
+describe('BILLING_ALERT_EMAIL (R-69.6)', () => {
+  it('blocks launch when missing', () => {
+    const { BILLING_ALERT_EMAIL: _b, ...rest } = GOOD
+    const r = checkEnv(rest)
+    expect(r.code).not.toBe(0)
+    expect(r.out).toMatch(/BLOCK\s+BILLING_ALERT_EMAIL/)
   })
 })

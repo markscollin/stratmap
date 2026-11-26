@@ -269,3 +269,28 @@ describe('no Stripe key (R-20)', () => {
     }
   })
 })
+
+// R-69.2: a lapsed subscription (unpaid, paused, incomplete) cannot be revived in the Portal, so it must not block buying again.
+describe('lapsed subscriptions (R-69.2)', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test'
+    process.env.STRIPE_STARTER_MONTHLY_PRICE_ID = 'price_starter_monthly'
+  })
+  for (const status of ['unpaid', 'paused', 'incomplete']) {
+    it(`a workspace whose subscription is ${status} gets a new Checkout (same customer), not the Portal`, async () => {
+      await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_lapsed', subscriptionStatus: status }).where(eq(schema.workspaces.id, TEST_WS_ID))
+      subRetrieve.mockImplementation(async (id: string) => ({ id, status, customer: 'cus_1', metadata: {}, cancel_at_period_end: false, cancel_at: null, items: { data: [{ price: { id: 'price_starter_monthly' }, current_period_end: 1_900_000_000 }] } }))
+      const res = createRes()
+      await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, res as never)
+      expect(portalCreate).not.toHaveBeenCalled()
+      expect(sessionCreate).toHaveBeenCalledTimes(1)
+      expect(sessionCreate.mock.calls[0][0].customer).toBe('cus_1')
+    })
+  }
+  it('a live subscriber still goes to the Portal', async () => {
+    await testDb.update(schema.workspaces).set({ stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', subscriptionStatus: 'active' }).where(eq(schema.workspaces.id, TEST_WS_ID))
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { tier: 'starter', billingCycle: 'monthly' } }) as never, res as never)
+    expect(res._body).toMatchObject({ portal: true })
+  })
+})

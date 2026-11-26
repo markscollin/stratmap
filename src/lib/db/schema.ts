@@ -43,6 +43,8 @@ export const workspaces = pgTable('workspaces', {
   // End of the paid-through period; when cancelAtPeriodEnd, the plan ends here.
   planExpiresAt: timestamp('plan_expires_at'),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  /** When the Stripe state last written here was READ from Stripe (R-69): a slower, older read never overwrites a newer one. */
+  billingSyncedAt: timestamp('billing_synced_at'),
   // An admin dismissed the getting-started checklist for the whole workspace (roadmap 2.7).
   onboardingDismissedAt: timestamp('onboarding_dismissed_at'),
   // Admin-granted trial/comped access (overrides planTier when trialEndsAt > now)

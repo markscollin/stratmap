@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import type Stripe from 'stripe'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull, lte, or } from 'drizzle-orm'
 import { db } from './db'
 import { reportError } from './sentry'
 import { getAppUrl } from './url'
@@ -47,6 +47,8 @@ export function tierForPriceId(priceId: string): PaidTier | null {
 // banner. When Stripe gives up it cancels the subscription or marks it unpaid,
 // and the workspace drops to Free.
 const PAID_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing', 'past_due'])
+/** Statuses that count as a live subscription for Checkout and duplicates (R-69.2): the paid ones. Unpaid, paused and incomplete are lapsed. */
+export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = PAID_STATUSES
 // Statuses Stripe never leaves. The subscription is gone, so we forget its id.
 const TERMINAL_STATUSES = new Set<Stripe.Subscription.Status>(['canceled', 'incomplete_expired'])
 
@@ -123,8 +125,10 @@ export interface SyncResult {
 export async function syncSubscription(
   stripe: Stripe,
   subscriptionId: string,
-  opts: { workspaceId?: string } = {},
+  opts: { workspaceId?: string; readAt?: Date; retried?: boolean } = {},
 ): Promise<SyncResult | null> {
+  // When this request read Stripe (R-69.4): stored with the result, so an older read arriving late never overwrites a newer one.
+  const readAt = opts.readAt ?? new Date()
   let sub: Stripe.Subscription
   try {
     sub = await stripe.subscriptions.retrieve(subscriptionId)
@@ -135,7 +139,7 @@ export async function syncSubscription(
     throw err
   }
 
-  const cols = { id: workspaces.id, planTier: workspaces.planTier, stripeSubscriptionId: workspaces.stripeSubscriptionId }
+  const cols = { id: workspaces.id, planTier: workspaces.planTier, stripeSubscriptionId: workspaces.stripeSubscriptionId, deletedAt: workspaces.deletedAt }
   let [ws] = await db
     .select(cols)
     .from(workspaces)
@@ -149,7 +153,7 @@ export async function syncSubscription(
   if (!ws && !opts.workspaceId && !TERMINAL_STATUSES.has(sub.status)) {
     const fromMetadata = sub.metadata?.workspaceId
     if (fromMetadata) {
-      const [candidate] = await db.select({ ...cols, deletedAt: workspaces.deletedAt }).from(workspaces).where(eq(workspaces.id, fromMetadata)).limit(1)
+      const [candidate] = await db.select(cols).from(workspaces).where(eq(workspaces.id, fromMetadata)).limit(1)
       if (candidate && !candidate.deletedAt) {
         ws = candidate
         if (!candidate.stripeSubscriptionId) console.warn(`[stripe] linked workspace ${ws.id} to subscription ${sub.id} from subscription metadata (checkout event was missed)`)
@@ -158,6 +162,14 @@ export async function syncSubscription(
   }
   if (!ws) {
     console.warn(`[stripe] no workspace for subscription ${sub.id}`)
+    return null
+  }
+
+  // R-69.5: a Checkout opened before the workspace was deleted can complete after. Never link a new subscription to a deleted
+  // workspace (it would renew for something nobody can open): cancel and refund it, and tell a human.
+  if (ws.deletedAt && ws.stripeSubscriptionId !== sub.id && !TERMINAL_STATUSES.has(sub.status)) {
+    reportError(new Error(`Subscription ${sub.id} arrived for deleted workspace ${ws.id}: cancelled and refunded, not linked`), { route: 'billing.syncSubscription' })
+    await cancelAndRefund(stripe, sub)
     return null
   }
 
@@ -172,13 +184,18 @@ export async function syncSubscription(
       // Otherwise we cannot tell whether the linked one is still live: touch nothing, and ask a human to look.
       else reportError(err, { route: 'billing.syncSubscription', note: `could not check ${ws.stripeSubscriptionId} before deciding about ${sub.id}` })
     }
-    if (current && !TERMINAL_STATUSES.has(current.status)) {
+    if (current && PAID_STATUSES.has(current.status)) {
+      // The linked one is live (active, trialing or past due): this one is the duplicate.
       await cancelDuplicateSubscription(stripe, sub, ws.id)
-    }
-    if (!linkedGone && (!current || !TERMINAL_STATUSES.has(current.status))) {
       return { workspaceId: ws.id, previousTier: ws.planTier, tier: ws.planTier, status: sub.status }
     }
-    // The linked subscription is actually finished in Stripe (its event was lost): this one replaces it, below.
+    if (!current && !linkedGone) return { workspaceId: ws.id, previousTier: ws.planTier, tier: ws.planTier, status: sub.status }
+    // R-69.2: a linked subscription that lapsed (unpaid, paused, incomplete) is not live: the new one replaces it, and the old one
+    // is cancelled (no refund: it did not take money for this period) so it cannot come back to life and bill twice.
+    if (current && !TERMINAL_STATUSES.has(current.status)) {
+      await stripe.subscriptions.cancel(current.id).catch(err => reportError(err, { route: 'billing.syncSubscription', note: `could not cancel lapsed ${current!.id} replaced by ${sub.id}` }))
+    }
+    // The linked subscription is finished (or lapsed, or unknown to Stripe): this one replaces it, below.
   }
 
   let tier = tierForSubscription(sub)
@@ -193,7 +210,9 @@ export async function syncSubscription(
     return { workspaceId: ws.id, previousTier: ws.planTier, tier: ws.planTier, status: sub.status }
   }
 
-  await db.update(workspaces)
+  // Written only if nothing changed underneath us (R-69.1, R-69.4): the link is still the one we read, and no newer Stripe read
+  // has been stored since. Two subscriptions racing for one unlinked workspace can then not both "win".
+  const written = await db.update(workspaces)
     .set({
       planTier: tier,
       subscriptionStatus: sub.status,
@@ -201,9 +220,30 @@ export async function syncSubscription(
       cancelAtPeriodEnd: !terminal && (sub.cancel_at_period_end || sub.cancel_at != null),
       stripeCustomerId: idOf(sub.customer),
       stripeSubscriptionId: terminal ? null : sub.id,
+      billingSyncedAt: readAt,
       updatedAt: new Date(),
     })
-    .where(eq(workspaces.id, ws.id))
+    .where(and(
+      eq(workspaces.id, ws.id),
+      ws.stripeSubscriptionId ? eq(workspaces.stripeSubscriptionId, ws.stripeSubscriptionId) : isNull(workspaces.stripeSubscriptionId),
+      or(isNull(workspaces.billingSyncedAt), lte(workspaces.billingSyncedAt, readAt)),
+    ))
+    .returning({ id: workspaces.id })
+
+  if (written.length === 0) {
+    const [now] = await db.select({ link: workspaces.stripeSubscriptionId, syncedAt: workspaces.billingSyncedAt, planTier: workspaces.planTier })
+      .from(workspaces).where(eq(workspaces.id, ws.id)).limit(1)
+    if (!now) return null
+    // Another subscription was linked meanwhile: decide again against it (once), which makes one of the two the duplicate.
+    if (now.link !== ws.stripeSubscriptionId) {
+      if (!opts.retried) return syncSubscription(stripe, subscriptionId, { ...opts, readAt: undefined, retried: true })
+    } else {
+      // Same link, but a newer read of it is already stored: ours is stale, keep theirs.
+      return { workspaceId: ws.id, previousTier: ws.planTier, tier: now.planTier, status: sub.status }
+    }
+    reportError(new Error(`Could not settle subscription ${sub.id} for workspace ${ws.id} after a retry`), { route: 'billing.syncSubscription' })
+    return null
+  }
 
   return { workspaceId: ws.id, previousTier: ws.planTier, tier, status: sub.status }
 }
@@ -214,6 +254,11 @@ export async function syncSubscription(
  */
 export async function cancelDuplicateSubscription(stripe: Stripe, sub: Stripe.Subscription, workspaceId: string): Promise<void> {
   reportError(new Error(`Duplicate subscription ${sub.id} for workspace ${workspaceId}: cancelling and refunding it`), { route: 'billing.syncSubscription' })
+  await cancelAndRefund(stripe, sub)
+}
+
+/** Cancels a subscription so it can never bill again, then refunds what it charged (best-effort; a failed refund is reported for a human). */
+export async function cancelAndRefund(stripe: Stripe, sub: Stripe.Subscription): Promise<void> {
   await stripe.subscriptions.cancel(sub.id)
   try {
     const invoiceId = typeof sub.latest_invoice === 'string' ? sub.latest_invoice : sub.latest_invoice?.id
@@ -225,7 +270,7 @@ export async function cancelDuplicateSubscription(stripe: Stripe, sub: Stripe.Su
       if (piId) await stripe.refunds.create({ payment_intent: piId }, { idempotencyKey: `refund-dup-${sub.id}-${piId}` })
     }
   } catch (err) {
-    reportError(err, { route: 'billing.syncSubscription', note: `refund of duplicate subscription ${sub.id} failed: refund it by hand in the Stripe dashboard` })
+    reportError(err, { route: 'billing.syncSubscription', note: `refund of subscription ${sub.id} failed: refund it by hand in the Stripe dashboard` })
   }
 }
 
