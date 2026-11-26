@@ -18,5 +18,19 @@ export type PublicNode = Pick<Row, (typeof SHARED_NODE_FIELDS)[number]>
 export function publicNode(row: Row): PublicNode {
   const out: Record<string, unknown> = {}
   for (const f of SHARED_NODE_FIELDS) out[f] = row[f]
+  // A photo on a public share or embed page is loaded by every visitor's browser, so an address someone typed could log those
+  // visitors' IPs (R-75). Only photos from the sign-in provider's image hosts are shown publicly; anything else shows initials.
+  if (!isPublicAvatar(row.avatarUrl)) out.avatarUrl = null
   return out as PublicNode
+}
+
+/** Image hosts a public page may load a photo from (the sign-in provider's and common account-photo services). */
+export const PUBLIC_AVATAR_HOSTS = ['img.clerk.com', 'images.clerk.dev', 'www.gravatar.com', 'secure.gravatar.com', 'lh3.googleusercontent.com', 'avatars.githubusercontent.com']
+
+export function isPublicAvatar(url: string | null | undefined): boolean {
+  if (!url) return false
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && PUBLIC_AVATAR_HOSTS.includes(u.hostname)
+  } catch { return false }
 }

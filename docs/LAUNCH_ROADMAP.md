@@ -381,7 +381,14 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   and upsert. (3) `api/workspace.ts:~98-115`: workspace insert and owner-member insert are separate; a failure between leaves an orphan the user owns; put them in one batch.
 
 ### R-75 Small hardening
-- [ ] (reported) `api/_lib/identity.ts:17-21` gives any `dev-…` user id a synthetic identity without `isDevBypassAllowed()`: gate it. `api/_lib/auth.ts` `verifyToken`
+- [x] **Done 2026-11-26.** All five confirmed in the code. A `dev-` user id gets an invented identity only while the dev bypass is allowed.
+  `verifyToken` gets `authorizedParties` from `CLERK_AUTHORIZED_PARTIES`, else `APP_URL` on production (unset: unchecked, as before). Role restore
+  re-keys a role whose id another chart has taken, with its comments, lines and JDs (`{ rekeyed: true }`; the canvas picks the new id up on Reload).
+  Department colours must be `#RRGGBB` (the importer now converts any hex form to that); role photos must be https, and share/embed pages show a
+  photo only from the sign-in provider's and common photo hosts (`PUBLIC_AVATAR_HOSTS` in `sharedFields.ts`), initials otherwise. `/api/health`
+  reuses its last answer for 10 s per instance, so a burst of hits wakes Neon once (no rate limiter: that would itself hit the database).
+  Tests: `hardening-r75.test.ts`, `health.test.ts`, `importOrg.test.ts`.
+- (reported) `api/_lib/identity.ts:17-21` gives any `dev-…` user id a synthetic identity without `isDevBypassAllowed()`: gate it. `api/_lib/auth.ts` `verifyToken`
   without `authorizedParties`: pass the production origin(s) once O-01/O-03 are done. `api/charts/[id]/nodes/[nodeId]/restore.ts:58` plain insert: re-key on an id clash
   like `freeSquattedIds`. `avatarUrl` (any URL) and department `colour` (any 50 chars): restrict colour to a hex/token pattern; consider proxying or restricting avatar hosts
   on public share/embed pages (they leak viewers' IPs). `/api/health`: light rate limit (each hit wakes Neon).

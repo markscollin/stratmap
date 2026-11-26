@@ -49,6 +49,7 @@ const RULES = [
   ['info', 'STRIPE_AUTOMATIC_TAX', (v) => v === '1' || 'should be 1 (on) or unset (off)', 'set to 1 only after registering for tax and turning on Stripe Tax (R-60, D-6)'],
   ['warn', 'CRON_HEARTBEAT_URL_DAILY', (v) => v.startsWith('https://') || 'should be an https heartbeat URL', 'a daily-maintenance run that stops happening alerts nobody without it (docs/MONITORING.md 2b)'],
   ['warn', 'CRON_HEARTBEAT_URL_PURGE', (v) => v.startsWith('https://') || 'should be an https heartbeat URL', 'a purge run that stops happening alerts nobody without it (docs/MONITORING.md 2b)'],
+  ['info', 'CLERK_AUTHORIZED_PARTIES', (v) => v.split(',').every(x => /^https:\/\/[^\s/]+\/?$/.test(x.trim())) || 'should be comma-separated https origins', 'the sites session tokens may come from; on production it defaults to APP_URL (R-75)'],
   ['info', 'POSTHOG_KEY', () => true, 'product analytics (only for people who accept cookies)'],
 ]
 

@@ -43,12 +43,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!fitsLimit(plan.limits.maxNodesPerChart, nodeCount)) return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
 
     // A line comes back only if the role at its other end is still in the chart (it may have been deleted since).
-    const { node, comments, edges: lines, jobDescriptions: jds = [] } = copy.data
-    const others = [...new Set(lines.map(l => (l.sourceId === nodeId ? l.targetId : l.sourceId)))]
+    const { node: saved, comments: savedComments, edges: savedLines, jobDescriptions: savedJds = [] } = copy.data
+    // Role ids are global primary keys: another chart may have taken this one meanwhile (R-75, like `freeSquattedIds` for
+    // versions). Then the role comes back under a fresh id, its comments, lines and job descriptions following it.
+    const [squatted] = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, nodeId)).limit(1)
+    const restoredId = squatted ? crypto.randomUUID() : nodeId
+    const rekey = (id: string) => (id === nodeId ? restoredId : id)
+    const node = { ...saved, id: restoredId }
+    const comments = savedComments.map(c => ({ ...c, nodeId: restoredId }))
+    const lines = savedLines.map(l => ({ ...l, id: squatted ? crypto.randomUUID() : l.id, sourceId: rekey(l.sourceId), targetId: rekey(l.targetId) }))
+    const jds = savedJds.map(j => ({ ...j, nodeId: restoredId, id: squatted ? crypto.randomUUID() : j.id }))
+    const others = [...new Set(lines.map(l => (l.sourceId === restoredId ? l.targetId : l.sourceId)))]
     const stillThere = new Set(others.length
       ? (await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.chartId, chartId), inArray(nodes.id, others)))).map(n => n.id)
       : [])
-    const linesBack = lines.filter(l => stillThere.has(l.sourceId === nodeId ? l.targetId : l.sourceId))
+    const linesBack = lines.filter(l => stillThere.has(l.sourceId === restoredId ? l.targetId : l.sourceId))
     // Parents before their replies (a reply points at its parent).
     const commentsBack = [...comments].sort((a, b) => Number(!!a.parentId) - Number(!!b.parentId))
 
@@ -63,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       d.delete(deletedNodes).where(eq(deletedNodes.id, copy.id)),
     ])
     if (refused) return
-    return res.status(201).json({ id: nodeId })
+    return res.status(201).json({ id: restoredId, ...(squatted ? { rekeyed: true } : {}) })
   } catch (err) {
     console.error('/api/charts/[id]/nodes/[nodeId]/restore', err)
     return res.status(500).json({ error: 'Internal server error' })

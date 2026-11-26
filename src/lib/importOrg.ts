@@ -203,6 +203,13 @@ export function parseEmployment(raw: string): EmploymentType | null {
 }
 
 const HEX_COLOUR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+
+/** Any hex colour a spreadsheet may hold, as the #RRGGBB the server stores (R-75): #abc → #AABBCC, alpha dropped. */
+export function toSixDigitHex(colour: string): string {
+  const h = colour.slice(1)
+  const six = h.length <= 4 ? h.slice(0, 3).split('').map(c => c + c).join('') : h.slice(0, 6)
+  return `#${six.toUpperCase()}`
+}
 const COORD_MAX = 1_000_000
 
 function statusFor(roleType: RoleType | undefined, vacant: boolean): NodeStatus {
@@ -342,7 +349,7 @@ export function buildImportPlan(sheet: ParsedSheet, mapping: ColumnMapping, opti
     const y = coord(mapping.y, 'Y position')
 
     const colourRaw = cell(r, mapping.departmentColour)
-    const colour = HEX_COLOUR.test(colourRaw) ? colourRaw : ''
+    const colour = HEX_COLOUR.test(colourRaw) ? toSixDigitHex(colourRaw) : ''
     if (colourRaw && !colour) issue(row, 'warning', `Department colour "${colourRaw}" is not a hex colour like #0EA5E9, so it was ignored.`)
 
     const dateRaw = cell(r, mapping.startDate)

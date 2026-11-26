@@ -8,7 +8,7 @@ vi.mock('../../src/lib/db/index', async () => {
 vi.mock('../_lib/auth', () => ({ requireAuth: vi.fn(), requireUser: vi.fn() }))
 
 import { requireAuth, requireUser } from '../_lib/auth'
-import handler, { DB_TIMEOUT_MS } from '../health'
+import handler, { DB_TIMEOUT_MS, resetHealthCache } from '../health'
 import { setupSchema, testDb } from './helpers/db'
 import { createReq } from './helpers/req'
 import { createRes } from './helpers/res'
@@ -21,7 +21,7 @@ const call = async (method = 'GET') => {
 
 beforeAll(async () => { await setupSchema() })
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
-beforeEach(() => { vi.mocked(requireAuth).mockClear(); vi.mocked(requireUser).mockClear() })
+beforeEach(() => { vi.mocked(requireAuth).mockClear(); vi.mocked(requireUser).mockClear(); resetHealthCache() })
 
 describe('GET /api/health', () => {
   it('is 200 and says the database is fine when it answers', async () => {
@@ -75,5 +75,25 @@ describe('GET /api/health', () => {
   it('rejects other methods', async () => {
     expect((await call('POST'))._status).toBe(405)
     expect((await call('DELETE'))._status).toBe(405)
+  })
+})
+
+// R-75: each check wakes the database, so a burst of hits is answered from the last check for a few seconds.
+describe('GET /api/health is gentle on the database (R-75)', () => {
+  it('several calls within the cache window run one query', async () => {
+    const spy = vi.spyOn(testDb, 'execute')
+    for (let i = 0; i < 5; i++) expect((await call())._status).toBe(200)
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+  it('a failure is remembered too, and a fresh check runs once the window has passed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(testDb, 'execute').mockRejectedValueOnce(new Error('down'))
+    expect((await call())._status).toBe(503)
+    expect((await call())._status).toBe(503)
+    expect(spy).toHaveBeenCalledTimes(1)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.now() + 11_000)
+    expect((await call())._status).toBe(200)
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 })

@@ -101,7 +101,7 @@ describe('templates for a new chart', () => {
   it('a template naming another workspace\'s department creates the chart with that department unlinked', async () => {
     const res = await call(chartsHandler as H, { method: 'POST', body: {
       name: 'From template', templateNodes: [], templateEdges: [],
-      templateDepts: [{ id: 'd1', name: 'Mine', colour: '#111', workspaceDepartmentId: TEST_DEPT_ID }, { id: 'd2', name: 'Theirs', colour: '#222', workspaceDepartmentId: OTHER.dept }],
+      templateDepts: [{ id: 'd1', name: 'Mine', colour: '#111111', workspaceDepartmentId: TEST_DEPT_ID }, { id: 'd2', name: 'Theirs', colour: '#222222', workspaceDepartmentId: OTHER.dept }],
     } })
     expect(res._status).toBe(201)
     const rows = await testDb.select().from(schema.departments).where(eq(schema.departments.chartId, (res._body as { id: string }).id))

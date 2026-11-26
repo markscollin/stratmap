@@ -59,6 +59,18 @@ async function ensureDevWorkspace() {
   }
 }
 
+/**
+ * The sites a session token may have been issued for (R-75): `CLERK_AUTHORIZED_PARTIES` (comma-separated origins), else on
+ * production the site's own `APP_URL`. A token minted for another site that uses the same Clerk instance is then refused.
+ * Unset (local, preview without the variable): not checked, as before.
+ */
+export function authorizedParties(): string[] | undefined {
+  const listed = (process.env.CLERK_AUTHORIZED_PARTIES ?? '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean)
+  if (listed.length) return listed
+  const app = process.env.APP_URL?.trim().replace(/\/$/, '')
+  return process.env.VERCEL_ENV === 'production' && app ? [app] : undefined
+}
+
 // Verifies identity only — does NOT require a workspace to exist.
 // Use this for workspace creation (onboarding) where no membership row exists yet.
 export async function requireUser(
@@ -91,6 +103,7 @@ export async function requireUser(
     const { verifyToken } = await import('@clerk/backend')
     const payload = await verifyToken(authHeader.slice(7), {
       secretKey: process.env.CLERK_SECRET_KEY!,
+      authorizedParties: authorizedParties(),
     })
     return { userId: payload.sub }
   } catch {
@@ -138,6 +151,7 @@ export async function requireAuth(
     const { verifyToken } = await import('@clerk/backend')
     const payload = await verifyToken(authHeader.slice(7), {
       secretKey: process.env.CLERK_SECRET_KEY!,
+      authorizedParties: authorizedParties(),
     })
     userId = payload.sub
   } catch {

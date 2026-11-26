@@ -268,3 +268,14 @@ describe('reading files', () => {
     expect(plan.stats).toMatchObject({ vacant: 1, roots: 1, departments: 3 })
   })
 })
+
+// R-75: the server stores department colours as #RRGGBB only, so the importer turns any hex colour into that form.
+describe('toSixDigitHex (R-75)', () => {
+  it('expands short forms and drops alpha', async () => {
+    const { toSixDigitHex } = await import('../importOrg')
+    expect(toSixDigitHex('#abc')).toBe('#AABBCC')
+    expect(toSixDigitHex('#abcd')).toBe('#AABBCC')
+    expect(toSixDigitHex('#0ea5e9')).toBe('#0EA5E9')
+    expect(toSixDigitHex('#0ea5e980')).toBe('#0EA5E9')
+  })
+})

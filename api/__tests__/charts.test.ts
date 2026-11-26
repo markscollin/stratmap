@@ -127,7 +127,7 @@ describe('POST /api/charts', () => {
   })
 
   it('remaps departmentId foreign key in nodes when seeding from template', async () => {
-    const templateDepts = [{ id: 'tmpl-dept-1', name: 'Engineering', colour: '#blue' }]
+    const templateDepts = [{ id: 'tmpl-dept-1', name: 'Engineering', colour: '#1D4ED8' }]
     const templateNodes = [{ id: 'tmpl-node-1', name: 'Alice', title: 'CTO', x: 0, y: 0, departmentId: 'tmpl-dept-1' }]
 
     const res = createRes()

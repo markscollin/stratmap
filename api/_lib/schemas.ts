@@ -15,6 +15,8 @@ import {
 export const Id = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'invalid id')
 
 /** Optional foreign-key id; the client sends '' for "none", which we store as null. */
+/** A department colour: #RRGGBB only (R-75). Cards append an alpha suffix to it, and nothing else (CSS, url()) is ever drawn. */
+const Colour = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'must be a colour like #0EA5E9')
 const OptionalRef = z.union([Id, z.literal(''), z.null()])
   .optional()
   .transform(v => (v === '' ? null : v))
@@ -37,7 +39,7 @@ const nodeFields = {
   status: enumOf(nodeStatusEnum).optional(),
   employmentType: enumOf(employmentTypeEnum).optional(),
   roleType: enumOf(roleTypeEnum).nullable().optional(),
-  avatarUrl: z.string().max(2048).nullable().optional(),
+  avatarUrl: z.string().max(2048).regex(/^https:\/\//, 'must be an https address').nullable().optional(), // R-75
   location: ShortText.nullable().optional(),
   startDate: z.string().max(40).nullable().optional(),
   x: Coord,
@@ -68,7 +70,7 @@ export const ChartCreate = z.object({
   templateDepts: z.array(z.object({
     id: Id,
     name: Name,
-    colour: z.string().max(50),
+    colour: Colour,
     workspaceDepartmentId: OptionalRef,
   })).max(500).default([]),
 })
@@ -78,7 +80,7 @@ export const ChartImport = z.object({
   nodes: z.array(z.object({ ...nodeFields, id: Id })).min(1).max(MAX_TEMPLATE_NODES),
   edges: z.array(z.object({ sourceId: Id, targetId: Id })).max(MAX_TEMPLATE_NODES * 2).default([]),
   /** Every department the nodes use; same-named ones on the chart are reused. */
-  departments: z.array(z.object({ id: Id, name: Name, colour: z.string().max(50) })).max(500).default([]),
+  departments: z.array(z.object({ id: Id, name: Name, colour: Colour })).max(500).default([]),
 })
 
 export const ChartUpdate = z.object({
@@ -156,7 +158,6 @@ export const HeadcountUpdate = z.object({
   status: enumOf(headcountStatusEnum),
 }).partial().refine(minNotAboveMax, SALARY_ORDER)
 
-const Colour = z.string().trim().min(1).max(50)
 
 export const DepartmentCreate = z.object({ name: z.string().trim().min(1).max(100), colour: Colour })
 

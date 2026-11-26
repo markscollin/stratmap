@@ -17,7 +17,8 @@ const DEV_USER_ID = 'u-dev'
 const DEV_PREFIX = 'dev-' // extra dev-bypass identities, see api/_lib/auth.ts
 
 export async function getUserIdentity(userId: string): Promise<UserIdentity> {
-  if (userId.startsWith(DEV_PREFIX)) {
+  // Only while the dev bypass is allowed (R-75): on a deployed site a `dev-` id gets no invented identity, it goes to Clerk (and fails).
+  if (userId.startsWith(DEV_PREFIX) && isDevBypassAllowed()) {
     // `x-dev-user: alice` → dev-alice, alice@e2e.test. Clerk ids never start with "dev-".
     const slug = userId.slice(DEV_PREFIX.length)
     return { emails: [`${slug}@e2e.test`], name: slug, avatarUrl: null }
