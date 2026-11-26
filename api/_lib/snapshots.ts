@@ -6,6 +6,7 @@ import { nodeOrder, edgeOrder } from './order'
 import { charts, chartSnapshots, departments, edges, nodes, workspaceDepartments, roleComments, jobDescriptions, deletedNodes, type SnapshotData } from '../../src/lib/db/schema'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import { trashCutoff } from './nodeTrash'
+import { revisionClaimStatement } from './revision'
 
 /** Dates in a trash copy come back from jsonb as strings. */
 const asDate = (v: unknown): Date | null => (v ? new Date(v as string) : null)
@@ -99,7 +100,7 @@ export async function freeSquattedIds(chartId: string, data: SnapshotData): Prom
  * brought back (a job description written for them earlier re-attaches, since it is keyed by role id). Reporting lines
  * are replaced. The chart's name, status and sharing are not touched.
  */
-export async function applySnapshot(chartId: string, workspaceId: string, snapshotData: SnapshotData): Promise<void> {
+export async function applySnapshot(chartId: string, workspaceId: string, snapshotData: SnapshotData, opts: { claimRevision?: { expected: number | undefined } } = {}): Promise<void> {
   const data = await freeSquattedIds(chartId, snapshotData)
   const [currentNodes, currentDepts, workspaceDepts] = await Promise.all([
     db.select({ id: nodes.id }).from(nodes).where(eq(nodes.chartId, chartId)),
@@ -143,6 +144,8 @@ export async function applySnapshot(chartId: string, workspaceId: string, snapsh
 
   await runAtomically(d => {
     const statements: PromiseLike<unknown>[] = [
+      // The revision claim, when asked for, in the same transaction as the restore (R-70).
+      ...(opts.claimRevision ? [revisionClaimStatement(d, chartId, opts.claimRevision.expected)] : []),
       d.delete(edges).where(eq(edges.chartId, chartId)),
     ]
     for (const part of chunk(removeNodes)) statements.push(d.delete(nodes).where(and(eq(nodes.chartId, chartId), inArray(nodes.id, part))))

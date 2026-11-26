@@ -327,7 +327,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   - Owner side: set the Customer Portal to charge upgrades immediately (`always_invoice`), and restrict promotion codes to the intended coupons.
 
 ### R-70 Chart revision is claimed before the write
-- [ ] (reported) `claimRevision` commits N+1, then the handler writes in a separate call (`api/charts/[id]/nodes/[nodeId].ts:~52-78`, `restore.ts:~56`, `import.ts:~60`).
+- [x] **Done 2026-11-26.** Reproduced (`api/__tests__/revision-atomic.test.ts`: a failed write left a bump; a retried DELETE or same-value PUT got a
+  false 409; a PUT for a missing role bumped). Every structural write now goes through `writeWithRevision` (`api/_lib/revision.ts`): an early
+  stale check, then the revision claim and the write as ONE atomic batch (the claim locks the chart row). Role edit/delete/create/restore, line
+  create/delete, chart rename/status and version restore (`applySnapshot(..., { claimRevision })`) all use it; role create's limit recount is now a
+  guard in that batch (R-33's take-back is gone). Repeats are answered before the claim: a missing role or line on DELETE is 204, a PUT that
+  changes nothing returns the role, a PUT for a missing role is 404. `claimRevision` (claim-then-write) is removed.
+- (reported) `claimRevision` commits N+1, then the handler writes in a separate call (`api/charts/[id]/nodes/[nodeId].ts:~52-78`, `restore.ts:~56`, `import.ts:~60`).
   A read between them gets N+1 with old data and its next edit passes the check (e.g. a line to a role being deleted; edges have no FK to nodes). A lost reply to a
   DELETE/PUT makes Retry hit a false `409 chart-changed`. **Fix:** put the conditional revision update in the same `runAtomically` batch as the write (fail the batch
   when it matches 0 rows), and make DELETE/PUT idempotent before the claim, as POST already is.

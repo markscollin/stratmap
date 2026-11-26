@@ -2,8 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, count, eq, gt, inArray } from 'drizzle-orm'
 import { requireAuth } from '../../../../_lib/auth'
 import { requireRole, requireChartsEditable, getEffectivePlan, sendPlanLimit } from '../../../../_lib/access'
-import { claimRevision } from '../../../../_lib/revision'
-import { runAtomically } from '../../../../_lib/atomic'
+import { writeWithRevision } from '../../../../_lib/revision'
 import { trashCutoff } from '../../../../_lib/nodeTrash'
 import { db } from '../../../../_lib/db'
 import { charts, nodes, edges, roleComments, deletedNodes, jobDescriptions } from '../../../../../src/lib/db/schema'
@@ -53,8 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Parents before their replies (a reply points at its parent).
     const commentsBack = [...comments].sort((a, b) => Number(!!a.parentId) - Number(!!b.parentId))
 
-    if ((await claimRevision(req, res, chartId)) === null) return
-    await runAtomically(d => [
+    // The claim and every row in one transaction (R-70).
+    const refused = await writeWithRevision(req, res, chartId, d => [
       d.insert(nodes).values(node),
       ...(commentsBack.length ? [d.insert(roleComments).values(commentsBack.map(c => ({
         ...c, createdAt: new Date(c.createdAt), editedAt: asDate(c.editedAt), deletedAt: asDate(c.deletedAt), resolvedAt: asDate(c.resolvedAt),
@@ -63,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...(linesBack.length ? [d.insert(edges).values(linesBack).onConflictDoNothing()] : []),
       d.delete(deletedNodes).where(eq(deletedNodes.id, copy.id)),
     ])
+    if (refused) return
     return res.status(201).json({ id: nodeId })
   } catch (err) {
     console.error('/api/charts/[id]/nodes/[nodeId]/restore', err)

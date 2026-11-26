@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../../../_lib/auth'
 import { requireRole, requireChartsEditable } from '../../../_lib/access'
-import { claimRevision } from '../../../_lib/revision'
+import { writeWithRevision } from '../../../_lib/revision'
 import { db } from '../../../_lib/db'
 import { charts, edges } from '../../../../src/lib/db/schema'
 
@@ -25,8 +25,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'DELETE') {
       if (!(await requireRole(auth, res, 'editor'))) return
       if (!(await requireChartsEditable(auth.workspaceId, res))) return
-      if ((await claimRevision(req, res, chartId)) === null) return
-      await db.delete(edges).where(and(eq(edges.id, edgeId), eq(edges.chartId, chartId)))
+      // Already gone (a retried delete): done, without claiming a revision (R-70).
+      const [line] = await db.select({ id: edges.id }).from(edges).where(and(eq(edges.id, edgeId), eq(edges.chartId, chartId))).limit(1)
+      if (!line) return res.status(204).end()
+      const refused = await writeWithRevision(req, res, chartId, d => [d.delete(edges).where(and(eq(edges.id, edgeId), eq(edges.chartId, chartId)))])
+      if (refused) return
       return res.status(204).end()
     }
 

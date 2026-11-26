@@ -7,7 +7,7 @@ import { parseBody } from '../../_lib/validate'
 import { NodeCreate, NodePositions, MAX_SAMPLE_NODES } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
 import { charts, nodes } from '../../../src/lib/db/schema'
-import { claimRevision } from '../../_lib/revision'
+import { writeWithRevision, guardStatement } from '../../_lib/revision'
 import { checkRoleReferences } from '../../_lib/references'
 import { fitsLimit } from '../../../src/lib/plans'
 
@@ -58,29 +58,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // The client generates the id so it can draw edges optimistically; it is
       // validated (charset/length) and always scoped to this chart.
-      if ((await claimRevision(req, res, chartId)) === null) return
-      const [node] = await db
-        .insert(nodes)
-        .values({ ...body, id: body.id ?? crypto.randomUUID(), chartId })
-        .returning()
-
-      // The count above and the insert are separate statements, so parallel requests can all pass the check.
-      // Count again now that the row is in: if the chart is over the limit, take this one back out (R-33). Requests
-      // that raced at the edge may all be refused rather than one accepted; the client's Retry then succeeds.
-      const [{ value: after }] = await db.select({ value: count() }).from(nodes).where(eq(nodes.chartId, chartId))
-      const sampleFull = chart.isSample && after > MAX_SAMPLE_NODES
-      if (sampleFull || !fitsLimit(plan.limits.maxNodesPerChart, after - 1)) {
-        await db.delete(nodes).where(and(eq(nodes.id, node.id), eq(nodes.chartId, chartId)))
-        if (sampleFull) return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
-        return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
-      }
+      // The claim, the insert and the limit recount in one transaction (R-70; the recount is R-33's, now a guard that fails the
+      // whole batch instead of an insert taken back out). Parallel requests at the edge may all be refused; Retry then succeeds.
+      const node = { ...body, id: body.id ?? crypto.randomUUID(), chartId }
+      const planMax = plan.limits.maxNodesPerChart
+      const cap = chart.isSample ? (planMax < 0 ? MAX_SAMPLE_NODES : Math.min(planMax, MAX_SAMPLE_NODES)) : planMax
+      const capReason = chart.isSample && (planMax < 0 || MAX_SAMPLE_NODES <= planMax) ? 'sample-too-large' : 'plan-limit'
+      const refused = await writeWithRevision(req, res, chartId, d => [
+        d.insert(nodes).values(node),
+        ...(cap >= 0 ? [guardStatement(d, capReason, sql`count(*) <= ${cap}`, sql`${nodes} WHERE ${nodes.chartId} = ${chartId}`)] : []),
+      ])
+      if (refused === 'sample-too-large') return res.status(400).json({ error: 'sample-too-large', message: `A sample chart can have at most ${MAX_SAMPLE_NODES} roles.` })
+      if (refused === 'plan-limit') return sendPlanLimit(res, 'nodes', plan, plan.limits.maxNodesPerChart)
+      if (refused) return
 
       // Funnel: a chart reaches 10 roles through people adding them (not template seeding).
       if (!chart.isSample && nodeCount < 10 && nodeCount + 1 >= 10) {
         await track('ten_roles_reached', { userId: auth.userId, workspaceId: auth.workspaceId, consent: hasAnalyticsConsent(req), props: { plan: plan.tier } })
       }
 
-      return res.status(201).json(node)
+      const [created] = await db.select().from(nodes).where(eq(nodes.id, node.id)).limit(1)
+      return res.status(201).json(created)
     }
 
     if (req.method === 'PUT') {

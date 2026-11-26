@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, eq } from 'drizzle-orm'
 import { requireAuth } from '../../../../_lib/auth'
 import { requireRole, requireFeature, requireChartsEditable, getEffectivePlan, sendPlanLimit } from '../../../../_lib/access'
-import { claimRevision } from '../../../../_lib/revision'
+import { revisionStillCurrent, sentRevision, guardFailure, sendChartChanged, sendRevisionHeader } from '../../../../_lib/revision'
 import { applySnapshot, saveSnapshot } from '../../../../_lib/snapshots'
 import { logAudit } from '../../../../_lib/audit'
 import { db } from '../../../../_lib/db'
@@ -38,10 +38,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Last check before changing anything: is this client looking at the latest chart?
-    if ((await claimRevision(req, res, chartId)) === null) return
+    if (!(await revisionStillCurrent(req, res, chartId))) return
 
     await saveSnapshot({ workspaceId: auth.workspaceId, chartId, name: `Before restoring “${snapshot.name}”`.slice(0, 100), kind: 'auto', userId: auth.userId })
-    await applySnapshot(chartId, auth.workspaceId, snapshot.data)
+    // The revision is claimed inside the restore's own transaction (R-70): a restore that fails leaves no bump behind.
+    try {
+      await applySnapshot(chartId, auth.workspaceId, snapshot.data, { claimRevision: { expected: sentRevision(req) } })
+    } catch (err) {
+      if (guardFailure(err) === 'chart-changed') { await sendChartChanged(res, chartId); return }
+      throw err
+    }
+    await sendRevisionHeader(res, chartId)
     await logAudit({
       workspaceId: auth.workspaceId, actorUserId: auth.userId, action: 'chart.restored', targetType: 'chart', targetId: chartId,
       details: { chartName: chart.name, versionName: snapshot.name },

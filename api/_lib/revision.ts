@@ -7,13 +7,15 @@
 // silently mixing two people's edits. A request without the header is not checked
 // (scripts, older clients) but still bumps the revision.
 //
-// The check and the bump are one conditional UPDATE, so two simultaneous writes with
-// the same revision cannot both succeed. Call it as the last step before the write,
-// after validation, role and plan checks, so refused requests don't bump anything.
+// The check and the bump are one conditional UPDATE, run in the SAME transaction as the write it stands for
+// (`writeWithRevision`, R-70), so two simultaneous writes with the same revision cannot both succeed, a failed write
+// bumps nothing, and no reader sees the new revision with the old rows. Do validation, role, plan and "already done"
+// checks first, so refused or repeated requests don't bump anything.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { and, eq, sql, type SQL } from 'drizzle-orm'
+import { eq, sql, type SQL } from 'drizzle-orm'
 import { db } from './db'
 import { charts } from '../../src/lib/db/schema'
+import { runAtomically } from './atomic'
 
 export const REVISION_HEADER = 'X-Chart-Revision'
 
@@ -22,22 +24,6 @@ function expectedRevision(req: VercelRequest): number | undefined {
   const value = Array.isArray(raw) ? raw[0] : raw
   if (value === undefined || !/^\d{1,9}$/.test(value)) return undefined
   return Number(value)
-}
-
-/** Claims the next revision. Returns it, or sends 409 and returns null. */
-export async function claimRevision(req: VercelRequest, res: VercelResponse, chartId: string): Promise<number | null> {
-  const expected = expectedRevision(req)
-  const [row] = await db
-    .update(charts)
-    .set({ revision: sql`${charts.revision} + 1`, updatedAt: new Date() })
-    .where(and(eq(charts.id, chartId), expected === undefined ? undefined : eq(charts.revision, expected)))
-    .returning({ revision: charts.revision })
-  if (row) {
-    res.setHeader(REVISION_HEADER, String(row.revision))
-    return row.revision
-  }
-  await sendChartChanged(res, chartId)
-  return null
 }
 
 // ── Inside one atomic batch (R-59) ──────────────────────────────────────────────────────────────────────────────────────────
@@ -99,4 +85,27 @@ export async function revisionStillCurrent(req: VercelRequest, res: VercelRespon
 export async function sendRevisionHeader(res: VercelResponse, chartId: string): Promise<void> {
   const [current] = await db.select({ revision: charts.revision }).from(charts).where(eq(charts.id, chartId)).limit(1)
   if (current) res.setHeader(REVISION_HEADER, String(current.revision))
+}
+
+/**
+ * A structural write and its revision claim as ONE atomic batch (R-70): the revision is bumped in the same transaction as the
+ * rows it stands for, so a failure part-way leaves no bump behind, and no reader can see the new revision with the old rows.
+ * `build` returns the write's statements (no reads between them); any guard statements in it can fail the batch with a reason.
+ * Answers 409 chart-changed itself (stale client, checked early and again in the batch) and sets `X-Chart-Revision` on success.
+ * Returns null when the write was committed, 'chart-changed' when the 409 was sent, or another guard's reason for the caller.
+ */
+export async function writeWithRevision(
+  req: VercelRequest, res: VercelResponse, chartId: string, build: (d: typeof db) => PromiseLike<unknown>[],
+): Promise<string | null> {
+  if (!(await revisionStillCurrent(req, res, chartId))) return 'chart-changed'
+  try {
+    await runAtomically(d => [revisionClaimStatement(d, chartId, sentRevision(req)), ...build(d)])
+  } catch (err) {
+    const reason = guardFailure(err)
+    if (reason === 'chart-changed') { await sendChartChanged(res, chartId); return reason }
+    if (reason) return reason
+    throw err
+  }
+  await sendRevisionHeader(res, chartId)
+  return null
 }

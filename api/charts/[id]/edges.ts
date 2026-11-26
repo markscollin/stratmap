@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../../_lib/auth'
 import { requireRole, requireChartsEditable } from '../../_lib/access'
-import { claimRevision } from '../../_lib/revision'
+import { writeWithRevision } from '../../_lib/revision'
 import { parseBody } from '../../_lib/validate'
 import { EdgeCreate } from '../../_lib/schemas'
 import { db } from '../../_lib/db'
@@ -49,14 +49,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      if ((await claimRevision(req, res, chartId)) === null) return
-      const [edge] = await db
-        .insert(edges)
-        .values({ id: clientId ?? crypto.randomUUID(), chartId, sourceId, targetId })
-        .onConflictDoNothing({ target: edges.id })
-        .returning()
-      // Lost a race for the same id between the check and the insert.
-      if (!edge) return res.status(409).json({ error: 'id-taken' })
+      const edge = { id: clientId ?? crypto.randomUUID(), chartId, sourceId, targetId }
+      // The claim and the insert in one transaction (R-70). The same id taken by a racing request fails the insert: 409.
+      try {
+        if (await writeWithRevision(req, res, chartId, d => [d.insert(edges).values(edge)])) return
+      } catch (err) {
+        if ((err as { code?: string; cause?: { code?: string } }).code === '23505' || (err as { cause?: { code?: string } }).cause?.code === '23505') {
+          return res.status(409).json({ error: 'id-taken' })
+        }
+        throw err
+      }
 
       return res.status(201).json(edge)
     }

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '../_lib/auth'
 import { requireRole, requireFeature, requireChartsEditable } from '../_lib/access'
-import { claimRevision } from '../_lib/revision'
+import { writeWithRevision } from '../_lib/revision'
 import { parseBody } from '../_lib/validate'
 import { ChartUpdate } from '../_lib/schemas'
 import { db } from '../_lib/db'
@@ -61,18 +61,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Renaming or changing status is a structural edit: stale clients get 409 (roadmap 2.4).
       // Sharing on/off is a setting, not content, so it never conflicts.
-      if ((name !== undefined || status !== undefined) && (await claimRevision(req, res, chartId)) === null) return
-
-      const [updated] = await db
-        .update(charts)
-        .set({
-          ...(name !== undefined && { name }),
-          ...(status !== undefined && { status }),
-          ...(isPublic !== undefined && { isPublic }),
-          updatedAt: new Date(),
-        })
-        .where(eq(charts.id, chartId))
-        .returning()
+      const changes = {
+        ...(name !== undefined && { name }),
+        ...(status !== undefined && { status }),
+        ...(isPublic !== undefined && { isPublic }),
+        updatedAt: new Date(),
+      }
+      if (name !== undefined || status !== undefined) {
+        // The claim and the rename/status change in one transaction (R-70).
+        if (await writeWithRevision(req, res, chartId, d => [d.update(charts).set(changes).where(eq(charts.id, chartId))])) return
+      } else {
+        await db.update(charts).set(changes).where(eq(charts.id, chartId))
+      }
+      const [updated] = await db.select().from(charts).where(eq(charts.id, chartId)).limit(1)
 
       if (isPublic !== undefined && isPublic !== chart.isPublic) {
         await logAudit({
