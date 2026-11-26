@@ -3,7 +3,12 @@ import { db } from './db'
 import { chunk } from './chunk'
 import { runAtomically } from './atomic'
 import { nodeOrder, edgeOrder } from './order'
-import { charts, chartSnapshots, departments, edges, nodes, workspaceDepartments, type SnapshotData } from '../../src/lib/db/schema'
+import { charts, chartSnapshots, departments, edges, nodes, workspaceDepartments, roleComments, jobDescriptions, deletedNodes, type SnapshotData } from '../../src/lib/db/schema'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
+import { trashCutoff } from './nodeTrash'
+
+/** Dates in a trash copy come back from jsonb as strings. */
+const asDate = (v: unknown): Date | null => (v ? new Date(v as string) : null)
 
 // Chart version history (roadmap 5): capturing a chart's structure, and putting a saved version back.
 // A version holds roles, reporting lines and departments only: never job-description text or salary bands.
@@ -108,6 +113,34 @@ export async function applySnapshot(chartId: string, workspaceId: string, snapsh
   // A department linked to a workspace department that has since been deleted would break the foreign key: unlink it.
   const liveWorkspaceDepts = new Set(workspaceDepts.map(d => d.id))
 
+  // R-67: a role the restore removes goes into the deleted-role trash with its comments, lines and job descriptions, exactly like
+  // a role delete (it used to lose its comments at once and leave its JDs to the orphan purge). A role the restore brings back
+  // takes its comments and JDs back out of the trash, so restoring the "Before restoring" version gives back everything.
+  const currentIds = new Set(currentNodes.map(n => n.id))
+  const returning = data.nodes.map(n => n.id).filter(id => !currentIds.has(id))
+  const [removedRows, removedComments, removedJds, removedLines, trashed] = await Promise.all([
+    readIn(nodes, removeNodes, chartId),
+    readIn(roleComments, removeNodes, chartId, roleComments.nodeId),
+    readIn(jobDescriptions, removeNodes, chartId, jobDescriptions.nodeId),
+    db.select().from(edges).where(eq(edges.chartId, chartId)),
+    returning.length
+      ? readIn(deletedNodes, returning, chartId, deletedNodes.nodeId).then(rows => rows.filter(r => r.deletedAt > trashCutoff()))
+      : Promise.resolve([] as (typeof deletedNodes.$inferSelect)[]),
+  ])
+  const deletedBy = 'system:restore'
+  const copies = removedRows.map(node => ({
+    id: crypto.randomUUID(), chartId, nodeId: node.id, deletedBy, deletedAt: new Date(),
+    data: {
+      node,
+      comments: removedComments.filter(c => c.nodeId === node.id),
+      edges: removedLines.filter(e => e.sourceId === node.id || e.targetId === node.id),
+      jobDescriptions: removedJds.filter(j => j.nodeId === node.id),
+    },
+  }))
+  const commentsBack = trashed.flatMap(t => t.data.comments ?? [])
+    .sort((a, b) => Number(!!a.parentId) - Number(!!b.parentId)) // a thread's first comment before its replies
+  const jdsBack = trashed.flatMap(t => t.data.jobDescriptions ?? [])
+
   await runAtomically(d => {
     const statements: PromiseLike<unknown>[] = [
       d.delete(edges).where(eq(edges.chartId, chartId)),
@@ -138,8 +171,41 @@ export async function applySnapshot(chartId: string, workspaceId: string, snapsh
       }))
     }
     for (const part of chunk(data.edges)) statements.push(d.insert(edges).values(part.map(e => ({ ...e, chartId }))))
+
+    // The removed roles' copies (the role rows are already gone above; their JDs go now, their comments went with the role).
+    for (const part of chunk(removeNodes)) statements.push(d.delete(jobDescriptions).where(and(eq(jobDescriptions.chartId, chartId), inArray(jobDescriptions.nodeId, part))))
+    for (const part of chunk(copies)) {
+      statements.push(d.insert(deletedNodes).values(part).onConflictDoUpdate({
+        target: [deletedNodes.chartId, deletedNodes.nodeId],
+        set: { id: sql`excluded.id`, deletedBy: sql`excluded.deleted_by`, deletedAt: sql`excluded.deleted_at`, data: sql`excluded.data` },
+      }))
+    }
+    // Returning roles get their discussion and job descriptions back, and their trash copy is used up.
+    for (const part of chunk(commentsBack)) {
+      statements.push(d.insert(roleComments).values(part.map(c => ({
+        ...c, createdAt: new Date(c.createdAt), editedAt: asDate(c.editedAt),
+        deletedAt: asDate(c.deletedAt), resolvedAt: asDate(c.resolvedAt),
+      }))).onConflictDoNothing())
+    }
+    for (const part of chunk(jdsBack)) {
+      statements.push(d.insert(jobDescriptions).values(part.map(j => ({ ...j, updatedAt: new Date(j.updatedAt) }))).onConflictDoNothing())
+    }
+    if (trashed.length) statements.push(d.delete(deletedNodes).where(inArray(deletedNodes.id, trashed.map(t => t.id))))
     return statements
   })
+}
+
+/** Rows of `table` in this chart whose `column` (default: id) is one of `ids`, read in chunks. */
+async function readIn<T extends typeof nodes | typeof roleComments | typeof jobDescriptions | typeof deletedNodes>(
+  table: T, ids: string[], chartId: string, column?: AnyPgColumn,
+): Promise<T['$inferSelect'][]> {
+  const out: T['$inferSelect'][] = []
+  const t = table as unknown as typeof nodes
+  for (const part of chunk(ids)) {
+    const rows = await db.select().from(t).where(and(eq(t.chartId, chartId), inArray(column ?? t.id, part)))
+    out.push(...(rows as unknown as T['$inferSelect'][]))
+  }
+  return out
 }
 
 /** Creates a NEW chart (fresh ids everywhere) from a saved version, all or nothing. Returns the new chart's row. */

@@ -245,6 +245,40 @@ describe('restoring a version', () => {
     expect(await chartNodes()).toEqual(reorganised)
   })
 
+  // R-67: a restore removed roles that were not in the version and their comments went with them for good (cascade), while their
+  // job descriptions were left orphaned and later erased. Undoing the restore brought the roles back bare.
+  it('R-67: undoing a restore brings back the removed roles\' comments and job descriptions', async () => {
+    const v1 = idOf(await save('v1'))                  // CEO, CTO, Dev
+    await testDb.insert(schema.nodes).values({ id: 'n-new', chartId: TEST_CHART_ID, name: 'Di New', title: 'Designer', x: 0, y: 300 })
+    await testDb.insert(schema.roleComments).values([
+      { id: 'c1', workspaceId: TEST_WS_ID, chartId: TEST_CHART_ID, nodeId: 'n-new', authorId: 'u-ed', body: 'Hire by March', mentions: [] },
+      { id: 'c2', workspaceId: TEST_WS_ID, chartId: TEST_CHART_ID, nodeId: 'n-new', authorId: 'u-ad', body: 'Agreed', mentions: [], parentId: 'c1' },
+    ])
+    await testDb.insert(schema.jobDescriptions).values({ id: 'jd-new', chartId: TEST_CHART_ID, nodeId: 'n-new', status: 'draft', responsibilities: '<p>Design</p>', requirements: '', version: 1, updatedBy: 'u-ed', salaryBandMin: 50000 })
+
+    expect((await restore(v1))._status).toBe(200)       // Di New is not in v1: removed
+    expect((await chartNodes()).map(n => n.id)).not.toContain('n-new')
+    expect(await testDb.select().from(schema.jobDescriptions).where(eq(schema.jobDescriptions.nodeId, 'n-new'))).toHaveLength(0) // not left orphaned
+
+    const auto = (await list()).snapshots.find(s => s.kind === 'auto')!
+    expect((await restore(auto.id as string))._status).toBe(200)
+    expect((await chartNodes()).map(n => n.id)).toContain('n-new')
+    const comments = await testDb.select().from(schema.roleComments).where(eq(schema.roleComments.nodeId, 'n-new'))
+    expect(comments.map(c => c.body).sort()).toEqual(['Agreed', 'Hire by March'])
+    expect(comments.find(c => c.id === 'c2')!.parentId).toBe('c1')
+    const [jd] = await testDb.select().from(schema.jobDescriptions).where(eq(schema.jobDescriptions.nodeId, 'n-new'))
+    expect(jd).toMatchObject({ responsibilities: '<p>Design</p>', salaryBandMin: 50000 })
+    expect(await testDb.select().from(schema.deletedNodes).where(eq(schema.deletedNodes.nodeId, 'n-new'))).toHaveLength(0) // used up
+  })
+
+  it('R-67: a role removed by a restore can also be brought back on its own, like a deleted role', async () => {
+    const v1 = idOf(await save('v1'))
+    await testDb.insert(schema.nodes).values({ id: 'n-new', chartId: TEST_CHART_ID, name: 'Di New', title: 'Designer', x: 0, y: 300 })
+    await restore(v1)
+    const [copy] = await testDb.select().from(schema.deletedNodes).where(eq(schema.deletedNodes.nodeId, 'n-new'))
+    expect(copy.data.node).toMatchObject({ id: 'n-new', name: 'Di New' })
+  })
+
   it('keeps only the latest 20 of the app\'s own versions', async () => {
     const v1 = idOf(await save('v1'))
     for (let i = 0; i < MAX_AUTO_SNAPSHOTS + 3; i++) await restore(v1)

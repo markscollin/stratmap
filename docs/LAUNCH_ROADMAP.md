@@ -284,7 +284,11 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 ## Phase 4: first 30 days after launch
 
 ### R-67 Restoring a version permanently loses comments and job descriptions
-- [ ] (reported) `api/_lib/snapshots.ts:109-125`: roles not in the version are deleted; their comments cascade away at once (`role_comments.node_id`) and are not
+- [x] **Done 2026-11-26.** Reproduced (restore A, then "Before restoring A": the role came back with no comments and no JD). `applySnapshot`
+  now puts every role it removes into the deleted-role trash with its comments, lines and JDs (same as a role delete, in the same atomic
+  batch, `deletedBy: 'system:restore'`), deletes their JDs instead of orphaning them, and when a restore brings a role back it re-inserts that
+  role's comments (threads in order) and JDs from the trash and uses the copy up. Same 3-day window as deleted roles (D-1). Tests: `snapshots.test.ts`.
+- (reported) `api/_lib/snapshots.ts:109-125`: roles not in the version are deleted; their comments cascade away at once (`role_comments.node_id`) and are not
   copied to `deleted_nodes`; their JDs are orphaned and the daily `purgeOrphanJobDescriptions` erases them (it checks the JD's `updated_at`, usually old).
   So undoing a mistaken restore brings the roles back without their discussions or JDs. **Fix:** in the same batch, copy each removed role (with comments,
   lines, JDs) into `deleted_nodes`, exactly like a role delete, and on restore-of-the-auto-version bring them back; or at minimum keep the orphan purge off a chart's
@@ -375,9 +379,9 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
 | ID | Question | Blocks |
 |---|---|---|
 | D-6 | ~~VAT~~ Answered 2026-11-25: not a blocker; built and switched off (`PRICE_TAX_MODE`, `STRIPE_AUTOMATIC_TAX`). | — |
-| D-7 | May an editor take a JD or headcount plan out of "approved"? Does an editor's content edit of an approved item send it back to review? | R-68 |
+| D-7 | Answered 2026-11-26: editors **may** take a JD or hire plan out of approved; an editor's content edit of an approved JD sends it back to review; editors cannot edit or delete an approved hire plan (admins can). | R-68 |
 | D-8 | Which HR system first (e.g. HiBob, BambooHR, Personio, Rippling)? Which plan gets it? | R-78 |
-| D-9 | Is it acceptable that auto-layout and PDF export can be bypassed by a determined Free user? | R-76 |
+| D-9 | Answered 2026-11-26: acceptable; write it down. | R-76 |
 | D-10 | What does a 50–500 person company buy: a "Scale" tier (price?) or add-ons? | R-79 |
 | R-41 | Which chart (or image) should the landing page show? | R-62 |
 
