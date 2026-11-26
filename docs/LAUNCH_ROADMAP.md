@@ -394,7 +394,9 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   on public share/embed pages (they leak viewers' IPs). `/api/health`: light rate limit (each hit wakes Neon).
 
 ### R-76 Auto-layout and PDF are gated in the browser only
-- [ ] (reported) Auto-layout just saves positions through `PUT /nodes`; PDF is drawn in the browser. A determined Free user can get both. **Needs D-9**; if accepted, write it
+- [x] **Closed 2026-11-26 (D-9: accepted).** Confirmed: auto-layout only saves positions through `PUT /nodes`, and the PDF is drawn in the browser,
+  so a determined Free user can get both. The owner accepted that; it is written down in `CLAUDE.md` next to the PNG watermark note. No code change.
+- (reported) Auto-layout just saves positions through `PUT /nodes`; PDF is drawn in the browser. A determined Free user can get both. **Needs D-9**; if accepted, write it
   down in `CLAUDE.md` next to the watermark note and close.
 
 ---

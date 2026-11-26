@@ -346,7 +346,7 @@ New-chart content comes from `src/lib/chartTemplates.ts`.
   layout with real checkout to signed-in people. `AuthProvider` treats it as an *optional-auth* page: no sign-in redirect, but a signed-in person's workspace and plan still load.
 - **Watermark (2.6):** `showsBranding(tier)` in `src/lib/plans.ts` (Free only). `exportAsPNG(…, { watermark })` draws "Made with StratMap" into the pixels
   (`drawWatermark`). `GET /api/share/:code` returns a `branding` boolean (never the plan); `SharePage` shows the "Made with StratMap" pill only when true (Privacy/Terms stay),
-  and passes it to `OrgChart` as `brandExports`. PDF is paid-only and CSV is data, so neither is marked. It is client-side, so it can be bypassed by a determined user.
+  and passes it to `OrgChart` as `brandExports`. PDF is paid-only and CSV is data, so neither is marked. It is client-side, so it can be bypassed by a determined user. **The same is accepted for auto-layout and PDF export (owner decision D-9, R-76):** auto-layout only saves positions and the PDF is drawn in the browser, so both are gated in the UI only. Do not spend effort on server-side enforcement without asking.
 - **Not verifiable locally:** the Vercel rewrites and `includeFiles` only run on Vercel. After the first deploy: open `/charts/x` directly (should load the app),
   and paste a share link into Slack (should unfurl with the name and role count).
 - **Tests:** `src/lib/__tests__/seo.test.ts`, `vercelRewrites.test.ts`, `src/utils/__tests__/export.test.ts`, `src/pages/__tests__/SharePage.test.tsx`, `PricingRoute.test.tsx`,
