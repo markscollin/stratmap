@@ -104,9 +104,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [claimed] = await db.delete(pendingInvites).where(eq(pendingInvites.id, invite.id)).returning()
     if (!claimed) return res.status(404).json({ error: 'invite-not-found', message: 'This invite has already been used.' })
 
+    const memberId = crypto.randomUUID()
     try {
       await db.insert(workspaceMembers).values({
-        id: crypto.randomUUID(),
+        id: memberId,
         workspaceId: claimed.workspaceId,
         userId: user.userId,
         email: claimed.email,
@@ -118,6 +119,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Put the invite back so the user can retry.
       await db.insert(pendingInvites).values(claimed).catch(() => {})
       throw err
+    }
+
+    // The seat check above and the insert are separate statements, so someone else can take the last seat in between (R-74).
+    // Count again now that this person is in; over the cap, take back exactly what this request did and keep the invite.
+    if (plan) {
+      const { members } = await getSeatUsage(claimed.workspaceId)
+      if (!fitsLimit(plan.limits.seats, members, 0)) {
+        await db.delete(workspaceMembers).where(eq(workspaceMembers.id, memberId))
+        await db.insert(pendingInvites).values(claimed).onConflictDoNothing()
+        return res.status(402).json({
+          error: 'plan-limit', limit: 'seats', max: plan.limits.seats, tier: plan.tier,
+          message: 'This workspace has no free seats on its current plan. Ask a workspace admin to upgrade or free up a seat, then try again.',
+        })
+      }
     }
 
     await logAudit({

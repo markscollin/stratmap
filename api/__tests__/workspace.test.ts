@@ -277,14 +277,13 @@ describe('POST /api/workspace', () => {
     })
 
     it('a workspace that could not be created gives the trial back', async () => {
-      const real = testDb.insert.bind(testDb)
-      let failed = false
-      const spy = vi.spyOn(testDb, 'insert').mockImplementation(((table: unknown) => {
-        if (table === schema.workspaces && !failed) { failed = true; throw new Error('database down') }
-        return real(table as never)
-      }) as never)
+      // The workspace insert fails (inside the create's transaction since R-74, so a spy on testDb.insert no longer sees it).
+      const exec = (t: string) => (testDb as unknown as { $client: { exec: (q: string) => Promise<unknown> } }).$client.exec(t)
+      await exec(`CREATE OR REPLACE FUNCTION fail_ws() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'database down'; END $$;
+        CREATE TRIGGER fail_ws BEFORE INSERT ON workspaces FOR EACH STATEMENT EXECUTE FUNCTION fail_ws();`)
+      vi.spyOn(console, 'error').mockImplementation(() => {})
       const res = await create()
-      spy.mockRestore()
+      await exec('DROP TRIGGER fail_ws ON workspaces')
       expect(res._status).toBe(500)
       expect(await testDb.select().from(schema.trialGrants)).toHaveLength(0)
       const retry = await create()

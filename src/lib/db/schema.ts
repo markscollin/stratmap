@@ -179,7 +179,11 @@ export const jobDescriptions = pgTable('job_descriptions', {
   version: integer('version').notNull().default(1),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   updatedBy: text('updated_by').notNull(),
-}, (t) => [index('job_descriptions_chart_id_node_id_idx').on(t.chartId, t.nodeId)])
+}, (t) => [
+  // Kept: migrations only add (expand/contract), and the adoption check (scripts/adopt.mjs) relies on that.
+  index('job_descriptions_chart_id_node_id_idx').on(t.chartId, t.nodeId),
+  uniqueIndex('job_descriptions_chart_node_uq').on(t.chartId, t.nodeId), // one JD per role (R-74); migration 0019 removes duplicates first
+])
 
 // ─── Headcount Plans ─────────────────────────────────────────────────────────
 

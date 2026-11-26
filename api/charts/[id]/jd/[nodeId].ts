@@ -146,6 +146,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updatedBy: auth.userId,
           ...body,
         })
+        // Two first saves at once (R-74): the unique (chart, role) index makes the second an update of the first, not a second row.
+        .onConflictDoUpdate({
+          target: [jobDescriptions.chartId, jobDescriptions.nodeId],
+          set: { ...body, updatedAt: new Date(), updatedBy: auth.userId },
+        })
         .returning()
 
       await logSalaryChange(auth, chartId, nodeId, SALARY_FIELDS.filter(f => body[f] !== undefined && body[f] !== null))

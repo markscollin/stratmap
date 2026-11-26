@@ -47,7 +47,7 @@ async function ensureDevWorkspace() {
       ownerRole: 'Founder/CEO',
       size: '11-50',
       planTier: 'free',
-    })
+    }).onConflictDoNothing() // two first requests at once both see no workspace (R-74): the second one is a no-op
     await db.insert(workspaceMembers).values({
       id: 'wm-dev',
       workspaceId: DEV_WORKSPACE_ID,
@@ -55,7 +55,7 @@ async function ensureDevWorkspace() {
       email: 'dev@example.com',
       name: 'Dev User',
       permission: 'owner',
-    })
+    }).onConflictDoNothing()
   }
 }
 

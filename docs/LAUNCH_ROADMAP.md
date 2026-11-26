@@ -27,7 +27,7 @@ Owner account work is still listed in `docs/OWNER_CHECKLIST.md`. Tick items **he
 
 **After Phase 0 + 1 (2026-11-24):** typecheck clean; lint 0 errors, 14 warnings; 1,000 frontend (+2 skipped); API 948/948; build OK;
 e2e 126/126. Seen in e2e logs, not a test failure and not from these changes (present before them): a `workspaces_pkey` duplicate-key error
-and a failed `workspaceDepartmentStore` fetch during `journey.spec.ts`, probably two parallel first requests for the `u-dev` workspace. Worth a look in R-74.
+and a failed `workspaceDepartmentStore` fetch during `journey.spec.ts`: two parallel first requests creating the dev-only `u-dev` workspace. Fixed in R-74.
 
 Sizes: **S** under half a day, **M** one to two days, **L** three days or more.
 
@@ -371,7 +371,12 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   `CREATE INDEX CONCURRENTLY` is impossible; add a "no-transaction" marker before any table is big.
 
 ### R-74 Check-then-insert races
-- [ ] (reported) (1) `api/invites/accept.ts:~76-110` checks seats then inserts, with no recount, against the rule in `CLAUDE.md`; recount and take back like invite create.
+- [x] **Done 2026-11-26.** All three reproduced (`api/__tests__/insert-races.test.ts`). (1) Invite accept recounts members after joining and, over
+  the cap, takes back exactly its own member row and puts the invite back (402). (2) Migration 0019 removes duplicate job descriptions (keeps the
+  newest) and adds a unique `(chart_id, node_id)` index (the old one stays: migrations only add, which `scripts/adopt.mjs` relies on); the first save is an upsert, so two first autosaves leave one row. (3) `POST /api/workspace` writes
+  the workspace and the owner's membership in one batch (a failure leaves nothing, and the trial claim is released). Also: the `workspaces_pkey`
+  error seen in e2e logs was the dev-only `u-dev` workspace being created by two first requests at once; that insert is now idempotent.
+- (reported) (1) `api/invites/accept.ts:~76-110` checks seats then inserts, with no recount, against the rule in `CLAUDE.md`; recount and take back like invite create.
   (2) `job_descriptions` has a non-unique `(chart_id, node_id)` index (`schema.ts:176`): two first autosaves can both insert; make it unique (dedupe first, keep newest)
   and upsert. (3) `api/workspace.ts:~98-115`: workspace insert and owner-member insert are separate; a failure between leaves an orphan the user owns; put them in one batch.
 

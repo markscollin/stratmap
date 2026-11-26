@@ -12,6 +12,7 @@ import { softDeleteWorkspace, eraseDate } from './_lib/workspaceLifecycle'
 import { reportError } from './_lib/sentry'
 import { getUserIdentity, type UserIdentity } from './_lib/identity'
 import { workspaces, workspaceMembers, trialGrants } from '../src/lib/db/schema'
+import { runAtomically } from './_lib/atomic'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -86,26 +87,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (claimed) trial = { trialPlan: NEW_WORKSPACE_TRIAL_PLAN, trialEndsAt: new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000) }
       }
 
-      let ws: typeof workspaces.$inferSelect
+      // The workspace and its owner's membership in ONE atomic batch (R-74): a failure between them used to leave a workspace
+      // the person owned but could not open (and, with the one-owned-workspace rule, could never replace).
       try {
-        ;[ws] = await db
-          .insert(workspaces)
-          .values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size, ...trial })
-          .returning()
+        await runAtomically(d => [
+          d.insert(workspaces).values({ id: workspaceId, name, ownerId: user.userId, ownerRole, size, ...trial }),
+          d.insert(workspaceMembers).values({
+            id: crypto.randomUUID(),
+            workspaceId,
+            userId: user.userId,
+            email: identity.emails[0] ?? '',   // verified by the sign-in provider, never what the browser sent (R-09)
+            name: identity.name ?? '',
+            permission: 'owner',
+          }),
+        ])
       } catch (err) {
         // The workspace was not made, so the trial was not used: give it back, or a failed request would cost it.
         if (trialClaimed) await db.delete(trialGrants).where(eq(trialGrants.userId, user.userId)).catch(() => {})
         throw err
       }
-
-      await db.insert(workspaceMembers).values({
-        id: crypto.randomUUID(),
-        workspaceId,
-        userId: user.userId,
-        email: identity.emails[0] ?? '',   // verified by the sign-in provider, never what the browser sent (R-09)
-        name: identity.name ?? '',
-        permission: 'owner',
-      })
+      const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1)
 
       await track('workspace_created', { userId: user.userId, workspaceId, consent: hasAnalyticsConsent(req), props: { plan: 'free' } })
 
