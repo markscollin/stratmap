@@ -244,7 +244,7 @@ export const InviteDecline = z.object({ inviteId: InviteId })
 // ─── Billing / AI / admin ────────────────────────────────────────────────────
 
 export const CheckoutCreate = z.object({
-  tier: z.enum(['starter', 'growth']),
+  tier: z.enum(['starter', 'growth', 'scale']),
   billingCycle: z.enum(['monthly', 'annual']),
 })
 

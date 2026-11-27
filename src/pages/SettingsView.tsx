@@ -7,7 +7,7 @@ import { usePlanLimits } from '../hooks/usePlanLimits'
 import { api, ApiError } from '../lib/apiClient'
 import { failureMessage } from '../lib/failureMessage'
 import { useToastStore } from '../store/toastStore'
-import { PLAN_LIMITS, UNLIMITED } from '../lib/plans'
+import { PLAN_LIMITS, PLAN_PRICES, TIER_NAME, UNLIMITED } from '../lib/plans'
 import { useBillingStore } from '../store/billingStore'
 import { ActivityTab } from '../features/audit/ActivityTab'
 import { DataRightsSection } from '../features/dataRights/DataRightsSection'
@@ -457,12 +457,15 @@ function BillingTab() {
   return <BillingTabContent />
 }
 
-const TIER_ORDER: PlanTier[] = ['free', 'starter', 'growth', 'enterprise']
-const TIER_PRICE: Partial<Record<PlanTier, string>> = { free: '£0', starter: '£18', growth: '£49' }
+const TIER_ORDER: PlanTier[] = ['free', 'starter', 'growth', 'scale', 'enterprise']
+// Prices come from plans.ts (they used to be typed here and could drift).
+const TIER_PRICE: Partial<Record<PlanTier, string>> = {
+  free: '£0', starter: `£${PLAN_PRICES.starter.monthly}`, growth: `£${PLAN_PRICES.growth.monthly}`, scale: `£${PLAN_PRICES.scale.monthly}`,
+}
 const TIER_HIGHLIGHT: Partial<Record<PlanTier, string>> = { starter: 'Job descriptions', growth: 'Headcount planning' }
 
 function tierName(tier: PlanTier): string {
-  return tier.charAt(0).toUpperCase() + tier.slice(1)
+  return TIER_NAME[tier]
 }
 
 function describeTier(tier: PlanTier): string {
@@ -470,7 +473,7 @@ function describeTier(tier: PlanTier): string {
   const n = (v: number, unit: string) => (v === UNLIMITED ? `Unlimited ${unit}` : `${v} ${unit}`)
   return [
     n(l.maxCharts, l.maxCharts === 1 ? 'chart' : 'charts'),
-    n(l.maxNodesPerChart, 'nodes'),
+    n(l.maxNodesPerChart, 'roles per chart'),
     TIER_HIGHLIGHT[tier],
     n(l.seats, 'seats'),
   ].filter(Boolean).join(' · ')
@@ -498,6 +501,7 @@ function BillingTabContent() {
   const style: Partial<Record<PlanTier, { grad: string; glow: string }>> = {
     starter: { grad: 'var(--grad-brand)', glow: 'var(--brand-glow)' },
     growth:  { grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
+    scale:   { grad: 'var(--grad-purple)', glow: 'rgba(139,92,246,.3)' },
   }
   const price = TIER_PRICE[currentTier]
   return (

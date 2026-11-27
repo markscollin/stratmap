@@ -420,7 +420,13 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   Probably an Enterprise or Growth add-on.
 
 ### R-79 A way to buy above Growth
-- [ ] Growth stops at 10 seats and 500 roles; above it there is only "Talk to sales". **Needs D-10.** Either a self-serve "Scale" tier in `PLAN_LIMITS`/Stripe, or seat/role
+- [x] 2026-11-27: a self-serve **Scale** tier (D-10): 25 seats, unlimited charts, 2,000 roles per chart, 600 AI drafts a month, every Growth
+  feature (audit export stays Enterprise), £129/month or £1,290/year. The builder's numbers: change them in `src/lib/plans.ts` (`PLAN_LIMITS`,
+  `PLAN_PRICES`) and the Stripe prices together. Migration 0021 adds `scale` to the `plan_tier` enum (additive). Pricing card, Settings → Billing,
+  checkout (`STRIPE_SCALE_MONTHLY_PRICE_ID` / `_ANNUAL_`, both blocking in `check:env`), Stripe price → tier, landing teaser. One shared
+  `TIER_NAME`. Settings → Billing read hard-coded prices before; it now reads `PLAN_PRICES`. Tests: `plans.test.ts`, `PricingRoute.test.tsx`,
+  `billing.test.ts`, `checkout.test.ts`, `owner-scripts.test.ts`.
+  Was: Growth stopped at 10 seats and 500 roles; above it there is only "Talk to sales". **Needs D-10.** Either a self-serve "Scale" tier in `PLAN_LIMITS`/Stripe, or seat/role
   add-ons on Growth. Code is small once decided (plans, pricing page, checkout price ids, `check:env`).
 
 ### R-80 Onboarding questions that nothing uses

@@ -109,6 +109,16 @@ describe('pricing page fixes (R-63)', () => {
     expect(screen.getByTestId('plan-includes-starter')).toHaveTextContent('Everything in Free, plus')
   })
 
+  it('offers Scale above Growth, with its numbers from plans.ts (R-79)', async () => {
+    const { PLAN_LIMITS, PLAN_PRICES } = await import('../../lib/plans')
+    renderRoute()
+    expect(screen.getByTestId('plan-includes-scale')).toHaveTextContent('Everything in Growth, plus')
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.scale.maxNodesPerChart} roles per chart`)).toBeTruthy()
+    expect(screen.getByText(`Up to ${PLAN_LIMITS.scale.seats} team members`)).toBeTruthy()
+    expect(screen.getByText(`£${PLAN_PRICES.scale.monthly}`)).toBeTruthy()
+    expect(screen.getByTestId('pricing-cta-scale')).toHaveAttribute('href', '/sign-up')
+  })
+
   it('every limit and price on the cards comes from plans.ts, and says "roles", not "nodes"', async () => {
     const { PLAN_LIMITS, PLAN_PRICES } = await import('../../lib/plans')
     renderRoute()

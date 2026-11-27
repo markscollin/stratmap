@@ -39,8 +39,8 @@ export function PricingPage() {
   const roles = (l: PlanLimits) => (l.maxNodesPerChart < 0 ? 'Unlimited roles per chart' : `Up to ${l.maxNodesPerChart} roles per chart`)
   const seats = (l: PlanLimits) => (l.seats < 0 ? 'Unlimited team members' : `Up to ${l.seats} team members`)
   const pounds = (n: number) => `£${n}`
-  const { free, starter, growth } = PLAN_LIMITS
-  const plans: { tier: 'free' | 'starter' | 'growth'; name: string; monthlyPrice: string; annualPrice: string; description: string; includes?: string; features: { name: string; included: boolean }[] }[] = [
+  const { free, starter, growth, scale } = PLAN_LIMITS
+  const plans: { tier: 'free' | 'starter' | 'growth' | 'scale'; name: string; monthlyPrice: string; annualPrice: string; description: string; includes?: string; features: { name: string; included: boolean }[] }[] = [
     {
       tier: 'free',
       name: 'Free',
@@ -93,6 +93,21 @@ export function PricingPage() {
         { name: `${growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
         { name: 'Headcount planning and budgets', included: true },
         { name: 'Version history & scenarios', included: true },
+      ],
+    },
+    {
+      // R-79: the self-serve step above Growth (D-10), for organisations of roughly 50 to 500 people.
+      tier: 'scale',
+      name: 'Scale',
+      monthlyPrice: pounds(PLAN_PRICES.scale.monthly),
+      annualPrice: pounds(PLAN_PRICES.scale.annual),
+      description: 'For organisations of about 50 to 500 people',
+      includes: 'Everything in Growth, plus',
+      features: [
+        { name: charts(scale), included: true },
+        { name: roles(scale), included: true },
+        { name: seats(scale), included: true },
+        { name: `${scale.aiDraftsPerMonth} AI JD drafts per month`, included: true },
       ],
     },
   ]
@@ -162,7 +177,7 @@ export function PricingPage() {
       </div>
 
       {/* Pricing cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, maxWidth: 1200, margin: '0 auto 40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, maxWidth: 1200, margin: '0 auto 40px' }}>
         {plans.map((plan) => {
           const isCurrent = signedIn && currentTier === plan.tier
           return (

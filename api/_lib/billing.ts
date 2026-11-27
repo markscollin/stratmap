@@ -27,6 +27,10 @@ function priceIds(): Record<PaidTier, Record<BillingCycle, string | undefined>> 
       monthly: process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID || undefined,
       annual:  process.env.STRIPE_GROWTH_ANNUAL_PRICE_ID || undefined,
     },
+    scale: {
+      monthly: process.env.STRIPE_SCALE_MONTHLY_PRICE_ID || undefined,
+      annual:  process.env.STRIPE_SCALE_ANNUAL_PRICE_ID || undefined,
+    },
   }
 }
 
@@ -52,7 +56,7 @@ export const LIVE_SUBSCRIPTION_STATUSES: ReadonlySet<string> = PAID_STATUSES
 // Statuses Stripe never leaves. The subscription is gone, so we forget its id.
 const TERMINAL_STATUSES = new Set<Stripe.Subscription.Status>(['canceled', 'incomplete_expired'])
 
-const TIER_RANK: Record<PaidTier, number> = { starter: 1, growth: 2 }
+const TIER_RANK: Record<PaidTier, number> = { starter: 1, growth: 2, scale: 3 }
 
 /**
  * The tier a subscription grants: Free unless it is in a paid status, else the

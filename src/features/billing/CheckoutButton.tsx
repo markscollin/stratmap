@@ -4,7 +4,7 @@ import { useToastStore } from '../../store/toastStore'
 import { usePermission } from '../../hooks/usePermission'
 
 interface CheckoutButtonProps {
-  tier: 'starter' | 'growth'
+  tier: 'starter' | 'growth' | 'scale'
   billingCycle: 'monthly' | 'annual'
   variant?: 'primary' | 'secondary'
 }

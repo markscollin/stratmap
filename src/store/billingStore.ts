@@ -6,6 +6,7 @@ const AI_DRAFT_LIMITS: Record<PlanTier, number> = {
   free:       PLAN_LIMITS.free.aiDraftsPerMonth,
   starter:    PLAN_LIMITS.starter.aiDraftsPerMonth,
   growth:     PLAN_LIMITS.growth.aiDraftsPerMonth,
+  scale:      PLAN_LIMITS.scale.aiDraftsPerMonth,
   enterprise: PLAN_LIMITS.enterprise.aiDraftsPerMonth,
 }
 
@@ -34,6 +35,7 @@ interface BillingStore {
 const FREE_PLAN: Plan = planFor('free')
 const STARTER_PLAN: Plan = planFor('starter')
 const GROWTH_PLAN: Plan = planFor('growth')
+const SCALE_PLAN: Plan = planFor('scale')
 const ENTERPRISE_PLAN: Plan = planFor('enterprise')
 
 // Single source of truth for tier → Plan. Use this everywhere a planTier string
@@ -42,6 +44,7 @@ export const PLAN_BY_TIER: Record<PlanTier, Plan> = {
   free: FREE_PLAN,
   starter: STARTER_PLAN,
   growth: GROWTH_PLAN,
+  scale: SCALE_PLAN,
   enterprise: ENTERPRISE_PLAN,
 }
 

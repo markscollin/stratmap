@@ -18,10 +18,7 @@ export function BillingSuccessPage() {
   const [outcome, setOutcome] = useState<Outcome>('checking')
   const [attemptKey, setAttemptKey] = useState(0)
 
-  const planNames: Record<string, string> = {
-    starter: 'Starter',
-    growth: 'Growth',
-  }
+  const planNames: Record<string, string> = { starter: 'Starter', growth: 'Growth', scale: 'Scale' }
   const displayPlan = planNames[plan || ''] || 'upgraded plan'
 
   // Sync the billing store from the DB. The Stripe webhook updates planTier

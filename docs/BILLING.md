@@ -65,7 +65,7 @@ How StratMap keeps a workspace's plan in step with Stripe (roadmap 1.3 and 1.4).
 1. **Webhook endpoint** `https://<domain>/api/webhooks/stripe`. Subscribe it to the eleven events listed above.
 2. **Customer Portal** (Settings → Billing → Customer portal):
    - Allow updating the payment method, viewing invoices, and cancelling. For cancellation, choose **at end of billing period**.
-   - Allow switching plans between the Starter and Growth products (monthly and annual prices).
+   - Allow switching plans between the Starter, Growth and Scale products (monthly and annual prices; Scale since R-79, env `STRIPE_SCALE_MONTHLY_PRICE_ID` and `STRIPE_SCALE_ANNUAL_PRICE_ID`).
      Set **downgrades to take effect at the end of the billing period** and **prorate upgrades**.
      For upgrades choose **charge the prorated amount immediately** (`always_invoice`), so an upgrade is paid for when it is used (R-69).
    - **Promotion codes:** Checkout allows them; create codes only from the coupons you mean to offer and give each a limit (redemptions, expiry, first-time customers), since any code that exists can be typed in.

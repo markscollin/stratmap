@@ -2,7 +2,7 @@ import type { VercelResponse } from '@vercel/node'
 import { and, count, eq, gt, isNull, or } from 'drizzle-orm'
 import { db } from './db'
 import { workspaces, workspaceMembers, pendingInvites, charts, permissionEnum } from '../../src/lib/db/schema'
-import { PLAN_LIMITS, PAID_FEATURES, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
+import { PLAN_LIMITS, PAID_FEATURES, TIER_NAME, tierHasFeature, type PlanLimits, type PaidFeature } from '../../src/lib/plans'
 import type { AuthContext } from './auth'
 import { resolvePlanTier } from './billing'
 
@@ -199,7 +199,7 @@ export async function requireFeature(workspaceId: string, res: VercelResponse, f
     feature,
     requiredTier: info.minTier,
     tier: plan?.tier ?? 'free',
-    message: `${info.label} ${info.label.endsWith('s') ? 'are' : 'is'} available on the ${info.minTier === 'starter' ? 'Starter' : info.minTier === 'growth' ? 'Growth' : 'Enterprise'} plan and above. ${info.unlocks}`,
+    message: `${info.label} ${info.label.endsWith('s') ? 'are' : 'is'} available on the ${TIER_NAME[info.minTier]} plan and above. ${info.unlocks}`,
   })
   return false
 }

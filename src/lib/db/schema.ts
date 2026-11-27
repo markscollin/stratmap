@@ -22,7 +22,7 @@ export const roleTypeEnum = pgEnum('role_type', ['existing', 'new-headcount', 'b
 export const roleStatusEnum = pgEnum('role_status', ['draft', 'in-review', 'approved', 'published', 'hired'])
 export const chartStatusEnum = pgEnum('chart_status', ['draft', 'editing', 'review', 'rejected', 'approved', 'live', 'archived'])
 export const permissionEnum = pgEnum('permission', ['owner', 'admin', 'editor', 'commenter', 'viewer'])
-export const planTierEnum = pgEnum('plan_tier', ['free', 'starter', 'growth', 'enterprise'])
+export const planTierEnum = pgEnum('plan_tier', ['free', 'starter', 'growth', 'scale', 'enterprise'])
 export const headcountStatusEnum = pgEnum('headcount_status', ['planned', 'approved', 'filled'])
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────

@@ -35,6 +35,8 @@ const RULES = [
   ['block', 'STRIPE_STARTER_ANNUAL_PRICE_ID', startsWith('price_'), 'live price id'],
   ['block', 'STRIPE_GROWTH_MONTHLY_PRICE_ID', startsWith('price_'), 'live price id'],
   ['block', 'STRIPE_GROWTH_ANNUAL_PRICE_ID', startsWith('price_'), 'live price id'],
+  ['block', 'STRIPE_SCALE_MONTHLY_PRICE_ID', startsWith('price_'), 'live price id (Scale, R-79)'],
+  ['block', 'STRIPE_SCALE_ANNUAL_PRICE_ID', startsWith('price_'), 'live price id (Scale, R-79)'],
   ['block', 'CRON_SECRET', long(24), 'without it the daily purge never runs and deleted workspaces are kept for ever'],
   ['block', 'ADMIN_SECRET', long(24), 'protects /api/admin/grant-trial'],
   ['block', 'RESEND_API_KEY', startsWith('re_'), 'without it no invite or notification email is sent'],

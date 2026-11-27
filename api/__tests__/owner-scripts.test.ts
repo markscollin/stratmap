@@ -14,6 +14,7 @@ const GOOD = {
   STRIPE_SECRET_KEY: 'sk_live_abc', STRIPE_WEBHOOK_SECRET: 'whsec_abc',
   STRIPE_STARTER_MONTHLY_PRICE_ID: 'price_1', STRIPE_STARTER_ANNUAL_PRICE_ID: 'price_2',
   STRIPE_GROWTH_MONTHLY_PRICE_ID: 'price_3', STRIPE_GROWTH_ANNUAL_PRICE_ID: 'price_4',
+  STRIPE_SCALE_MONTHLY_PRICE_ID: 'price_5', STRIPE_SCALE_ANNUAL_PRICE_ID: 'price_6', // R-79
   CRON_SECRET: 'a'.repeat(40), ADMIN_SECRET: 'b'.repeat(40), RESEND_API_KEY: 're_abc',
   APP_URL: 'https://stratmap.example.com', ANTHROPIC_API_KEY: 'sk-ant-abc',
   SENTRY_DSN: 'https://k@o.ingest.sentry.io/1', VITE_SENTRY_DSN: 'https://k@o.ingest.sentry.io/1',

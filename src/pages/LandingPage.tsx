@@ -177,7 +177,7 @@ export function LandingPage() {
           <div style={{ maxWidth: 620 }}>
             <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 8px' }}>Free to start. Pay when you grow.</h2>
             <p style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
-              Free for one chart of up to {free.maxNodesPerChart} roles. Starter is £{PLAN_PRICES.starter.monthly} a month and Growth £{PLAN_PRICES.growth.monthly} a month,
+              Free for one chart of up to {free.maxNodesPerChart} roles. Starter is £{PLAN_PRICES.starter.monthly} a month, Growth £{PLAN_PRICES.growth.monthly} and Scale £{PLAN_PRICES.scale.monthly},
               per workspace, not per person.
             </p>
           </div>

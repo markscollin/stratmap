@@ -43,7 +43,8 @@ describe('LandingPage (R-62)', () => {
     const teaser = screen.getByTestId('pricing-teaser').textContent ?? ''
     expect(teaser).toContain(`up to ${PLAN_LIMITS.free.maxNodesPerChart} roles`)
     expect(teaser).toContain(`£${PLAN_PRICES.starter.monthly} a month`)
-    expect(teaser).toContain(`£${PLAN_PRICES.growth.monthly} a month`)
+    expect(teaser).toContain(`Growth £${PLAN_PRICES.growth.monthly}`)
+    expect(teaser).toContain(`Scale £${PLAN_PRICES.scale.monthly}`)
   })
 
   it('no longer promises a chart that keeps itself current, and invents no social proof', () => {

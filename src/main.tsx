@@ -19,7 +19,7 @@ if (import.meta.env.DEV) {
     setPlan: (tier: string) => {
       const plan = PLAN_BY_TIER[tier as PlanTier]
       if (plan) useBillingStore.getState().setPlan(plan)
-      else console.warn('Unknown tier. Use: free, starter, growth, enterprise')
+      else console.warn('Unknown tier. Use: free, starter, growth, scale, enterprise')
     },
   }
 }

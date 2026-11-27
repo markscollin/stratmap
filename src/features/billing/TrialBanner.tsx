@@ -3,10 +3,10 @@ import { Link, useLocation } from 'react-router-dom'
 import { Sparkles, X } from 'lucide-react'
 import { useBillingStore } from '../../store/billingStore'
 import { usePermission } from '../../hooks/usePermission'
-import { PLAN_LIMITS } from '../../lib/plans'
+import { PLAN_LIMITS, TIER_NAME } from '../../lib/plans'
 import { trialDaysLeft } from '../../lib/trial'
 
-const NAME: Record<string, string> = { starter: 'Starter', growth: 'Growth', enterprise: 'Enterprise' }
+const NAME: Record<string, string> = TIER_NAME
 
 // Hidden for the rest of the day once dismissed (R-66): it is useful, not urgent, and it sat on every page including the canvas.
 const DISMISS_KEY = 'stratmap_trial_banner_dismissed'

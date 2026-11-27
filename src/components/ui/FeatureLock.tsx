@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import { UpgradeModal } from './UpgradeModal'
 import { usePlanLimits } from '../../hooks/usePlanLimits'
-import { PAID_FEATURES, type PaidFeature } from '../../lib/plans'
-
-const TIER_NAME = { starter: 'Starter', growth: 'Growth', enterprise: 'Enterprise' } as const
+import { PAID_FEATURES, TIER_NAME, type PaidFeature } from '../../lib/plans'
 
 /** Small "🔒 Starter" pill marking a locked control. */
 export function PlanBadge({ feature }: { feature: PaidFeature }) {

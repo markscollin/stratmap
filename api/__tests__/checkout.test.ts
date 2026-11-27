@@ -143,6 +143,18 @@ describe('POST /api/checkout', () => {
     expect(sessionCreate.mock.calls[0][0].customer).toBe('cus_old')
   })
 
+  it('starts a Scale checkout with the Scale price (R-79)', async () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test'
+    process.env.STRIPE_SCALE_ANNUAL_PRICE_ID = 'price_scale_annual'
+    try {
+      const res = createRes()
+      await handler(createReq({ method: 'POST', body: { tier: 'scale', billingCycle: 'annual' } }) as never, res as never)
+      expect(sessionCreate.mock.calls[0][0].line_items).toEqual([{ price: 'price_scale_annual', quantity: 1 }])
+    } finally {
+      delete process.env.STRIPE_SCALE_ANNUAL_PRICE_ID
+    }
+  })
+
   it('sends an existing subscriber to the Customer Portal instead of a second subscription', async () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test'
     process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID = 'price_growth_monthly'

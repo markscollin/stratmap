@@ -16,6 +16,11 @@ export interface PlanLimits {
 
 export const UNLIMITED = -1
 
+/** How a tier is named on every page and in every server message. */
+export const TIER_NAME: Record<PlanTier, string> = {
+  free: 'Free', starter: 'Starter', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise',
+}
+
 /**
  * Every new workspace starts with a free trial of a paid plan (launch review R-18, owner decision D-3), so the first minute is not
  * three locked features. It rides on the admin trial override (`trialPlan` + `trialEndsAt`), so nothing else needs to know about it.
@@ -28,6 +33,8 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free:       { seats: 3,  maxCharts: 1,  maxNodesPerChart: 30,  aiDraftsPerMonth: 0 },
   starter:    { seats: 5,  maxCharts: 5,  maxNodesPerChart: 100, aiDraftsPerMonth: 3 },
   growth:     { seats: 10, maxCharts: -1, maxNodesPerChart: 500, aiDraftsPerMonth: 300 },
+  // R-79 (owner decision D-10: a self-serve tier above Growth, numbers proposed by the builder): for companies of about 50 to 500.
+  scale:      { seats: 25, maxCharts: -1, maxNodesPerChart: 2000, aiDraftsPerMonth: 600 },
   enterprise: { seats: -1, maxCharts: -1, maxNodesPerChart: -1,  aiDraftsPerMonth: 1000 },
 }
 
@@ -35,6 +42,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
 export const PLAN_PRICES = {
   starter: { monthly: 18, annual: 180 },
   growth: { monthly: 49, annual: 490 },
+  scale: { monthly: 129, annual: 1290 },
 } as const
 
 /**
@@ -60,8 +68,8 @@ export function fitsLimit(limit: number, count: number, adding = 1): boolean {
 export type PaidFeature = 'jd-editor' | 'approval-workflow' | 'pdf-export' | 'ai-drafting' | 'auto-layout' | 'headcount-planning' | 'audit-export' | 'version-history'
 
 export interface FeatureInfo {
-  /** Cheapest tier that includes the feature. */
-  minTier: Exclude<PlanTier, 'free'>
+  /** Cheapest tier that includes the feature. Scale (R-79) adds room, not features, so no feature starts there. */
+  minTier: 'starter' | 'growth' | 'enterprise'
   label: string
   /** One sentence on what the user gets by upgrading. */
   unlocks: string
@@ -110,7 +118,7 @@ export const PAID_FEATURES: Record<PaidFeature, FeatureInfo> = {
   },
 }
 
-const TIER_RANK: Record<PlanTier, number> = { free: 0, starter: 1, growth: 2, enterprise: 3 }
+const TIER_RANK: Record<PlanTier, number> = { free: 0, starter: 1, growth: 2, scale: 3, enterprise: 4 }
 
 /** The better of two tiers (a trial never lowers what a workspace already pays for). */
 export function higherTier(a: PlanTier, b: PlanTier): PlanTier {

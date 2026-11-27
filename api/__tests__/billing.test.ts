@@ -72,6 +72,20 @@ describe('tierForSubscription', () => {
     expect(tierForSubscription(sub('past_due', ['p_g']))).toBe('growth')
   })
 
+  it('maps the Scale prices to Scale, above Growth (R-79)', () => {
+    process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID = 'p_g'
+    process.env.STRIPE_SCALE_MONTHLY_PRICE_ID = 'p_sc'
+    process.env.STRIPE_SCALE_ANNUAL_PRICE_ID = 'p_sca'
+    try {
+      expect(tierForSubscription(sub('active', ['p_sc']))).toBe('scale')
+      expect(tierForSubscription(sub('active', ['p_sca']))).toBe('scale')
+      expect(tierForSubscription(sub('active', ['p_g', 'p_sc']))).toBe('scale')
+    } finally {
+      delete process.env.STRIPE_SCALE_MONTHLY_PRICE_ID
+      delete process.env.STRIPE_SCALE_ANNUAL_PRICE_ID
+    }
+  })
+
   it('is free for statuses that do not pay', () => {
     process.env.STRIPE_GROWTH_MONTHLY_PRICE_ID = 'p_g'
     for (const status of ['unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'paused']) {

@@ -229,6 +229,13 @@ tier that unlocks it and the copy saying what it does. The list drives four plac
 
 To lock a new feature, add it to `PAID_FEATURES` and guard both the API route and the UI.
 
+**Scale tier (R-79, owner decision D-10, 2026-11-27):** `scale` sits between Growth and Enterprise (`PlanTier`, the `plan_tier` enum via migration 0021,
+`TIER_RANK`). It adds room, not features: every Growth feature, no feature has `minTier: 'scale'`. Its numbers (25 seats, 2,000 roles per chart, 600 AI
+drafts, £129/£1,290) are the builder's proposal in `PLAN_LIMITS`/`PLAN_PRICES`; Stripe prices come from `STRIPE_SCALE_MONTHLY_PRICE_ID` /
+`STRIPE_SCALE_ANNUAL_PRICE_ID`. Show a tier's name with `TIER_NAME` (plans.ts), never a hand-made map. **Adding a tier:** `PlanTier`, the enum (a migration),
+`PLAN_LIMITS`, `PLAN_PRICES`, `TIER_RANK` in plans.ts and in `api/_lib/billing.ts`, `priceIds()`, the checkout schema, `check:env`, the pricing card and
+`TIER_ORDER` in SettingsView; `tsc` finds most of them.
+
 ## Billing life-cycle (roadmap 1.3 + 1.4, 2026-11-05)
 
 See `docs/BILLING.md`. Summary:
