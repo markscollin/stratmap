@@ -183,7 +183,8 @@ export const DepartmentUpdate = DepartmentCreate.partial()
 
 export const WorkspaceCreate = z.object({
   name: z.string().trim().min(1).max(100),
-  ownerRole: z.string().trim().min(1).max(100),
+  // No longer asked in onboarding (R-80); older clients still send it.
+  ownerRole: z.string().trim().max(100).optional().default(''),
   size: z.string().trim().min(1).max(50),
   // No email or name here on purpose (R-09): the server takes both from the sign-in provider. A client that still sends them is ignored.
 })

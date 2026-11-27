@@ -430,7 +430,12 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   add-ons on Growth. Code is small once decided (plans, pricing page, checkout price ids, `check:env`).
 
 ### R-80 Onboarding questions that nothing uses
-- [ ] (verified by the UX run) "Your role" and "Company size" are asked and stored but unused. Either use them (e.g. company size picks the starter template and the default zoom;
+- [x] 2026-11-27: "Your role" is gone (nothing could honestly use it; the API still accepts it from old clients and stores '' otherwise).
+  Company size is now "How many people work there?" and decides how the workspace starts (`src/lib/onboardingStart.ts`): up to 50 people get
+  the 5-role starter chart; 51 and up are offered "Import your people" first (opens the import after setup) and a 13-role example. Not sent to
+  analytics: the owner's analytics decision lists the allowed properties, and size is not one of them. Tests: `onboardingStart.test.ts`,
+  `OnboardingPage.test.tsx`, `workspace.test.ts`.
+  Was: (verified by the UX run) "Your role" and "Company size" are asked and stored but unused. Either use them (e.g. company size picks the starter template and the default zoom;
   send them to analytics only with consent) or drop the step.
 
 ---

@@ -108,6 +108,14 @@ describe('POST /api/workspace', () => {
     expect(body.name).toBe('Acme')
   })
 
+  it('no longer needs "Your role" (R-80): a workspace is created from a name and a size', async () => {
+    const res = createRes()
+    await handler(createReq({ method: 'POST', body: { name: 'Acme', size: '51-200' } }) as never, res as never)
+    expect(res._status).toBe(201)
+    const [ws] = await testDb.select().from(schema.workspaces).where(eq(schema.workspaces.name, 'Acme'))
+    expect(ws).toMatchObject({ ownerRole: '', size: '51-200' })
+  })
+
   it('seeds the owner as a workspace member', async () => {
     const res = createRes()
     await handler(

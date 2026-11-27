@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { greetingName } from '../lib/greetingName'
 import { useNavigate } from 'react-router-dom'
-import { Plus, X, Zap } from 'lucide-react'
+import { Plus, X, Zap, Upload } from 'lucide-react'
 import { useUserStore } from '../store/userStore'
 import { useBillingStore, PLAN_BY_TIER } from '../store/billingStore'
 import { useToastStore } from '../store/toastStore'
@@ -12,6 +12,7 @@ import { api } from '../lib/apiClient'
 import { DeletedWorkspaceNotice } from '../features/dataRights/DeletedWorkspaceNotice'
 import { PendingInvitesChoice } from '../features/onboarding/PendingInvitesChoice'
 import type { Permission, CompanySize, WorkspaceRole, Workspace, PlanTier } from '../types'
+import { onboardingStart, type OnboardingStart } from '../lib/onboardingStart'
 import { buildChartTemplate } from '../lib/chartTemplates'
 import { PLAN_LIMITS } from '../lib/plans'
 
@@ -26,7 +27,6 @@ interface InviteRow {
   permission: Permission
 }
 
-const ROLES: WorkspaceRole[] = ['Founder/CEO', 'HR Leader', 'Operations', 'Finance', 'Other']
 const SIZES: CompanySize[] = ['1-10', '11-50', '51-200', '201-1000', '1000+']
 const PERMISSIONS: Permission[] = ['admin', 'editor', 'viewer']
 
@@ -41,7 +41,6 @@ export function OnboardingPage() {
 
   const [step, setStep] = useState<Step>(1)
   const [workspaceName, setWorkspaceName] = useState('')
-  const [ownerRole, setOwnerRole] = useState<WorkspaceRole>('Founder/CEO')
   const [size, setSize] = useState<CompanySize>('11-50')
   const [focus, setFocus] = useState<string | null>(null)
   // One finish at a time (R-34): a double click used to send the invites and create the starter chart twice.
@@ -69,24 +68,27 @@ export function OnboardingPage() {
     setInvites((rows) => rows.filter((_, i) => i !== idx))
   }
 
-  async function complete(sendInvites: boolean, quickStart = false) {
+  const start = onboardingStart(size)
+
+  async function complete(sendInvites: boolean, then: 'charts' | 'quick-start' | 'import' = 'charts') {
     if (busyRef.current) return
     busyRef.current = true
     setBusy(true)
     try {
-      await finish(sendInvites, quickStart)
+      await finish(sendInvites, then)
     } finally {
       busyRef.current = false
       setBusy(false)
     }
   }
 
-  async function finish(sendInvites: boolean, quickStart: boolean) {
+  async function finish(sendInvites: boolean, then: 'charts' | 'quick-start' | 'import') {
     const filledInvites = sendInvites ? invites.filter(r => r.email.trim()) : []
     try {
       const ws = await api.post<{ id: string; name: string; ownerRole: string; size: string; createdAt: string; myPermission?: Permission; planTier?: PlanTier; trialPlan?: PlanTier | null; trialEndsAt?: string | null }>(
         '/api/workspace',
-        { name: workspaceName.trim(), ownerRole, size, email: user?.email ?? '', userName: user?.name ?? '' }
+        // "Your role" is no longer asked (R-80: nothing used it); the size picks how the workspace starts.
+        { name: workspaceName.trim(), size }
       )
       setSelectedWorkspaceId(ws.id)
       const now = new Date().toISOString()
@@ -122,8 +124,13 @@ export function OnboardingPage() {
       }
 
       const firstName = greetingName(user?.name)
-      if (quickStart) {
-        const { nodes, edges, departments } = buildChartTemplate('quickstart')
+      if (then === 'import') {
+        addToast(`Welcome to StratMap, ${firstName}! Choose your file to import your people.`, 'success')
+        navigate('/charts?import=1')
+        return
+      }
+      if (then === 'quick-start') {
+        const { nodes, edges, departments } = buildChartTemplate(start.template)
         const chart = await createChart('Current Structure', nodes, edges, departments)
         if (chart) {
           addToast(`Welcome to StratMap, ${firstName}! Your starter chart is ready.`, 'success')
@@ -188,8 +195,6 @@ export function OnboardingPage() {
           <Step1
             workspaceName={workspaceName}
             setWorkspaceName={setWorkspaceName}
-            ownerRole={ownerRole}
-            setOwnerRole={setOwnerRole}
             size={size}
             setSize={setSize}
             focus={focus}
@@ -204,7 +209,9 @@ export function OnboardingPage() {
             removeInviteRow={removeInviteRow}
             onSkip={() => complete(false)}
             onSend={() => complete(true)}
-            onQuickStart={() => complete(false, true)}
+            onQuickStart={() => complete(false, 'quick-start')}
+            onImport={() => complete(false, 'import')}
+            start={start}
             canAddMore={invites.length < MAX_ONBOARDING_INVITES}
             busy={busy}
           />
@@ -222,15 +229,12 @@ export function OnboardingPage() {
 // ── Step 1 ──────────────────────────────────────────────────────────────────
 function Step1({
   workspaceName, setWorkspaceName,
-  ownerRole, setOwnerRole,
   size, setSize,
   focus, setFocus,
   onContinue,
 }: {
   workspaceName: string
   setWorkspaceName: (v: string) => void
-  ownerRole: WorkspaceRole
-  setOwnerRole: (v: WorkspaceRole) => void
   size: CompanySize
   setSize: (v: CompanySize) => void
   focus: string | null
@@ -268,28 +272,11 @@ function Step1({
         />
       </div>
 
-      {/* Your role */}
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>Your role</label>
-        <select
-          data-testid="owner-role"
-          value={ownerRole}
-          onChange={(e) => setOwnerRole(e.target.value as WorkspaceRole)}
-          style={{
-            width: '100%', padding: '10px 12px',
-            background: 'var(--input-bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 8, color: 'var(--text)', fontSize: 14,
-          }}
-        >
-          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </div>
-
       {/* Company size */}
       <div style={{ marginBottom: 32 }}>
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>Company size</label>
+        <label htmlFor="company-size" style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>How many people work there?</label>
         <select
+          id="company-size"
           data-testid="company-size"
           value={size}
           onChange={(e) => setSize(e.target.value as CompanySize)}
@@ -302,6 +289,7 @@ function Step1({
         >
           {SIZES.map((s) => <option key={s} value={s}>{s} people</option>)}
         </select>
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>We use this to suggest how to start your first chart.</p>
       </div>
 
       <button
@@ -327,7 +315,7 @@ function Step1({
 // ── Step 2 ──────────────────────────────────────────────────────────────────
 function Step2({
   invites, updateInvite, addInviteRow, removeInviteRow,
-  onSkip, onSend, onQuickStart, canAddMore, busy,
+  onSkip, onSend, onQuickStart, onImport, start, canAddMore, busy,
 }: {
   invites: InviteRow[]
   updateInvite: (idx: number, field: keyof InviteRow, value: string) => void
@@ -336,6 +324,8 @@ function Step2({
   onSkip: () => void
   onSend: () => void
   onQuickStart: () => void
+  onImport: () => void
+  start: OnboardingStart
   canAddMore: boolean
   busy: boolean
 }) {
@@ -406,36 +396,20 @@ function Step2({
         </button>
       )}
 
-      {/* Quick start option */}
-      <div style={{
-        marginTop: canAddMore ? 0 : 28, marginBottom: 12,
-        padding: '14px 16px', background: 'var(--raised)', borderRadius: 10,
-        border: '1px solid var(--border)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
-              Start with a starter chart
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              Creates a 5-node "Current Structure" chart — CEO, CTO, CPO, Head of Sales &amp; Ops
-            </div>
-          </div>
-          <button
-            data-testid="quick-start-btn"
-            onClick={onQuickStart}
-            disabled={busy}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', flexShrink: 0,
-              background: 'var(--brand-bg)', border: '1px solid var(--brand)',
-              borderRadius: 8, color: 'var(--brand)',
-              fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
-            }}
-          >
-            <Zap size={13} /> Quick start
-          </button>
-        </div>
+      {/* How to start (R-80): a bigger company is offered its own people first, then an example structure that fits its size. */}
+      <div style={{ marginTop: canAddMore ? 0 : 28 }}>
+        {start.suggestImport && (
+          <StartOption
+            testId="import-start-btn" title="Import your people"
+            body="From a CSV or Excel export of your HR system or a spreadsheet. You check every row before anything is added."
+            icon={<Upload size={13} />} label="Import" onClick={onImport} busy={busy} primary
+          />
+        )}
+        <StartOption
+          testId="quick-start-btn" title={start.suggestImport ? 'Or start from an example' : 'Start with a starter chart'}
+          body={`Creates a ${start.roles}-role "Current Structure" chart: ${start.summary}. Rename and change anything.`}
+          icon={<Zap size={13} />} label="Quick start" onClick={onQuickStart} busy={busy}
+        />
       </div>
 
       <div style={{ display: 'flex', gap: 10 }}>
@@ -468,5 +442,34 @@ function Step2({
         </button>
       </div>
     </>
+  )
+}
+
+function StartOption({ testId, title, body, icon, label, onClick, busy, primary }: {
+  testId: string; title: string; body: string; icon: React.ReactNode; label: string; onClick: () => void; busy: boolean; primary?: boolean
+}) {
+  return (
+    <div style={{ marginBottom: 12, padding: '14px 16px', background: 'var(--raised)', borderRadius: 10, border: `1px solid ${primary ? 'var(--brand)' : 'var(--border)'}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{title}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{body}</div>
+        </div>
+        <button
+          data-testid={testId}
+          onClick={onClick}
+          disabled={busy}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', flexShrink: 0,
+            background: 'var(--brand-bg)', border: '1px solid var(--brand)',
+            borderRadius: 8, color: 'var(--brand)',
+            fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {icon} {label}
+        </button>
+      </div>
+    </div>
   )
 }

@@ -210,6 +210,52 @@ describe('OnboardingPage — workspace owner', () => {
   })
 })
 
+describe('OnboardingPage — company size decides how to start (R-80)', () => {
+  it('no longer asks "Your role", and sends only the name and size', async () => {
+    const { api } = await import('../../lib/apiClient')
+    vi.mocked(api.post).mockClear()
+    renderPage()
+    expect(screen.queryByText('Your role')).toBeNull()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('How many people work there?'), { target: { value: '1-10' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    fireEvent.click(screen.getByTestId('skip-btn'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/charts'))
+    expect(vi.mocked(api.post).mock.calls[0][1]).toEqual({ name: 'Acme', size: '1-10' })
+  })
+
+  it('a small company sees only the 5-role starter chart', () => {
+    renderPage()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('How many people work there?'), { target: { value: '1-10' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    expect(screen.queryByTestId('import-start-btn')).toBeNull()
+    expect(screen.getByText(/Creates a 5-role "Current Structure" chart/)).toBeInTheDocument()
+  })
+
+  it('a bigger company is offered the import first, which opens the import after setup', async () => {
+    renderPage()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('How many people work there?'), { target: { value: '201-1000' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    expect(screen.getByText(/Creates a 13-role "Current Structure" chart/)).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('import-start-btn'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/charts?import=1'))
+  })
+
+  it("a bigger company's quick start uses the fuller example", async () => {
+    const { api } = await import('../../lib/apiClient')
+    vi.mocked(api.post).mockClear()
+    renderPage()
+    fireEvent.change(screen.getByTestId('workspace-name'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('How many people work there?'), { target: { value: '51-200' } })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    fireEvent.click(screen.getByTestId('quick-start-btn'))
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.length).toBe(2))
+    expect((vi.mocked(api.post).mock.calls[1][1] as { templateNodes: unknown[] }).templateNodes).toHaveLength(13)
+  })
+})
+
 describe('OnboardingPage — quick start', () => {
   it('creates the workspace and a starter chart through the API, then opens the chart', async () => {
     const { api } = await import('../../lib/apiClient')
