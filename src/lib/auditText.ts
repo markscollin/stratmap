@@ -19,6 +19,7 @@ const SALARY_PARTS: Record<string, string> = { salaryBandMin: 'minimum', salaryB
 const HEADCOUNT_PARTS: Record<string, string> = { salaryMin: 'minimum', salaryMax: 'maximum', salaryCurrency: 'currency' }
 
 export function actorLabel(e: AuditEventView): string {
+  if (e.actor.userId === 'system') return 'StratMap' // the daily jobs (e.g. the scheduled BambooHR sync, R-78)
   return e.actor.name || e.actor.email || 'A former member'
 }
 
@@ -35,6 +36,9 @@ export function describeAudit(e: AuditEventView): string {
     case 'workspace.deleted': return `${who} deleted the workspace`
     case 'workspace.ownership_transferred': return `${who} made ${email} the owner of the workspace`
     case 'workspace.restored': return `${who} restored the workspace`
+    case 'chart.synced_from_hr': return `${who} synced ${chart} from BambooHR (${num(d.added)} added, ${num(d.removed)} removed, ${num(d.changed)} changed)`
+    case 'integration.connected': return `${who} connected ${chart} to BambooHR`
+    case 'integration.disconnected': return `${who} disconnected ${chart} from BambooHR`
     case 'chart.updated_from_file': return `${who} updated ${chart} from a file (${num(d.added)} added, ${num(d.removed)} removed, ${num(d.changed)} changed)`
     case 'chart.restored': return `${who} restored ${chart} to the version ${str(d.versionName, 'an earlier version')}`
     case 'chart.branched': return `${who} created ${chart} from the version ${str(d.versionName, 'a saved version')}`

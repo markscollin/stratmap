@@ -47,6 +47,16 @@ To make a long random secret (CRON_SECRET, ADMIN_SECRET): `openssl rand -hex 32`
 - **After Vercel Pro (O-02):** raise `maxDuration` for `api/cron/*.ts` in `vercel.json` from 60 to 300, and set up the two cron heartbeats
   in `docs/MONITORING.md` (step 2b).
 
+### BambooHR sync (R-78)
+- **Before offering it:** set `INTEGRATION_ENCRYPTION_KEY` in Vercel Production (run `openssl rand -base64 32` once and keep the value;
+  **never change it** afterwards, or every stored BambooHR key stops working and each chart has to be connected again). Without it the
+  BambooHR dialog says connections are not set up, and nothing else changes.
+- **O-16, check against a real BambooHR account:** the request was written without access to BambooHR's documentation (the docs host was
+  unreachable from the build sandbox). With a trial or sandbox BambooHR company: connect a chart (Preview should list your people with their
+  managers), run Sync now, then change someone's title or manager in BambooHR and preview again. If anything is off, the facts to check
+  are listed at the top of `api/_lib/bamboohr.ts`, and every BambooHR detail is in that one file.
+- Have the lawyer review the new "HR system connections" paragraph in the privacy policy (section 1).
+
 ## C. Local development
 
 If you run `vercel dev` **without** Clerk keys, add `ALLOW_DEV_BYPASS=1` to `.env.local`. With real Clerk keys nothing is needed.

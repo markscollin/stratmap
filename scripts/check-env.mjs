@@ -42,6 +42,7 @@ const RULES = [
   ['block', 'RESEND_API_KEY', startsWith('re_'), 'without it no invite or notification email is sent'],
   ['block', 'APP_URL', (v) => (/^https:\/\/[^\s/]+$/.test(v) && !v.endsWith('.vercel.app')) || 'should be your real https domain with no path, not a .vercel.app address (O-03)', 'links in emails, checkout redirects, canonical URLs'],
   ['warn', 'ANTHROPIC_API_KEY', startsWith('sk-ant-'), 'AI drafting answers "not configured" without it (also set a spend limit in the Anthropic console, O-08)'],
+  ['warn', 'INTEGRATION_ENCRYPTION_KEY', (v) => Buffer.from(v, 'base64').length === 32 || 'should be 32 random bytes in base64 (openssl rand -base64 32)', 'BambooHR connections cannot be made without it (R-78); never change it once keys are stored'],
   ['warn', 'SENTRY_DSN', startsWith('https://'), 'server errors are not reported without it'],
   ['warn', 'VITE_SENTRY_DSN', startsWith('https://'), 'browser errors are not reported without it (build-time variable)'],
   ['warn', 'EMAIL_FROM', (v) => v.includes('@') || 'should contain an address', 'sender of every email; the default may not be on your verified domain'],

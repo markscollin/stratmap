@@ -250,6 +250,7 @@ describe('the daily purge', () => {
     await testDb.insert(schema.deletedNodes).values({ id: `dn-${wsId}`, chartId: chart, nodeId: `gone-${wsId}`, deletedBy: 'o', data: { node: {} as never, comments: [], edges: [] } })
     await testDb.insert(schema.aiUsage).values({ workspaceId: wsId, period: '2026-11', count: 1 })
     await testDb.insert(schema.auditLog).values({ id: `a-${wsId}`, workspaceId: wsId, actorUserId: 'o', action: 'member.removed', targetType: 'member', details: { email: 'gone@co.com' } })
+    await testDb.insert(schema.hrIntegrations).values({ id: `hr-${wsId}`, workspaceId: wsId, chartId: chart, provider: 'bamboohr', subdomain: 'acme', apiKeyEncrypted: 'v1:x:y:z', keyHint: 'abcd', createdBy: 'o' })
   }
   const rowsOf = async (wsId: string) => {
     const q = async (table: string, col: string, val: string) =>
@@ -261,7 +262,7 @@ describe('the daily purge', () => {
       charts: await q('charts', 'id', chart), depts: await q('departments', 'chart_id', chart), nodes: await q('nodes', 'chart_id', chart),
       edges: await q('edges', 'chart_id', chart), jds: await q('job_descriptions', 'chart_id', chart),
       templates: await q('role_templates', 'workspace_id', wsId), plans: await q('headcount_plans', 'workspace_id', wsId), links: await q('shared_links', 'chart_id', chart),
-      usage: await q('ai_usage', 'workspace_id', wsId), comments: await q('role_comments', 'workspace_id', wsId), versions: await q('chart_snapshots', 'workspace_id', wsId), trash: await q('deleted_nodes', 'chart_id', chart), audit: await q('audit_log', 'workspace_id', wsId),
+      usage: await q('ai_usage', 'workspace_id', wsId), comments: await q('role_comments', 'workspace_id', wsId), versions: await q('chart_snapshots', 'workspace_id', wsId), trash: await q('deleted_nodes', 'chart_id', chart), audit: await q('audit_log', 'workspace_id', wsId), hr: await q('hr_integrations', 'workspace_id', wsId),
     }
   }
 

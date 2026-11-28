@@ -77,7 +77,7 @@ describe('the daily maintenance endpoint', () => {
     delete process.env.STRIPE_SECRET_KEY
     const res = await run()
     expect(res._status).toBe(200)
-    expect(res._body).toEqual({ reconcile: 'stripe-not-configured', rateLimitsPruned: 0, trialNotices: { warned: 0, ended: 0 }, scheduledVersions: { saved: 0, unchanged: 0, deferred: 0, failed: 0 } })
+    expect(res._body).toEqual({ reconcile: 'stripe-not-configured', rateLimitsPruned: 0, trialNotices: { warned: 0, ended: 0 }, scheduledVersions: { saved: 0, unchanged: 0, deferred: 0, failed: 0 }, hrSync: { synced: 0, held: 0, failed: 0, unchanged: 0, skipped: 0, deferred: 0 } })
   })
 
   it('saves a daily version of a changed chart on a Growth workspace, and reports it', async () => {

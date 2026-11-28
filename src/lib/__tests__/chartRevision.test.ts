@@ -11,6 +11,7 @@ describe('structuralChartId', () => {
     ['DELETE', '/api/charts/c1/edges/e1', 'c1'],
     ['POST', '/api/charts/c1/import', 'c1'],
     ['POST', '/api/charts/c1/sync', 'c1'], // R-77 update from file
+    ['POST', '/api/charts/c1/integration/sync', 'c1'], // R-78 Sync now
     ['POST', '/api/charts/c1/nodes/n1/restore', 'c1'],   // Undo of a role delete
     ['PUT', '/api/charts/c1', 'c1'],
   ])('%s %s is structural', (method, path, id) => expect(structuralChartId(method, path)).toBe(id))

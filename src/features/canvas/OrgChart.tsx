@@ -36,6 +36,7 @@ import { downloadText, fileSlug } from '../../lib/csvSafe'
 const NodeModal = lazy(() => import('../nodes/NodeModal').then(m => ({ default: m.NodeModal })))
 const HistoryPanel = lazy(() => import('../history/HistoryPanel').then(m => ({ default: m.HistoryPanel })))
 const ImportDialog = lazy(() => import('../import/ImportDialog').then(m => ({ default: m.ImportDialog })))
+const HrSyncDialog = lazy(() => import('../integrations/HrSyncDialog').then(m => ({ default: m.HrSyncDialog })))
 
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
   // Who the role being added reports to by default (R-64): the selected role, else the chart's one top role.
   const [addReportsTo, setAddReportsTo] = useState('')
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isHrSyncOpen, setIsHrSyncOpen] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [editingNodeId,  setEditingNodeId]  = useState<string | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -695,7 +697,14 @@ export function OrgChart({ chartId = '', chartName = 'chart', initialNodes = [],
             onClose={() => setIsImportOpen(false)}
             chart={{ id: chartId, name: chartName, nodes, departments, edges, allDepartments: deptLookup }}
             onImported={onImported}
+            onOpenHrSync={chartId ? () => { setIsImportOpen(false); setIsHrSyncOpen(true) } : undefined}
           />
+        </Suspense>
+      )}
+
+      {isHrSyncOpen && chartId && (
+        <Suspense fallback={null}>
+          <HrSyncDialog chart={{ id: chartId, name: chartName }} onClose={() => setIsHrSyncOpen(false)} onSynced={() => onImported?.()} />
         </Suspense>
       )}
 

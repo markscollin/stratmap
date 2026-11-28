@@ -7,8 +7,8 @@ import { DEFAULT_NEW_WORKSPACE_TRIAL_DAYS, PLAN_LIMITS, PLAN_PRICES } from '../l
 import { useIsPhone } from '../hooks/useMediaQuery'
 
 // The public landing page (R-62). Honest copy only: no testimonials, logos or numbers we do not have, and no promise the product
-// does not keep. A chart is kept current by people editing it or by uploading a newer export ("update from a file", R-77);
-// there is no automatic HR sync yet (R-78), so never say it updates itself.
+// does not keep. A chart is kept current by people editing it, by uploading a newer export ("update from a file", R-77), or on Growth
+// and up by a BambooHR connection (R-78, daily if switched on). Nothing else syncs, so never claim other HR systems.
 // The pictures are the real app (made by `npm run make:landing-images`), with made-up names, and say so.
 
 const FEATURES = [
@@ -33,7 +33,7 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { Icon: Upload, title: 'Import or start from a template', body: 'Upload a CSV or Excel export from any HR system or spreadsheet, or pick a starter structure. When people join, leave or move, upload the newer export and review the changes before they apply.' },
+  { Icon: Upload, title: 'Import or start from a template', body: 'Upload a CSV or Excel export from any HR system or spreadsheet, or pick a starter structure. When people join, leave or move, upload the newer export and review the changes before they apply, or on Growth connect BambooHR and sync daily.' },
   { Icon: Move, title: 'Arrange it', body: 'Drag roles, draw reporting lines, colour by department and mark open, planned and backfill roles.' },
   { Icon: Share2, title: 'Share and plan', body: 'Send a read-only link or embed it, then plan hires and their cost by quarter.' },
 ]

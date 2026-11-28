@@ -93,6 +93,7 @@ export function PricingPage() {
         { name: `${growth.aiDraftsPerMonth} AI JD drafts per month`, included: true },
         { name: 'Headcount planning and budgets', included: true },
         { name: 'Version history & scenarios', included: true },
+        { name: 'BambooHR sync', included: true },
       ],
     },
     {

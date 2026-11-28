@@ -416,7 +416,16 @@ domain + `APP_URL` + email DNS (O-03), Vercel Pro (O-02), Stripe live (O-04), pr
   Reuse `importOrg.ts`'s mapping and rules. This is cheaper than an integration and covers every HR system.
 
 ### R-78 First HR-system integration
-- [ ] After R-77. **Needs D-8** (which system first). Read-only sync on a schedule into a chart, using the R-77 diff engine; secrets in env/Vercel, not the DB, or encrypted.
+- [x] 2026-11-28: **BambooHR** (D-8), Growth and up (feature `hr-sync`; plan not stated by the owner, so the builder's default). An admin
+  connects a chart in the BambooHR dialog (from the import dialog: "Sync with BambooHR instead"): subdomain and API key; the key is tried,
+  then stored encrypted (AES-256-GCM, `INTEGRATION_ENCRYPTION_KEY`, `api/_lib/secretBox.ts`; table `hr_integrations`, migration 0022, one
+  per chart, cascades), never shown again. Editors **Preview** (worked out on the server, nothing written) and **Sync now** (structural,
+  revision-checked). Optional **daily sync** in the daily-maintenance job, with a brake: it holds when more than max(5, 10%) of the chart
+  would leave, when BambooHR lists nobody, or when the data has an importer error; the dialog says why. Same engine and atomic apply as
+  R-77 (shared `api/_lib/chartUpdate.ts`), a "Before BambooHR sync" version first. Audit `integration.connected`/`disconnected`,
+  `chart.synced_from_hr` (actor "StratMap" for the daily one). **Not checked against BambooHR's docs or a real account** (the docs host was
+  unreachable from the sandbox): O-16 in `docs/OWNER_CHECKLIST.md`. Tests: `hr-sync.test.ts` (19), `HrSyncDialog.test.tsx`.
+  After R-77. After R-77. **Needs D-8** (which system first). Read-only sync on a schedule into a chart, using the R-77 diff engine; secrets in env/Vercel, not the DB, or encrypted.
   Probably an Enterprise or Growth add-on.
 
 ### R-79 A way to buy above Growth

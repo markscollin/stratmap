@@ -29,6 +29,7 @@ export async function setupSchema() {
 }
 
 export async function cleanDb() {
+  await testDb.delete(schema.hrIntegrations)
   await testDb.delete(schema.auditLog)
   await testDb.delete(schema.chartSnapshots)
   await testDb.delete(schema.deletedNodes)

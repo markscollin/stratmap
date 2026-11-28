@@ -6,12 +6,14 @@ import { pruneRateLimits } from '../_lib/rateLimit'
 import { reconcileSubscriptions, type ReconcileResult } from '../_lib/reconcile'
 import { sendTrialNotices, type TrialNoticeResult } from '../_lib/trialNotices'
 import { takeScheduledSnapshots, type ScheduledSnapshotResult } from '../_lib/scheduledSnapshots'
+import { runScheduledHrSyncs, type ScheduledHrSyncResult } from '../_lib/hrSync'
 
 // Daily job (vercel.json "crons"), same CRON_SECRET rule as purge-deleted. Four independent steps; one failing never stops the others:
 //   - R-22 re-read every workspace's Stripe subscription, so a lost webhook is repaired within a day
 //   - R-27 delete rate-limit rows whose window is long over
 //   - R-40 trial-ending emails
 //   - a daily version of every changed chart on plans with version history
+//   - R-78 the BambooHR sync of every chart that has auto-sync on (after the versions, so the day's version is the chart before it)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.CRON_SECRET) return res.status(503).json({ error: 'not-configured' })
@@ -22,7 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rateLimitsPruned: number | 'failed'
     trialNotices: TrialNoticeResult | 'failed'
     scheduledVersions: ScheduledSnapshotResult | 'failed'
-  } = { reconcile: 'failed', rateLimitsPruned: 'failed', trialNotices: 'failed', scheduledVersions: 'failed' }
+    hrSync: ScheduledHrSyncResult | 'failed'
+  } = { reconcile: 'failed', rateLimitsPruned: 'failed', trialNotices: 'failed', scheduledVersions: 'failed', hrSync: 'failed' }
 
   // Quick steps first, then the slow ones with a time budget (R-71): a run that hits the function's time limit used to be killed
   // part-way, skipping every later step, every day. Now the slow steps stop in time and leave the rest for tomorrow.
@@ -35,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : 'stripe-not-configured'
   } catch (err) { fail('reconcile', err) }
   try { report.scheduledVersions = await takeScheduledSnapshots(new Date(), undefined, deadline) } catch (err) { fail('scheduled-versions', err) }
+  try { report.hrSync = await runScheduledHrSyncs(new Date(), undefined, deadline) } catch (err) { fail('hr-sync', err) }
 
   console.log('[daily-maintenance]', JSON.stringify(report))
   const failed = Object.values(report).includes('failed')

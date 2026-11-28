@@ -410,3 +410,42 @@ export const deletedNodes = pgTable('deleted_nodes', {
   uniqueIndex('deleted_nodes_chart_node_idx').on(t.chartId, t.nodeId),
   index('deleted_nodes_deleted_at_idx').on(t.deletedAt),
 ])
+
+// ─── HR-system sync (R-78) ───────────────────────────────────────────────────
+
+/** What the last sync of an HR connection did. Counts and short reasons only: never names, emails or the key. */
+export interface HrSyncResult {
+  at: string
+  status: 'ok' | 'failed' | 'held' | 'unchanged'
+  /** Why it failed or was held, in plain words. */
+  reason?: string
+  joiners?: number
+  leavers?: number
+  moves?: number
+  changed?: number
+  /** 'manual' (someone pressed Sync now) or 'scheduled' (the daily job). */
+  trigger: 'manual' | 'scheduled'
+}
+
+/**
+ * One chart kept in step with a company's HR system (BambooHR first, owner decision D-8). The API key is stored encrypted
+ * (AES-256-GCM with INTEGRATION_ENCRYPTION_KEY, api/_lib/secretBox.ts); only its last four characters are kept in clear, to show
+ * which key is connected. One connection per chart.
+ */
+export const hrIntegrations = pgTable('hr_integrations', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  chartId: text('chart_id').notNull().references(() => charts.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(),               // 'bamboohr'
+  subdomain: text('subdomain').notNull(),             // the company's BambooHR subdomain
+  apiKeyEncrypted: text('api_key_encrypted').notNull(),
+  keyHint: text('key_hint').notNull(),                // last 4 characters of the key
+  autoSync: boolean('auto_sync').notNull().default(false),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  lastSyncAt: timestamp('last_sync_at'),
+  lastResult: jsonb('last_result').$type<HrSyncResult>(),
+}, (t) => [
+  uniqueIndex('hr_integrations_chart_uq').on(t.chartId),
+  index('hr_integrations_workspace_idx').on(t.workspaceId),
+])

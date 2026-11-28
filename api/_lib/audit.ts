@@ -31,6 +31,9 @@ export type AuditAction =
   | 'workspace.exported'
   | 'chart.restored'
   | 'chart.updated_from_file'
+  | 'chart.synced_from_hr'
+  | 'integration.connected'
+  | 'integration.disconnected'
   | 'chart.branched'
 
 export type AuditTargetType = 'member' | 'invite' | 'chart' | 'role' | 'workspace' | 'headcount'

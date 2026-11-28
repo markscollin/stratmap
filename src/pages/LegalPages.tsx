@@ -76,6 +76,9 @@ export function PrivacyPage() {
         authentication provider (Clerk).<br />
         <strong>Workspace content:</strong> org charts, nodes, job descriptions, headcount plans, and related
         data you create.<br />
+        <strong>HR system connections:</strong> if a workspace admin connects a chart to BambooHR, we store the API key they
+        give us encrypted, and read each current employee&apos;s id, name, job title, department, location, work email,
+        manager and hire date to keep that chart up to date. We only read from BambooHR, never write to it.<br />
         <strong>Billing data:</strong> subscription tier and payment identifiers handled by our payment processor
         (Stripe). We do not store full card numbers.<br />
         <strong>Usage data:</strong> log and diagnostic data used to operate and secure the Service.

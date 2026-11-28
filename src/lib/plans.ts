@@ -65,7 +65,7 @@ export function fitsLimit(limit: number, count: number, adding = 1): boolean {
 // we describe them. Used by the API (enforcement), the lock UI and UpgradeModal
 // (copy) and the pricing page, so all of them agree on what is locked.
 
-export type PaidFeature = 'jd-editor' | 'approval-workflow' | 'pdf-export' | 'ai-drafting' | 'auto-layout' | 'headcount-planning' | 'audit-export' | 'version-history'
+export type PaidFeature = 'jd-editor' | 'approval-workflow' | 'pdf-export' | 'ai-drafting' | 'auto-layout' | 'headcount-planning' | 'audit-export' | 'version-history' | 'hr-sync'
 
 export interface FeatureInfo {
   /** Cheapest tier that includes the feature. Scale (R-79) adds room, not features, so no feature starts there. */
@@ -110,6 +110,11 @@ export const PAID_FEATURES: Record<PaidFeature, FeatureInfo> = {
     minTier: 'growth',
     label: 'Version history and scenarios',
     unlocks: 'Save named versions of a chart, compare two versions or a version with today, restore an earlier one, and branch a scenario into a new chart.',
+  },
+  'hr-sync': {
+    minTier: 'growth',
+    label: 'BambooHR sync',
+    unlocks: 'Connect a chart to BambooHR: review joiners, leavers and moves before they apply, or let a daily sync keep the chart in step.',
   },
   'audit-export': {
     minTier: 'enterprise',

@@ -1,7 +1,7 @@
 import type { OrgNode, OrgEdge, Department, RoleType, NodeStatus, EmploymentType } from '../types'
 import { calculateLayout } from '../utils/layout'
 import { TEMPLATE_DEPARTMENTS } from './chartTemplates'
-import { unguardCell, toCsv } from './csvSafe'
+import { unguardCell, toCsv } from './csvText'
 
 // Roadmap 2.1: turn a spreadsheet of people into a reporting tree.
 //

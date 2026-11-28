@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Upload, FileSpreadsheet, Download, AlertTriangle, AlertCircle, Check } from 'lucide-react'
+import { X, Upload, FileSpreadsheet, Download, AlertTriangle, AlertCircle, Check, RefreshCw } from 'lucide-react'
 import {
   IMPORT_FIELDS, MAX_IMPORT_ROWS, buildImportPlan, buildTemplateCsv, guessMapping,
   type ColumnMapping, type ImportField, type ParsedSheet,
@@ -15,6 +15,7 @@ import { api, ApiError } from '../../lib/apiClient'
 import { NODE_W, NODE_H } from '../nodes/nodeSize'
 import type { Department, OrgEdge, OrgNode } from '../../types'
 import { Dialog } from '../../components/ui/Dialog'
+import { ChangeList } from './ChangeList'
 
 // Roadmap 2.1: import people from a CSV or Excel file.
 //   1. Choose a file (and, from a chart, where it goes).
@@ -35,12 +36,14 @@ export interface ImportDialogProps {
   }
   /** Called after roles were added to `chart`, so the canvas can reload. */
   onImported?: () => void
+  /** R-78: offered from a chart, opens the BambooHR sync instead of a file. */
+  onOpenHrSync?: () => void
 }
 
 const MAX_ISSUES_SHOWN = 40
 const GAP_X = 160 // space between the existing tree and an appended one
 
-export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) {
+export function ImportDialog({ onClose, chart, onImported, onOpenHrSync }: ImportDialogProps) {
   const navigate = useNavigate()
   const maxNodes = useBillingStore(s => s.plan.maxNodesPerChart)
   const createChart = useChartStore(s => s.createChart)
@@ -173,7 +176,7 @@ export function ImportDialog({ onClose, chart, onImported }: ImportDialogProps) 
         {step === 'file' && (
           <FileStep
             reading={reading} error={fileError} inputRef={fileInput}
-            onFile={f => void handleFile(f)}
+            onFile={f => void handleFile(f)} onOpenHrSync={onOpenHrSync}
           />
         )}
 
@@ -235,8 +238,8 @@ function downloadTemplate() {
   URL.revokeObjectURL(url)
 }
 
-function FileStep({ reading, error, inputRef, onFile }: {
-  reading: boolean; error: string | null
+function FileStep({ reading, error, inputRef, onFile, onOpenHrSync }: {
+  reading: boolean; error: string | null; onOpenHrSync?: () => void
   inputRef: React.RefObject<HTMLInputElement | null>; onFile: (f: File | undefined) => void
 }) {
   const [over, setOver] = useState(false)
@@ -266,9 +269,16 @@ function FileStep({ reading, error, inputRef, onFile }: {
         <p style={{ fontSize: 11, color: 'var(--dim)', marginTop: 12 }}>.csv or .xlsx · up to 5 MB · up to {MAX_IMPORT_ROWS.toLocaleString()} rows</p>
       </div>
       {error && <p role="alert" style={{ ...errorBox, marginTop: 14 }}>{error}</p>}
-      <button onClick={downloadTemplate} style={{ ...linkBtn, marginTop: 16 }}>
-        <Download size={13} /> Download a template
-      </button>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 16 }}>
+        <button onClick={downloadTemplate} style={linkBtn}>
+          <Download size={13} /> Download a template
+        </button>
+        {onOpenHrSync && (
+          <button onClick={onOpenHrSync} style={linkBtn}>
+            <RefreshCw size={13} /> Sync with BambooHR instead
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -542,24 +552,6 @@ function UpdateReview({ update, maxNodes, removeLeavers, onRemoveLeavers, server
         </button>
       </Footer>
     </div>
-  )
-}
-
-function ChangeList({ title, items }: { title: string; items: { id: string; text: string; note?: string }[] }) {
-  const LIMIT = 30
-  if (items.length === 0) return null
-  return (
-    <section aria-label={title} style={{ background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', fontSize: 12 }}>
-      <h3 style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600 }}>{title} · {items.length}</h3>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 150, overflowY: 'auto' }}>
-        {items.slice(0, LIMIT).map(i => (
-          <li key={i.id} style={{ color: 'var(--text)', lineHeight: 1.6 }}>
-            {i.text}{i.note && <span style={{ color: 'var(--muted)' }}> · {i.note}</span>}
-          </li>
-        ))}
-        {items.length > LIMIT && <li style={{ color: 'var(--muted)' }}>…and {items.length - LIMIT} more</li>}
-      </ul>
-    </section>
   )
 }
 
